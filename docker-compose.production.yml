@@ -1,0 +1,54 @@
+services:
+  lumbung-bersama-db:
+    image: postgres:16-alpine
+    container_name: lumbung-bersama-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lumbung_bersama
+      POSTGRES_USER: lumbung_bersama
+      POSTGRES_PASSWORD: ${LUMBUNG_DB_PASSWORD:?Set LUMBUNG_DB_PASSWORD in remote .env}
+    volumes:
+      - lumbung_bersama_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumbung_bersama -d lumbung_bersama"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  lumbung-bersama-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumbung-bersama-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      DATABASE_URL: postgres://lumbung_bersama:${LUMBUNG_DB_PASSWORD}@lumbung-bersama-db:5432/lumbung_bersama
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in remote .env}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH in remote .env}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin Lumbung}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-10}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      BPS_API_KEY: ${BPS_API_KEY:-}
+      WHATSAPP_BUSINESS_TOKEN: ${WHATSAPP_BUSINESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-v23.0}
+    ports:
+      - "127.0.0.1:3080:3000"
+    depends_on:
+      lumbung-bersama-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  lumbung_bersama_pgdata:

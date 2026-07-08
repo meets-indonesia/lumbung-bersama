@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lumbung-bersama-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lumbung_bersama
+      POSTGRES_USER: lumbung
+      POSTGRES_PASSWORD: lumbung_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - lumbung_bersama_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumbung -d lumbung_bersama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  lumbung_bersama_pgdata:

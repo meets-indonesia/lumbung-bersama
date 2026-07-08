@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.production
+npm-debug.log*
+docker-compose.postgres.yml
+*.tar
+*.tgz
