@@ -6,6 +6,7 @@ import {
   isHackathonSharedDbConfigured,
   queryHackathonRows,
 } from "@/lib/hackathon-shared-db";
+import { buildSourceCaveatFields } from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,15 @@ type OpportunityCandidate = {
     partnershipSignal: number;
     dataQualityCompleteness: number;
   };
+  marketSignal: {
+    status: "internal-transaction-signal" | "weak-or-missing-signal";
+    componentScore: number;
+    source: string;
+    supportingRows: number;
+    caveat: string;
+    nextAction: string;
+  };
+  sourceCaveat: ReturnType<typeof buildSourceCaveatFields>;
   score: number;
 };
 
@@ -300,6 +310,8 @@ async function getOpportunityScores() {
   const topAreas: OpportunityCandidate[] = rows
     .map((row) => {
       const computed = computeComponentScores(row, maxima);
+      const marketSignalStatus: OpportunityCandidate["marketSignal"]["status"] =
+        computed.rawSignals.transactions > 0 ? "internal-transaction-signal" : "weak-or-missing-signal";
       return {
         area: {
           kodeWilayah: row.kodeWilayah,
@@ -310,6 +322,21 @@ async function getOpportunityScores() {
         },
         rawSignals: computed.rawSignals,
         componentScores: computed.componentScores,
+        marketSignal: {
+          status: marketSignalStatus,
+          componentScore: computed.componentScores.marketTransactionSignal,
+          source: "transaksi_penjualan aggregate count in shared DB sample",
+          supportingRows: computed.rawSignals.transactions,
+          caveat:
+            "Market signal is based on historical/sample transaction counts only. It is not a real-time price, live buyer demand, or guaranteed offtake signal.",
+          nextAction:
+            "Use /api/commodity-news for contextual news and official price-check workflow before buyer negotiation.",
+        },
+        sourceCaveat: buildSourceCaveatFields(
+          "opportunity score aggregate tables",
+          computed.score >= 60 ? "medium" : "limited",
+          "shared-db-read-only-aggregate",
+        ),
         score: computed.score,
       };
     })
@@ -322,6 +349,14 @@ async function getOpportunityScores() {
     tablePrefix: HACKATHON_TABLE_PREFIX,
     schemaScope: HACKATHON_SCHEMA_SCOPE,
     scoreWeights,
+    marketSignalPolicy: {
+      weightedComponent: "marketTransactionSignal",
+      weight: scoreWeights.marketTransactionSignal,
+      source: "transaksi_penjualan aggregate count; external commodity news remains contextual only",
+      caveat:
+        "The 15% market component is a weak aggregate signal and must not be used as a real-time price or live demand claim.",
+      sourceCaveat: buildSourceCaveatFields("market signal aggregate", "limited", "shared-db-read-only-aggregate"),
+    },
     topAreas,
     guardrails: {
       enforcement: "authenticated read-only aggregate scoring only",

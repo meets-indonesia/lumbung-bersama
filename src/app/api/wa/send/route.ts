@@ -33,23 +33,47 @@ export async function POST(request: Request) {
   const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION || "v23.0";
   const setup = getWaSetupStatus();
 
+  const body = (await request.json().catch(() => ({}))) as {
+    to?: string;
+    message?: string;
+    type?: string;
+  };
+  const outboundType = body.type ?? "text";
+
+  if (outboundType !== "text") {
+    return Response.json(
+      {
+        error: "WHATSAPP_MEDIA_SEND_NOT_IMPLEMENTED",
+        message:
+          "Outbound media belum dikirim otomatis. Simpan sebagai draft follow-up dan minta operator memakai kanal resmi.",
+        status: "draft-only",
+        delivery: {
+          status: "draft-only",
+          caveat: "Image, audio, dan document send memerlukan implementasi payload media Graph API terpisah.",
+        },
+        setup,
+      },
+      { status: 501 },
+    );
+  }
+
   if (setup.send.status !== "ready" || !token || !phoneNumberId) {
     return Response.json(
       {
         error: "WHATSAPP_SEND_NOT_CONFIGURED",
         message:
-          "Isi WHATSAPP_BUSINESS_TOKEN dan WHATSAPP_PHONE_NUMBER_ID untuk mengirim pesan.",
+          "Pengiriman live menunggu env WhatsApp. Draft outbound belum diklaim terkirim.",
         status: "setup-required",
+        delivery: {
+          status: "setup-required",
+          caveat: "WHATSAPP_BUSINESS_TOKEN dan WHATSAPP_PHONE_NUMBER_ID wajib sebelum Graph API dipanggil.",
+        },
         setup,
       },
       { status: 503 },
     );
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    to?: string;
-    message?: string;
-  };
   const to = normalizePhone(body.to ?? "");
   const message = body.message?.trim();
 
@@ -88,6 +112,10 @@ export async function POST(request: Request) {
         error: "WHATSAPP_SEND_UNAVAILABLE",
         message: "WhatsApp Graph API tidak merespons sebelum batas waktu.",
         status: "ready",
+        delivery: {
+          status: "not-sent",
+          caveat: "Tidak ada klaim terkirim karena Graph API timeout.",
+        },
         setup,
       },
       { status: 504 },
@@ -101,6 +129,10 @@ export async function POST(request: Request) {
         error: "WHATSAPP_SEND_FAILED",
         message: "WhatsApp Graph API menolak pengiriman.",
         status: "ready",
+        delivery: {
+          status: "not-sent",
+          caveat: "Tidak ada klaim terkirim karena provider menolak payload.",
+        },
         provider: providerErrorMeta(payload),
         setup,
       },
@@ -126,6 +158,11 @@ export async function POST(request: Request) {
   return Response.json({
     ok: true,
     status: "ready",
+    message: "WhatsApp terkirim lewat Graph API.",
+    delivery: {
+      status: "sent",
+      caveat: "Status terkirim hanya diberikan setelah Graph API mengembalikan response sukses.",
+    },
     provider: {
       messageId: providerMessageId,
     },

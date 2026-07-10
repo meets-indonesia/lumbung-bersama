@@ -3,7 +3,7 @@ import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://lumbungbersama.id"),
+  metadataBase: new URL("https://lumbung-bersama.meetsin.id"),
   applicationName: "Lumbung Bersama",
   title: {
     default: "Lumbung Bersama | Peta Peluang dan Aksi Koperasi Desa",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     title: "Lumbung Bersama | Peta Peluang dan Aksi Koperasi Desa",
     description:
       "Dari potensi desa menjadi rekomendasi komoditas, buyer matching lite, readiness stok, dan laporan aksi yang bisa diverifikasi.",
-    url: "https://lumbungbersama.id",
+    url: "https://lumbung-bersama.meetsin.id",
     siteName: "Lumbung Bersama",
     locale: "id_ID",
     type: "website",

@@ -148,6 +148,18 @@ async function expectLoginRedirect(pathname) {
   pass(`${pathname} redirects to login`);
 }
 
+async function expectRedirect(pathname, expectedLocationPart) {
+  const response = await request(pathname);
+  if (![301, 302, 303, 307, 308].includes(response.status)) {
+    fail(`${pathname} returned ${response.status}, expected redirect`);
+  }
+  const location = response.headers.get("location") ?? "";
+  if (!location.includes(expectedLocationPart)) {
+    fail(`${pathname} redirect location was ${location}, expected ${expectedLocationPart}`);
+  }
+  pass(`${pathname} redirects to ${expectedLocationPart}`);
+}
+
 function assertDatabaseOrAuthGate(pathname, response, payload) {
   if (response.status === 503 && payload.error !== "DATABASE_URL_REQUIRED") {
     fail(`${pathname} 503 did not report DATABASE_URL_REQUIRED`);
@@ -563,11 +575,16 @@ async function run() {
   await startServerIfNeeded();
 
   await expectText("/", "Koperasi Opportunity");
+  await expectText("/login", "Login operator");
   await expectText("/peta-unggulan", "Peta Unggulan");
+  await expectRedirect("/peta-potensi", "/peta-unggulan");
+  await expectRedirect("/demo", "/login?next=/dashboard");
+  await expectRedirect("/demo/suara-warga", "/login?next=/wa");
 
-  for (const page of ["/dashboard", "/agents", "/wa", "/laporan", "/integrasi"]) {
+  for (const page of ["/dashboard", "/agents", "/wa", "/laporan", "/integrasi", "/modules"]) {
     await expectLoginRedirect(page);
   }
+  await expectRedirect("/modules/peta-unggulan", "/login?next=/modules");
 
   const health = await expectStatus("/api/health", 200);
   const healthPayload = await health.json();

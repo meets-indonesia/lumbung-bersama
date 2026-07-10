@@ -1,12 +1,20 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { waIntents } from "@/lib/demo-data";
 import {
   describeCommodityProfiles,
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
 import { formatFormalWaReply } from "@/lib/formal-replies";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
-import { ensureOperatorQueueForWaMessage } from "@/lib/wa-operator-queue";
+import {
+  buildWaAgentDraft,
+  displayTextForPayload,
+  ensureOperatorQueueForWaMessage,
+  fallbackIntentForPayload,
+  normalizeWaPayloadType,
+  queueSourceForPayload,
+  selectWaAgentIntent,
+  type WaPayloadType,
+} from "@/lib/wa-operator-queue";
 import { getWaSetupStatus, maskPhoneForDisplay, normalizeWaDisplayName } from "../status";
 
 export const runtime = "nodejs";
@@ -87,14 +95,6 @@ function verifySignature(rawBody: string, request: Request) {
   return { ok: true, response: null };
 }
 
-function selectIntent(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    waIntents.find((intent) => normalized.includes(intent.sample.split(" ")[0].toLowerCase())) ??
-    waIntents[0]
-  );
-}
-
 function extractMessages(payload: WhatsAppWebhookPayload) {
   const messages: Array<WhatsAppMessage & { contactName?: string; waId?: string }> = [];
 
@@ -117,12 +117,19 @@ function extractMessages(payload: WhatsAppWebhookPayload) {
   return messages;
 }
 
+function payloadTypeForMessage(message: WhatsAppMessage): WaPayloadType {
+  return normalizeWaPayloadType(message.type);
+}
+
+function rawTextForMessage(message: WhatsAppMessage) {
+  if (message.type === "text") return message.text?.body;
+  if (message.type === "image") return message.image?.caption;
+  if (message.type === "document") return message.document?.caption;
+  return undefined;
+}
+
 function messageText(message: WhatsAppMessage) {
-  if (message.type === "text" && message.text?.body) return message.text.body;
-  if (message.type === "image") return message.image?.caption || "[gambar dari WhatsApp]";
-  if (message.type === "document") return message.document?.caption || "[dokumen dari WhatsApp]";
-  if (message.type === "audio") return "[voice-note dari WhatsApp]";
-  return `[pesan:${message.type ?? "unknown"}]`;
+  return displayTextForPayload(payloadTypeForMessage(message), rawTextForMessage(message) ?? "");
 }
 
 function senderLabel(message: WhatsAppMessage & { contactName?: string; waId?: string }) {
@@ -131,14 +138,6 @@ function senderLabel(message: WhatsAppMessage & { contactName?: string; waId?: s
 
   const waId = message.waId || message.from;
   return waId ? `Warga WhatsApp ${maskPhoneForDisplay(waId)}` : "Warga WhatsApp";
-}
-
-function queueSource(message: WhatsAppMessage) {
-  if (message.type === "audio") return "WhatsApp voice note";
-  if (message.type === "image") return "WhatsApp image";
-  if (message.type === "document") return "WhatsApp document";
-  if (message.type === "text") return "WhatsApp text";
-  return "WhatsApp webhook";
 }
 
 export async function GET(request: Request) {
@@ -172,9 +171,21 @@ export async function POST(request: Request) {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
 
   const rawBody = await request.text();
+  const setup = getWaSetupStatus();
+  if (setup.webhook.status !== "ready") {
+    return Response.json(
+      {
+        error: "WHATSAPP_WEBHOOK_NOT_CONFIGURED",
+        message: "Webhook produksi wajib mengisi WHATSAPP_VERIFY_TOKEN dan WHATSAPP_APP_SECRET.",
+        status: "setup-required",
+        setup,
+      },
+      { status: 503 },
+    );
+  }
+
   const signature = verifySignature(rawBody, request);
   if (!signature.ok) return signature.response!;
-  const setup = getWaSetupStatus();
 
   let payload: WhatsAppWebhookPayload;
   try {
@@ -214,32 +225,33 @@ export async function POST(request: Request) {
 
   let stored = 0;
   let queued = 0;
+  let mediaQueued = 0;
   for (const inbound of inboundMessages) {
+    const payloadType = payloadTypeForMessage(inbound);
+    const rawText = rawTextForMessage(inbound);
     const text = messageText(inbound);
-    const intent = selectIntent(text);
-    const needsTranscription = inbound.type === "audio";
+    const intent = rawText?.trim()
+      ? selectWaAgentIntent(text)
+      : fallbackIntentForPayload(payloadType);
+    const draft = buildWaAgentDraft({
+      intent,
+      payloadType,
+      source: queueSourceForPayload(payloadType, "WhatsApp webhook"),
+    });
     const commodityProfiles = await findCommodityProfilesForMessage(text, cooperative.province).catch(() => []);
     const commodityDetails = describeCommodityProfiles(commodityProfiles);
-    const reply = needsTranscription
-      ? formatFormalWaReply({
-        summary:
-          "Voice note sudah diterima. Transkripsi live membutuhkan koneksi media WhatsApp dan speech-to-text sebelum isi pesan dapat dibaca otomatis.",
-        details: ["Status: menunggu transkripsi dan cek operator.", "Modul tujuan: Suara Warga."],
-        nextSteps: [
-          "Operator mengambil media WhatsApp setelah env produksi aktif.",
-          "Hasil transkripsi dicek ulang sebelum masuk data koperasi.",
-        ],
-      })
-      : formatFormalWaReply({
-        summary: intent.bot,
-        details: commodityDetails.length
-          ? [`Modul tujuan: ${intent.module}.`, ...commodityDetails]
-          : [`Modul tujuan: ${intent.module}.`],
-        nextSteps: [
-          "Operator koperasi mengecek data dan bukti pendukung.",
-          "Jika ada data kurang, warga akan menerima pertanyaan lanjutan.",
-        ],
-      });
+    const reply = formatFormalWaReply({
+      summary: intent.bot,
+      details: [
+        `Modul tujuan: ${draft.module}.`,
+        `Source: ${draft.source}. Confidence: ${draft.confidence}.`,
+        `Caveat: ${draft.caveat}`,
+        `Status review: ${draft.humanReviewStatus}`,
+        draft.mediaStatus,
+        ...commodityDetails,
+      ],
+      nextSteps: draft.nextSteps,
+    });
 
     const inserted = await queryOne<WaMessageRow>(
       `INSERT INTO wa_messages (id, cooperative_id, provider_message_id, sender, message, intent, module, bot_reply, status)
@@ -259,28 +271,31 @@ export async function POST(request: Request) {
         inbound.id || null,
         senderLabel(inbound),
         text,
-        needsTranscription ? "voice-note" : intent.label,
-        needsTranscription ? "Suara Warga" : intent.module,
+        intent.label,
+        draft.module,
         reply,
-        needsTranscription
-          ? "Masuk webhook, menunggu transkripsi"
-          : "Masuk webhook, menunggu verifikasi operator",
+        payloadType === "text"
+          ? "Masuk webhook; menunggu verifikasi operator"
+          : "Masuk webhook; media belum diproses otomatis dan perlu operator",
       ],
     );
     if (inserted) {
       stored += 1;
       const queue = await ensureOperatorQueueForWaMessage({
+        queryOne,
         waMessageId: inserted.id,
         providerMessageId: inserted.providerMessageId,
         cooperativeId: inserted.cooperativeId,
         sender: inserted.sender,
-        source: queueSource(inbound),
+        source: draft.source,
         message: inserted.message,
         module: inserted.module,
+        status: draft.queueStatus,
       });
       if (queue) queued += 1;
+      if (payloadType !== "text") mediaQueued += 1;
     }
   }
 
-  return Response.json({ received: true, stored, queued, setup });
+  return Response.json({ received: true, stored, queued, mediaQueued, setup });
 }

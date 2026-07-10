@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileCheck2, Lock, RefreshCcw } from "lucide-react";
 
 type DashboardReportPayload = {
@@ -82,6 +82,10 @@ type HackathonSummaryPayload = {
   source: string;
   mode: string;
   schemaScope?: { description: string };
+  headlineEvidence?: {
+    metrics: Array<{ id: string; label: string; value: number; unit: string; amountIdr?: number }>;
+    caveat: string;
+  };
   tableCounts: Array<{ tableName: string; total: string }>;
   provinceOpportunities: Array<{
     province: string;
@@ -95,6 +99,71 @@ type HackathonSummaryPayload = {
     partnershipRequests: string;
   }>;
   dataQualityFlags: string[];
+};
+
+type HackathonDataQualityPayload = {
+  source?: string;
+  mode?: string;
+  checks: Array<{
+    table: string;
+    totalRows: number;
+    missingKeyRefs: Array<{ field: string; missingRows: number; presentRows: number; completenessRate: number | null }>;
+    completeness: Array<{ field: string; missingRows: number; presentRows: number; completenessRate: number | null }>;
+    quality: Array<{ field: string; risk: string; affectedRows: number; affectedRate: number | null }>;
+  }>;
+  recommendations: string[];
+};
+
+type HackathonOpportunityPayload = {
+  source?: string;
+  mode?: string;
+  topAreas: Array<{
+    area: {
+      kodeWilayah: string | null;
+      province: string | null;
+      regency: string | null;
+      district: string | null;
+      village: string | null;
+    };
+    rawSignals: Record<string, number>;
+    componentScores: Record<string, number>;
+    score: number;
+    sourceCaveat?: {
+      confidence: string;
+      caveat: string;
+      humanReview: string;
+    };
+  }>;
+  recommendations: string[];
+};
+
+type HackathonBuyerPayload = {
+  source?: string;
+  mode?: string;
+  matches: Array<{
+    rank: number;
+    buyerArchetypeLabel: string;
+    score: number;
+    readinessCluster: string;
+    cooperativeRef: string;
+    cooperativeName: string | null;
+    location: {
+      province: string | null;
+      regency: string | null;
+    };
+    productSnapshot: {
+      productsTotal: number;
+      namedProducts: number;
+      productExamples: string[];
+    };
+    signals: {
+      stockItems: number;
+      transactions: number;
+      partnershipRequests: number;
+    };
+    readinessGaps?: string[];
+  }>;
+  nextActions: string[];
 };
 
 type HackathonFinancingPayload = {
@@ -210,9 +279,51 @@ function buyerEvidenceLabel(item: DashboardReportPayload["buyers"][number]) {
   return item.sourceLabel ?? "Buyer archetype; bukan named buyer atau komitmen permintaan live.";
 }
 
+const reportDemoFlowSteps = [
+  ["Dashboard", "Evidence, role, queue, and manager command center."],
+  ["Peta", "Wilayah/komoditas with source caveat."],
+  ["Score", "Explainable opportunity score and data-quality caveat."],
+  ["Buyer", "Buyer archetype, market check, and approval workflow."],
+  ["Laporan", "CSV/report artifact for cooperative meeting."],
+] as const;
+
+const reportRoleRows = [
+  ["Pengurus", "/dashboard, /laporan", "Final approval for outreach, finance, and locked report."],
+  ["Manager Koperasi", "/dashboard, /peta-unggulan, /laporan", "Monitors sales, stock, delivery, buyer, finance, and alerts."],
+  ["Staff/Admin Gudang", "Stock readiness", "Validates product, unit, inventory, location, and evidence."],
+  ["Staff/Admin Logistik", "Fulfillment", "Schedules pickup, courier assignment, delivery status, and proof."],
+  ["Kasir", "POS signal", "Aggregate transaction signal only; no customer detail."],
+  ["Kurir", "Delivery", "Marks delivery stages without public recipient data."],
+  ["Juri/Viewer demo", "Read-only demo routes", "Sample/aggregate/no PII view."],
+] as const;
+
+const reportApprovalStages = [
+  ["Recommended", "AI/rules produce source-grounded recommendation."],
+  ["Needs verification", "Operator checks stock, document, price, buyer requirement, and caveat."],
+  ["Approved", "Manager/pengurus approves next action; AI never approves automatically."],
+] as const;
+
+const reportSimkopdesChecklist = [
+  "Produk punya satuan, kategori, potensi desa, supplier/source, and status not draft.",
+  "Inventory readiness checks negative stock, generic labels, grade, packaging, and documentation.",
+  "POS signal is aggregate demand/cashflow proxy, not customer or receipt detail.",
+  "Logistics readiness covers warehouse location, courier, delivery status, and proof-of-delivery governance.",
+  "Member savings alignment covers Simpanan Pokok, Wajib, Sukarela, billing period, payment proof, withdrawal rules, and aggregate liquidity signal.",
+] as const;
+
+const reportAiGuardrails = [
+  "AI Business Analyst is aggregate early warning, not formal audit.",
+  "Borrower Risk uses risk flag and missing evidence, never automatic rejection or fraud labeling.",
+  "Market negotiation needs official/curated price source or operator input before offer/floor/target price.",
+  "Outreach script stays editable and requires operator/pengurus approval before buyer contact.",
+] as const;
+
 export function ReportClient() {
   const [dashboardData, setDashboardData] = useState<DashboardReportPayload | null>(null);
   const [hackathonSummary, setHackathonSummary] = useState<HackathonSummaryPayload | null>(null);
+  const [hackathonDataQuality, setHackathonDataQuality] = useState<HackathonDataQualityPayload | null>(null);
+  const [hackathonOpportunityScores, setHackathonOpportunityScores] = useState<HackathonOpportunityPayload | null>(null);
+  const [hackathonBuyerMatching, setHackathonBuyerMatching] = useState<HackathonBuyerPayload | null>(null);
   const [financingReadiness, setFinancingReadiness] = useState<HackathonFinancingPayload | null>(null);
   const [sourceRegistry, setSourceRegistry] = useState<OpenDataRegistryPayload | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -253,24 +364,46 @@ export function ReportClient() {
     }
 
     try {
-      const [sharedResponse, financingResponse] = await Promise.all([
+      const [
+        sharedResponse,
+        dataQualityResponse,
+        opportunityResponse,
+        buyerResponse,
+        financingResponse,
+      ] = await Promise.all([
         fetch("/api/hackathon/mvp-summary", { cache: "no-store" }),
+        fetch("/api/hackathon/data-quality", { cache: "no-store" }),
+        fetch("/api/hackathon/opportunity-scores", { cache: "no-store" }),
+        fetch("/api/hackathon/buyer-matching", { cache: "no-store" }),
         fetch("/api/hackathon/financing-readiness", { cache: "no-store" }),
       ]);
-      const sharedPayload = await sharedResponse.json().catch(() => null);
-      const financingPayload = await financingResponse.json().catch(() => null);
-      if (sharedResponse.status === 401 || financingResponse.status === 401) return;
-      if (!sharedResponse.ok || !financingResponse.ok) {
-        setHackathonSummary(null);
-        setFinancingReadiness(null);
-        setHackathonStatus(sharedResponse.status === 503 || financingResponse.status === 503 ? "setup" : "error");
-        return;
-      }
-      setHackathonSummary(sharedPayload as HackathonSummaryPayload);
-      setFinancingReadiness(financingPayload as HackathonFinancingPayload);
-      setHackathonStatus("ready");
+      const [sharedPayload, dataQualityPayload, opportunityPayload, buyerPayload, financingPayload] = await Promise.all([
+        sharedResponse.json().catch(() => null),
+        dataQualityResponse.json().catch(() => null),
+        opportunityResponse.json().catch(() => null),
+        buyerResponse.json().catch(() => null),
+        financingResponse.json().catch(() => null),
+      ]);
+      const responses = [sharedResponse, dataQualityResponse, opportunityResponse, buyerResponse, financingResponse];
+      if (responses.some((response) => response.status === 401)) return;
+
+      setHackathonSummary(sharedResponse.ok ? (sharedPayload as HackathonSummaryPayload) : null);
+      setHackathonDataQuality(dataQualityResponse.ok ? (dataQualityPayload as HackathonDataQualityPayload) : null);
+      setHackathonOpportunityScores(opportunityResponse.ok ? (opportunityPayload as HackathonOpportunityPayload) : null);
+      setHackathonBuyerMatching(buyerResponse.ok ? (buyerPayload as HackathonBuyerPayload) : null);
+      setFinancingReadiness(financingResponse.ok ? (financingPayload as HackathonFinancingPayload) : null);
+      setHackathonStatus(
+        responses.every((response) => response.ok)
+          ? "ready"
+          : responses.some((response) => response.status === 503)
+            ? "setup"
+            : "error",
+      );
     } catch {
       setHackathonSummary(null);
+      setHackathonDataQuality(null);
+      setHackathonOpportunityScores(null);
+      setHackathonBuyerMatching(null);
       setFinancingReadiness(null);
       setHackathonStatus("error");
     }
@@ -302,6 +435,7 @@ export function ReportClient() {
   const queue = dashboardData?.queue ?? [];
   const stocks = dashboardData?.stocks ?? [];
   const buyers = dashboardData?.buyers ?? [];
+  const finance = dashboardData?.finance ?? [];
   const buyerRequirements = dashboardData?.buyerRequirements ?? [];
   const stockLedger = dashboardData?.stockLedger ?? [];
   const mediaEvidence = dashboardData?.mediaEvidence ?? [];
@@ -318,6 +452,18 @@ export function ReportClient() {
   const financingChecklist = financingReadiness?.actionChecklist ?? [];
   const financingChannels = financingReadiness?.channelSummary.slice(0, 3) ?? [];
   const registrySources = sourceRegistry?.sources ?? [];
+  const headlineMetrics = hackathonSummary?.headlineEvidence?.metrics ?? [];
+  const qualityChecks = hackathonDataQuality?.checks ?? [];
+  const qualityIssueTotal = qualityChecks.reduce(
+    (total, check) =>
+      total +
+      check.missingKeyRefs.reduce((sum, item) => sum + item.missingRows, 0) +
+      check.completeness.reduce((sum, item) => sum + item.missingRows, 0) +
+      check.quality.reduce((sum, item) => sum + item.affectedRows, 0),
+    0,
+  );
+  const directOpportunityAreas = hackathonOpportunityScores?.topAreas ?? [];
+  const directBuyerMatches = hackathonBuyerMatching?.matches ?? [];
   const sourceLabels = sourceRegistry?.sourceLabels ?? [];
   const p0Roadmap = sourceRegistry?.p0Roadmap ?? [];
   const registryCoverage = sourceRegistry?.coverage.administrativeAreasImported ?? {};
@@ -333,44 +479,98 @@ export function ReportClient() {
       : registryStatus === "loading"
         ? "Memuat registry sumber"
         : "Registry sumber belum tersedia";
-
-  const executiveRows = useMemo(
-    () => [
-      ["Koperasi", dashboardData?.cooperative?.name ?? "Belum tersedia"],
-      ["Lokasi", dashboardData?.cooperative ? `${dashboardData.cooperative.village}, ${dashboardData.cooperative.regency}` : "Belum tersedia"],
-      ["Source operasional", status === "ready" ? "Postgres operational" : "Setup required"],
-      ["Shared DB evidence", hackathonStatus === "ready" ? "Shared DB read-only" : "Env gated"],
-      ["External source registry", sourceRegistrySummary],
-      ["Draft perlu verifikasi", formatInteger(pendingQueue.length)],
-      ["Stok/readiness gap", formatInteger(criticalStocks.length)],
-      ["Buyer readiness approved", formatInteger(approvedBuyers.length)],
-      ["Buyer requirement rows", formatInteger(buyerRequirements.length)],
-      ["Financing shared DB requests", financingReadiness ? formatInteger(financingReadiness.totals.totalRequests) : "Env gated"],
-      ["Financing verified aggregate", financingReadiness ? formatInteger(financingReadiness.totals.verifiedRequests) : "Env gated"],
-      ["Stock ledger rows", formatInteger(stockLedger.length)],
-      ["Media evidence rows", formatInteger(mediaEvidence.length)],
-      ["Team table prefix", dashboardData?.teamTablePrefix ?? "anak_sarengklek_"],
-      ["Prefixed DB status", dashboardData?.prefixedDbStatus?.status ?? "unknown"],
-      ["Section laporan aktif", `${formatInteger(includedSections.length)} dari ${formatInteger(reportSections.length)}`],
-      ["Decision status", locked ? "Dikunci untuk rapat pengurus" : "Draft laporan aksi"],
-    ],
+  const buyerNeedsReview = buyers.filter((item) => !item.status.toLowerCase().includes("setuju")).length;
+  const approvalSummary = [
+    ["Recommended", buyers.length + buyerRequirements.length],
+    ["Needs verification", pendingQueue.length + buyerNeedsReview + criticalStocks.length],
+    ["Approved", approvedBuyers.length],
+  ] as const;
+  const managerCommandRows = [
+    ["Sales/POS signal", topHackathonOpportunity ? formatInteger(topHackathonOpportunity.transactions) : "Env gated", "Aggregate transaction signal only; no customer detail."],
+    ["Inventory readiness", `${formatInteger(criticalStocks.length)} gaps`, "Validate stock, grade, unit, packaging, and documentation."],
+    ["Warehouse/logistics", `${formatInteger(stockLedger.length)} ledger rows`, "Check pickup, courier, storage location, and proof-of-delivery stage."],
+    ["Buyer outreach", `${formatInteger(buyerNeedsReview)} need review`, "Approve script only after price, grade, volume, and packaging are checked."],
+    ["Financing readiness", financingReadiness ? `${formatInteger(financingReadiness.totals.verifiedRequests)} verified` : "Env gated", "Readiness only, not loan approval."],
+    ["Data quality", `${formatInteger(qualityIssueTotal || hackathonSummary?.dataQualityFlags.length || 0)} flags`, "Bad data becomes needs verification."],
+  ] as const;
+  const simkopdesChecklistRows = reportSimkopdesChecklist.map((item, index) => {
+    const status =
+      index === 0
+        ? stocks.length > 0
+          ? `${formatInteger(stocks.length)} stock rows`
+          : "Checklist"
+        : index === 1
+          ? criticalStocks.length > 0
+            ? `${formatInteger(criticalStocks.length)} gaps`
+            : "No critical gap"
+          : index === 2
+            ? topHackathonOpportunity
+              ? `${formatInteger(topHackathonOpportunity.transactions)} transactions`
+              : "Env gated"
+            : index === 3
+              ? stockLedger.length > 0
+                ? `${formatInteger(stockLedger.length)} ledger`
+                : "Workflow"
+              : "Aggregate/roadmap";
+    return { item, status };
+  });
+  const businessAnalystRows = [
     [
-      approvedBuyers.length,
-      buyerRequirements.length,
-      criticalStocks.length,
-      dashboardData,
-      financingReadiness,
-      hackathonStatus,
-      includedSections.length,
-      locked,
-      pendingQueue.length,
-      reportSections.length,
-      stockLedger.length,
-      mediaEvidence.length,
-      sourceRegistrySummary,
-      status,
+      "Health score koperasi",
+      financingReadiness
+        ? financingReadiness.totals.verificationRate && financingReadiness.totals.verificationRate > 0.25
+          ? "Sehat terbatas"
+          : "Perlu perhatian"
+        : "Needs verification",
+      financingReadiness
+        ? `${formatInteger(financingReadiness.totals.totalRequests)} aggregate requests; ${formatInteger(financingReadiness.totals.verifiedRequests)} verified.`
+        : "Shared financing endpoint belum tersedia.",
     ],
-  );
+    ["Liquidity/cashflow proxy", topHackathonOpportunity ? `${formatInteger(topHackathonOpportunity.transactions)} POS signals` : "Source required", "POS sample helps demand reading, not audited finance."],
+    ["Savings aggregate", `${formatInteger(reportSimkopdesChecklist.length)} mapped checklist items`, "Member savings detail is not exposed in the public/demo report."],
+  ] as const;
+  const borrowerRiskRows = [
+    ["Duplicate/inconsistent request", finance.length > 1 ? "Check queue" : "Monitor", "Use risk flag and missing evidence, never fraud labels."],
+    ["Amount vs business scale", criticalStocks.length > 0 ? "Needs verification" : "Ready for review", "Compare purpose with inventory, stock, and repayment plan."],
+    ["Document completeness", pendingQueue.length > 0 ? "Missing evidence possible" : "Queue clear", "Committee review is required before status change."],
+  ] as const;
+  const negotiationRows = [
+    ["Market reference price", "Source required", "Use official/curated source or operator input; do not invent live prices."],
+    ["Offer/floor/target price", buyerRequirements.length > 0 ? "Draft after requirement review" : "Waiting requirement", "Needs grade, packaging, logistics, and margin minimum."],
+    ["Outreach script", buyers.length > 0 ? "Human approval required" : "No buyer archetype", "Editable script, not automatic buyer contact."],
+  ] as const;
+
+  const executiveRows = [
+    ["Koperasi", dashboardData?.cooperative?.name ?? "Belum tersedia"],
+    ["Lokasi", dashboardData?.cooperative ? `${dashboardData.cooperative.village}, ${dashboardData.cooperative.regency}` : "Belum tersedia"],
+    ["Source operasional", status === "ready" ? "Postgres operational" : "Setup required"],
+    ["Shared DB evidence", hackathonStatus === "ready" ? "Shared DB read-only" : "Env gated"],
+    ["Headline evidence", headlineMetrics.length ? `${formatInteger(headlineMetrics.length)} aggregate metrics` : "Env gated"],
+    ["Opportunity score endpoint", directOpportunityAreas.length ? `${formatInteger(directOpportunityAreas.length)} ranked areas` : "Env gated"],
+    ["Buyer matching lite endpoint", directBuyerMatches.length ? `${formatInteger(directBuyerMatches.length)} archetype matches` : "Env gated"],
+    ["Data-quality endpoint", qualityChecks.length ? `${formatInteger(qualityChecks.length)} table checks` : "Env gated"],
+    ["External source registry", sourceRegistrySummary],
+    ["Guided demo flow", reportDemoFlowSteps.map(([label]) => label).join(" -> ")],
+    ["Role/access alignment", `${formatInteger(reportRoleRows.length)} SIMKOPDES roles mapped`],
+    ["Manager command actions", `${formatInteger(managerCommandRows.length)} action rows`],
+    ["SIMKOPDES readiness checklist", `${formatInteger(simkopdesChecklistRows.length)} checklist rows`],
+    ["Operator approval workflow", approvalSummary.map(([label, value]) => `${label}: ${formatInteger(value)}`).join("; ")],
+    ["AI business analyst", String(businessAnalystRows[0]?.[1] ?? "Needs verification")],
+    ["Borrower risk guardrail", String(borrowerRiskRows[0]?.[1] ?? "Monitor")],
+    ["Market negotiation", String(negotiationRows[0]?.[1] ?? "Source required")],
+    ["Draft perlu verifikasi", formatInteger(pendingQueue.length)],
+    ["Stok/readiness gap", formatInteger(criticalStocks.length)],
+    ["Buyer readiness approved", formatInteger(approvedBuyers.length)],
+    ["Buyer requirement rows", formatInteger(buyerRequirements.length)],
+    ["Financing shared DB requests", financingReadiness ? formatInteger(financingReadiness.totals.totalRequests) : "Env gated"],
+    ["Financing verified aggregate", financingReadiness ? formatInteger(financingReadiness.totals.verifiedRequests) : "Env gated"],
+    ["Stock ledger rows", formatInteger(stockLedger.length)],
+    ["Media evidence rows", formatInteger(mediaEvidence.length)],
+    ["Team table prefix", dashboardData?.teamTablePrefix ?? "anak_sarengklek_"],
+    ["Prefixed DB status", dashboardData?.prefixedDbStatus?.status ?? "unknown"],
+    ["Section laporan aktif", `${formatInteger(includedSections.length)} dari ${formatInteger(reportSections.length)}`],
+    ["Decision status", locked ? "Dikunci untuk rapat pengurus" : "Draft laporan aksi"],
+  ];
 
   async function toggleReportLock() {
     if (!dashboardData?.reportPeriod) {
@@ -441,6 +641,54 @@ export function ReportClient() {
           caveat: "Ringkasan menggabungkan API operasional dan evidence aggregate; bukan klaim produksi SIMKOPDES.",
         },
       )),
+      ...reportDemoFlowSteps.map(([label, detail], index) => reportRow(
+        "guided-demo-flow",
+        `step-${index + 1}-${label}`,
+        detail,
+        "MVP backlog",
+        {
+          confidence: "medium",
+          nextAction: "Presenter mengikuti urutan flow dari dashboard ke laporan aksi.",
+          privacyScope: "navigation-only",
+          caveat: "Flow ini memandu demo; bukan bukti integrasi produksi.",
+        },
+      )),
+      ...reportRoleRows.map(([role, surface, workflow]) => reportRow(
+        "role-access-alignment",
+        role,
+        `${surface}; ${workflow}`,
+        "SIMKOPDES role alignment backlog",
+        {
+          confidence: "workflow-design",
+          nextAction: "Gunakan role sesuai kewenangan saat aksi bisnis direview.",
+          privacyScope: "role-matrix-no-employee-pii",
+          caveat: "Role matrix adalah alignment operasional demo; connector resmi SIMKOPDES belum aktif.",
+        },
+      )),
+      ...reportApprovalStages.map(([stage, detail]) => reportRow(
+        "operator-approval-workflow",
+        stage,
+        detail,
+        "human-in-the-loop policy",
+        {
+          confidence: "medium",
+          nextAction: "Pastikan buyer outreach, pembiayaan, dan report lock tetap perlu approval pengurus/manager.",
+          privacyScope: "workflow-only",
+          caveat: "AI tidak melakukan approval otomatis.",
+        },
+      )),
+      ...reportAiGuardrails.map((guardrail, index) => reportRow(
+        "ai-business-risk-guardrail",
+        `guardrail-${index + 1}`,
+        guardrail,
+        "MVP safety guardrail",
+        {
+          confidence: "policy",
+          nextAction: "Tampilkan guardrail ini saat membahas AI Business Analyst, Borrower Risk, dan Negotiation Agent.",
+          privacyScope: "policy-no-pii",
+          caveat: "Guardrail membatasi output AI agar tetap decision-support.",
+        },
+      )),
       reportRow(
         "evidence-source",
         "source registry",
@@ -453,6 +701,56 @@ export function ReportClient() {
           caveat: sourceRegistry?.registryPolicy?.externalClaims ?? "External integrations stay planned unless tested.",
         },
       ),
+      ...headlineMetrics.map((item) => reportRow(
+        "shared-db-headline-evidence",
+        item.label,
+        item.amountIdr ? `${formatInteger(item.value)} ${item.unit}; Rp${formatInteger(item.amountIdr)}` : `${formatInteger(item.value)} ${item.unit}`,
+        hackathonSummary?.headlineEvidence?.caveat ?? "hackathon shared DB aggregate verification",
+        {
+          confidence: "aggregate-sample",
+          nextAction: "Gunakan sebagai bukti konteks eksplorasi, lalu cek endpoint detail sebelum keputusan.",
+          privacyScope: "aggregate-no-pii",
+          caveat: hackathonSummary?.headlineEvidence?.caveat ?? "Sample eksplorasi, bukan KPI produksi.",
+        },
+      )),
+      ...qualityChecks.map((check) => reportRow(
+        "data-quality-endpoint",
+        check.table,
+        `${formatInteger(check.totalRows)} rows; ${formatInteger(
+          check.quality.reduce((total, item) => total + item.affectedRows, 0),
+        )} quality flags`,
+        hackathonDataQuality?.source ?? "hackathon data-quality API",
+        {
+          confidence: hackathonDataQuality ? "medium" : "limited",
+          nextAction: "Ubah issue menjadi verification task sebelum rekomendasi dijalankan.",
+          privacyScope: "aggregate-no-pii",
+          caveat: "Warning agregat tidak membuka row pribadi atau dokumen mentah.",
+        },
+      )),
+      ...directOpportunityAreas.slice(0, 5).map((item, index) => reportRow(
+        "opportunity-score-endpoint",
+        `rank-${index + 1}`,
+        `${[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area aggregate"}; score ${item.score}`,
+        hackathonOpportunityScores?.source ?? "hackathon opportunity-scores API",
+        {
+          confidence: item.sourceCaveat?.confidence ?? "limited",
+          nextAction: "Validasi stok, kualitas, buyer need, dan data source sebelum tindak lanjut.",
+          privacyScope: "area-aggregate-no-pii",
+          caveat: item.sourceCaveat?.caveat ?? "Score explainable adalah prioritas awal, bukan keputusan otomatis.",
+        },
+      )),
+      ...directBuyerMatches.slice(0, 5).map((item) => reportRow(
+        "buyer-matching-endpoint",
+        `rank-${item.rank}-${item.buyerArchetypeLabel}`,
+        `${item.cooperativeRef}; score ${item.score}; ${item.readinessCluster}`,
+        hackathonBuyerMatching?.source ?? "hackathon buyer-matching API",
+        {
+          confidence: item.score >= 60 ? "medium" : "limited",
+          nextAction: item.readinessGaps?.[0] ?? hackathonBuyerMatching?.nextActions?.[0] ?? "Human review before outreach.",
+          privacyScope: "buyer-archetype-pseudonymous-profile",
+          caveat: "Buyer matching lite memakai archetype dan profile pseudonymous, bukan buyer/koperasi bernama.",
+        },
+      )),
       ...p0Roadmap.map((item) => reportRow(
         "evidence-source",
         item.title,
@@ -463,6 +761,97 @@ export function ReportClient() {
           nextAction: "Jalankan import/source-check sebelum memakai data sebagai evidence operasional.",
           privacyScope: "registry-only-no-secrets",
           caveat: item.caveat,
+        },
+      )),
+      ...reportDemoFlowSteps.map(([label, detail], index) => reportRow(
+        "guided-demo-mode",
+        `step-${index + 1}-${label}`,
+        detail,
+        "dashboard/report UI",
+        {
+          nextAction: "Ikuti flow demo tanpa melompat ke klaim marketplace penuh.",
+          privacyScope: "demo-navigation-no-pii",
+          caveat: "Demo mode adalah presenter guide, bukan bukti integrasi eksternal.",
+        },
+      )),
+      ...reportRoleRows.map(([role, surfaces, workflow]) => reportRow(
+        "role-access-matrix",
+        role,
+        `${surfaces}; ${workflow}`,
+        "SIMKOPDES alignment checklist",
+        {
+          confidence: "workflow-alignment",
+          nextAction: "Pastikan aksi bisnis direview role yang sesuai.",
+          privacyScope: "role-only-no-employee-pii",
+          caveat: "Role model mengikuti pola operasional, bukan daftar karyawan asli.",
+        },
+      )),
+      ...managerCommandRows.map(([label, value, note]) => reportRow(
+        "manager-command-center",
+        label,
+        value,
+        "dashboard aggregate command rows",
+        {
+          nextAction: note,
+          caveat: "Manager command center memberi daftar aksi, bukan keputusan otomatis.",
+        },
+      )),
+      ...simkopdesChecklistRows.map((row) => reportRow(
+        "simkopdes-readiness-checklist",
+        row.item,
+        row.status,
+        "SIMKOPDES warehouse/POS/logistics/savings alignment",
+        {
+          confidence: row.status === "Checklist" || row.status === "Workflow" ? "workflow" : "medium",
+          nextAction: "Lengkapi readiness sebelum buyer outreach agresif.",
+          caveat: "Checklist operasional; stok resmi SIMKOPDES belum disinkronkan.",
+        },
+      )),
+      ...approvalSummary.map(([label, value]) => reportRow(
+        "operator-approval-workflow",
+        label,
+        value,
+        "operator queue + buyer readiness summary",
+        {
+          nextAction: "Move recommended items through verification before approval.",
+          privacyScope: "aggregate-count-no-pii",
+          caveat: "Approved means internal readiness approval, not automatic outreach or financing approval.",
+        },
+      )),
+      ...businessAnalystRows.map(([label, value, note]) => reportRow(
+        "ai-business-analyst",
+        label,
+        value,
+        "financing readiness + POS aggregate signals",
+        {
+          confidence: financingReadiness ? "limited-aggregate" : "needs-verification",
+          nextAction: note,
+          privacyScope: "aggregate-no-member-pii",
+          caveat: "Early warning only, not formal audit or accounting opinion.",
+        },
+      )),
+      ...borrowerRiskRows.map(([label, value, note]) => reportRow(
+        "borrower-risk",
+        label,
+        value,
+        "finance queue + stock/readiness signals",
+        {
+          confidence: "risk-flag",
+          nextAction: note,
+          privacyScope: "pseudonymous-no-member-identity",
+          caveat: "No automatic approval/rejection and no fraud labels.",
+        },
+      )),
+      ...negotiationRows.map(([label, value, note]) => reportRow(
+        "market-negotiation",
+        label,
+        value,
+        "buyer requirement + market source readiness",
+        {
+          confidence: value === "Source required" ? "source-required" : "draft",
+          nextAction: note,
+          privacyScope: "archetype-no-named-buyer",
+          caveat: "No fake real-time price and no automatic buyer contact.",
         },
       )),
       ...commodityHighlights.slice(0, 5).map((item) => reportRow(
@@ -635,6 +1024,145 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
+              <p className="text-sm font-black text-[#7A4E2D]">Guided demo and access</p>
+              <h2 className="mt-2 text-2xl font-black">Flow juri dan matrix role SIMKOPDES</h2>
+            </div>
+            <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
+              sample/aggregate/no PII
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-5">
+            {reportDemoFlowSteps.map(([label, detail], index) => (
+              <div key={label} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+                <p className="font-mono text-xs font-black text-[#D79A2B]">0{index + 1}</p>
+                <p className="mt-2 text-sm font-black">{label}</p>
+                <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{detail}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[#E7DED1]">
+                  {["Role", "Surface", "Workflow"].map((heading) => (
+                    <th key={heading} className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#7A4E2D]">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E7DED1]">
+                {reportRoleRows.map(([role, surface, workflow]) => (
+                  <tr key={role}>
+                    <td className="px-3 py-3 text-sm font-black">{role}</td>
+                    <td className="px-3 py-3 text-xs font-bold text-[#53606A]">{surface}</td>
+                    <td className="px-3 py-3 text-xs font-semibold leading-5 text-[#53606A]">{workflow}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-[#7A4E2D]">Manager command center</p>
+              <h2 className="mt-2 text-2xl font-black">Aksi operasional dan readiness SIMKOPDES</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+                Laporan menunjukkan tindak lanjut manager untuk sales/POS, inventory, logistics, buyer, finance, dan data-quality alerts.
+              </p>
+            </div>
+            <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
+              official connector not active
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {managerCommandRows.map(([label, value, note]) => (
+              <div key={label} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-black">{label}</p>
+                  <span className="font-mono text-xs font-black text-[#D79A2B]">{value}</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{note}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {simkopdesChecklistRows.map((row) => (
+              <div key={row.item} className="rounded-[12px] border border-[#E7DED1] bg-[#FFF8EA] p-3">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 size={17} strokeWidth={2.2} className="mt-0.5 text-[#2F7D32]" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-black">{row.item}</p>
+                    <p className="mt-1 text-xs font-bold text-[#53606A]">Status: {row.status}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-[#7A4E2D]">AI guardrails</p>
+              <h2 className="mt-2 text-2xl font-black">Business analyst, borrower risk, and negotiation summary</h2>
+            </div>
+            <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
+              human approval required
+            </span>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <div>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">AI Business Analyst</p>
+              <div className="mt-3 space-y-2">
+                {businessAnalystRows.map(([label, value, note]) => (
+                  <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
+                    <p className="font-black">{label}</p>
+                    <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{value}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Borrower risk</p>
+              <div className="mt-3 space-y-2">
+                {borrowerRiskRows.map(([label, value, note]) => (
+                  <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
+                    <p className="font-black">{label}</p>
+                    <p className="mt-1 text-xs font-bold text-[#C92A2A]">{value}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Market negotiation</p>
+              <div className="mt-3 space-y-2">
+                {negotiationRows.map(([label, value, note]) => (
+                  <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
+                    <p className="font-black">{label}</p>
+                    <p className="mt-1 text-xs font-bold text-[#1D5D8F]">{value}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-2 md:grid-cols-2">
+            {reportAiGuardrails.map((item) => (
+              <div key={item} className="rounded-[12px] border border-[#E7DED1] bg-[#FFF8EA] p-3 text-xs font-bold leading-5 text-[#7A4E2D]">
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
               <p className="text-sm font-black text-[#7A4E2D]">Evidence/source</p>
               <h2 className="mt-2 text-2xl font-black">Top opportunities dan data pendukung</h2>
             </div>
@@ -710,6 +1238,62 @@ export function ReportClient() {
                   Source registry belum terbaca. Klaim integrasi tetap discovery/planned.
                 </p>
               )}
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-[#7A4E2D]">SIMKOPDES alignment</p>
+              <h2 className="mt-2 text-2xl font-black">Role, approval, dan guardrail AI</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+                Laporan ini memosisikan Lumbung Bersama sebagai operating layer koperasi: role-aware, human-reviewed, dan aggregate-only.
+              </p>
+            </div>
+            <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
+              no PII
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-3">
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Role matrix</p>
+              <div className="mt-3 space-y-2">
+                {reportRoleRows.slice(0, 4).map(([role, surface, workflow]) => (
+                  <div key={role} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                    <p className="font-black">{role}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{surface}</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{workflow}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Approval workflow</p>
+              <div className="mt-3 space-y-2">
+                {reportApprovalStages.map(([stage, detail], index) => (
+                  <div key={stage} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-black">{stage}</p>
+                      <span className="font-mono text-xs font-black text-[#D79A2B]">0{index + 1}</span>
+                    </div>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">AI guardrails</p>
+              <div className="mt-3 space-y-2">
+                {reportAiGuardrails.map((guardrail) => (
+                  <div key={guardrail} className="rounded-[12px] bg-[#FFFCF5] p-3 text-xs font-bold leading-5 text-[#53606A]">
+                    {guardrail}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </article>

@@ -868,3 +868,152 @@ export const featureDetails: Record<
     operationalOutputs: ["Env checklist", "Integration status", "Fallback reason", "API map"],
   },
 };
+
+export const sourceGroundingPolicy = {
+  label: "sample/aggregate/no PII",
+  freshness: "Runtime aggregate fields are generated when the API is requested; external feeds keep their own freshness labels.",
+  caveat:
+    "Lumbung Bersama MVP uses sample, aggregate, and connector-planned evidence. It must not be presented as official SIMKOPDES production data.",
+  humanReview:
+    "Operator or committee review is required before outreach, procurement, financing, or public reporting action.",
+  noClaims: [
+    "no automatic buyer outreach",
+    "no automatic financing approval",
+    "no real-time price claim unless a tested official connector returns it",
+    "no named buyer/offtaker claim unless verified counterparty data exists",
+    "no borrower fraud label; use risk flag and needs verification",
+  ],
+} as const;
+
+export const commodityMarketSignalPolicy = {
+  sourceId: "gdelt-doc-api-context",
+  sourceLabel: "GDELT Doc API news context",
+  sourceUrl: "https://www.gdeltproject.org/",
+  role: "market context only",
+  freshnessWindow: "GDELT seen-date plus 10 minute API cache in this endpoint.",
+  caveat:
+    "News results are market context and issue signals only. They are not official price, demand, stock, production, or supply truth.",
+  scoreUse:
+    "Opportunity score may use the presence and recency of market context as a weak signal, but pricing and procurement still require official price checks and human review.",
+} as const;
+
+export const priceCheckNegotiationPlaybook = {
+  status: "source-discovery-and-operator-check",
+  caveat:
+    "No endpoint should invent real-time prices. If official price data is unavailable, return a checklist and caveat instead of a numeric price.",
+  officialSourceCandidates: [
+    {
+      id: "bapanas-panel-harga",
+      name: "Panel Harga Pangan Bapanas",
+      url: "https://panelharga.badanpangan.go.id/",
+      use: "Reference food price band by region where connector is available.",
+      status: "connector-planned",
+    },
+    {
+      id: "pihps",
+      name: "PIHPS",
+      url: "https://www.bi.go.id/hargapangan",
+      use: "Regional market price reference where public access is available.",
+      status: "source-discovery",
+    },
+    {
+      id: "sp2kp-kemendag",
+      name: "SP2KP Kemendag",
+      url: "https://ews.kemendag.go.id/",
+      use: "Market price and trade monitoring reference where connector is available.",
+      status: "source-discovery",
+    },
+    {
+      id: "operator-field-check",
+      name: "Operator field check",
+      url: "internal-operator-workflow",
+      use: "Physical stock, grade, moisture, packaging, logistics, and buyer terms verification.",
+      status: "required-before-negotiation",
+    },
+  ],
+  negotiationChecklist: [
+    "Verify commodity grade, moisture/quality, packaging, and minimum order quantity.",
+    "Check official regional price reference or record source unavailable.",
+    "Compare buyer archetype requirements against stock readiness and logistics.",
+    "Draft price band as a human-reviewed note, not an automated offer.",
+    "Record caveat, confidence, source label, and next action in the operator queue.",
+  ],
+} as const;
+
+export const borrowerRiskGuardrailPolicy = {
+  label: "Borrower Risk & Fraud Analysis guardrails",
+  role: "committee support, not automated credit decisioning",
+  prohibitedOutputs: [
+    "fraudster labels",
+    "automatic approve/reject decisions",
+    "PII exposure",
+    "bank account details",
+    "document URLs or file paths",
+    "blacklist claims without verified governance process",
+  ],
+  allowedOutputs: [
+    "aggregate readiness status",
+    "risk flag",
+    "needs verification",
+    "missing document checklist",
+    "repayment plan draft",
+    "committee review packet",
+  ],
+  riskFlags: [
+    {
+      id: "missing-status",
+      label: "Status belum lengkap",
+      nextAction: "Minta operator melengkapi status workflow sebelum naik ke komite.",
+    },
+    {
+      id: "missing-channel-or-purpose",
+      label: "Tujuan/channel belum jelas",
+      nextAction: "Klasifikasikan tujuan modal kerja dan hubungkan ke stok, produk, atau transaksi.",
+    },
+    {
+      id: "missing-amount",
+      label: "Nilai pengajuan belum valid",
+      nextAction: "Validasi nominal dan satuan pembiayaan dari dokumen internal.",
+    },
+    {
+      id: "low-verification-rate",
+      label: "Bottleneck verifikasi",
+      nextAction: "Prioritaskan requested backlog yang punya evidence usaha, stok, dan rencana bayar.",
+    },
+  ],
+  caveat:
+    "Risk flags are operational review cues. They must be phrased as needs verification and decided by authorized cooperative governance.",
+} as const;
+
+export const businessAnalystPlaybook = {
+  label: "Financing and business analyst aggregate",
+  role: "turn aggregate evidence into committee and operator next actions",
+  dimensions: [
+    {
+      id: "financing-funnel",
+      label: "Financing funnel",
+      source: "pengajuan_pembiayaan aggregate",
+      analystQuestion: "Where do draft/requested/verified records bottleneck?",
+    },
+    {
+      id: "market-readiness",
+      label: "Market readiness",
+      source: "produk_koperasi, inventaris_produk, transaksi_penjualan aggregate",
+      analystQuestion: "Which cooperative records have product, stock, and transaction signal before buyer outreach?",
+    },
+    {
+      id: "partnership-demand",
+      label: "Partnership demand",
+      source: "pengajuan_kemitraan aggregate",
+      analystQuestion: "Which requests can become human-reviewed buyer matching experiments?",
+    },
+    {
+      id: "data-quality",
+      label: "Data quality",
+      source: "data-quality aggregate checks",
+      analystQuestion: "Which missing fields or outliers block confident recommendations?",
+    },
+  ],
+  caveat:
+    "Analyst output is aggregate prioritization. It does not expose row-level borrower data and does not approve financing or buyer outreach.",
+} as const;

@@ -48,6 +48,35 @@ type CommodityNewsItem = {
   source: string;
 };
 
+type OpportunityAnalysis = {
+  mode?: string;
+  score?: number;
+  confidence?: string;
+  village?: {
+    name: string;
+    district: string;
+    regency: string;
+    province: string;
+  };
+  commodity?: {
+    name: string;
+    supply: string;
+    demand: string;
+    priceSignal: string;
+    opportunity: string;
+    risk: string;
+  };
+  opportunity?: {
+    title: string;
+    whyNow: string;
+    firstActions: string[];
+    risk: string;
+    waScript: string;
+  };
+  message?: string;
+  error?: string;
+};
+
 type DrillArea = {
   code: string;
   name: string;
@@ -328,6 +357,9 @@ export function PetaUnggulanClient() {
   const [commodityNews, setCommodityNews] = useState<CommodityNewsItem[]>([]);
   const [newsState, setNewsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [newsNote, setNewsNote] = useState("");
+  const [analysisState, setAnalysisState] = useState<"idle" | "loading" | "ready" | "setup" | "error">("idle");
+  const [analysisResult, setAnalysisResult] = useState<OpportunityAnalysis | null>(null);
+  const [analysisNote, setAnalysisNote] = useState("");
   const [message, setMessage] = useState("Pilih provinsi di peta untuk mulai drill-down.");
 
   const loadDrill = useCallback(
@@ -637,6 +669,41 @@ export function PetaUnggulanClient() {
     setCommodityFilter("");
     setSectorFilter("");
     void loadDrill(selected?.code ?? "", currentViewport, false, { commodity: "", sector: "" });
+  }
+
+  async function runOpportunityAnalysis() {
+    if (!selected) return;
+    setAnalysisState("loading");
+    setAnalysisNote("");
+    setAnalysisResult(null);
+
+    try {
+      const response = await fetch("/api/peta-unggulan/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          villageCode: selected.level === 4 ? selected.code : undefined,
+          commodity: (selectedCommodity?.commodity ?? commodityFilter) || undefined,
+          selectedLayers: ["cooperative", "warehouse", "umkm"],
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as OpportunityAnalysis;
+      if (!response.ok) {
+        setAnalysisState(response.status === 503 ? "setup" : "error");
+        setAnalysisNote(
+          payload.message ??
+            payload.error ??
+            "Analisis belum tersedia. Data Postgres operasional atau komoditas desa perlu diaktifkan.",
+        );
+        return;
+      }
+      setAnalysisResult(payload);
+      setAnalysisState("ready");
+      setAnalysisNote("Analisis opportunity berhasil dibuat dari endpoint peta.");
+    } catch (error) {
+      setAnalysisState("error");
+      setAnalysisNote(error instanceof Error ? error.message : "Analisis opportunity gagal dijalankan.");
+    }
   }
 
   return (
@@ -999,6 +1066,19 @@ export function PetaUnggulanClient() {
                   Buka dashboard operator
                   <ChevronRight size={15} strokeWidth={2.2} aria-hidden="true" />
                 </a>
+                <button
+                  type="button"
+                  onClick={() => void runOpportunityAnalysis()}
+                  disabled={analysisState === "loading"}
+                  className="inline-flex items-center justify-between gap-3 rounded-[12px] border border-[#D79A2B]/45 bg-[#D79A2B]/10 px-3 py-2 text-sm font-medium text-[#F4D7A2] transition hover:border-[#D79A2B] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:lb-focus"
+                >
+                  {analysisState === "loading" ? "Menganalisis..." : "Jalankan opportunity score"}
+                  {analysisState === "loading" ? (
+                    <Loader2 size={15} strokeWidth={2.2} className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight size={15} strokeWidth={2.2} aria-hidden="true" />
+                  )}
+                </button>
                 <a
                   href="/login?next=/dashboard"
                   className="inline-flex items-center justify-between gap-3 rounded-[12px] border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium text-[#F4F0E8] transition hover:border-[#D79A2B] focus-visible:lb-focus"
@@ -1010,6 +1090,40 @@ export function PetaUnggulanClient() {
               <p className="mt-3 text-xs leading-5 text-[#858B8D]">
                 CTA ini hanya menyiapkan tindak lanjut buyer/operator. Stok siap transaksi tetap perlu bukti WA, upload resmi, atau import data yang berwenang.
               </p>
+              {analysisState !== "idle" ? (
+                <div className="mt-4 rounded-[12px] border border-[#D79A2B]/28 bg-black/25 p-3 text-xs leading-5 text-[#AEB4B5]">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium text-[#F4F0E8]">
+                      {analysisState === "ready"
+                        ? `Score ${analysisResult?.score ?? "-"} - ${analysisResult?.confidence ?? "confidence source-labeled"}`
+                        : analysisState === "setup"
+                          ? "Setup data diperlukan"
+                          : analysisState === "loading"
+                            ? "Menunggu endpoint analisis"
+                            : "Analisis belum berhasil"}
+                    </p>
+                    <span className="rounded-[8px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-[#F4D7A2]">
+                      /api/peta-unggulan/analyze
+                    </span>
+                  </div>
+                  {analysisResult?.opportunity ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="font-medium text-[#F4D7A2]">{analysisResult.opportunity.title}</p>
+                      <p>{analysisResult.opportunity.whyNow}</p>
+                      <ul className="list-disc space-y-1 pl-4">
+                        {analysisResult.opportunity.firstActions.slice(0, 3).map((action) => (
+                          <li key={action}>{action}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-2">{analysisNote}</p>
+                  )}
+                  <p className="mt-3 text-[#858B8D]">
+                    Output ini tetap perlu validasi operator sebelum buyer outreach, stok, atau pembiayaan.
+                  </p>
+                </div>
+              ) : null}
             </section>
 
             {(commodityFilter || sectorFilter) && (

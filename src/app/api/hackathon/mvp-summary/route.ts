@@ -6,6 +6,7 @@ import {
   isHackathonSharedDbConfigured,
   queryHackathonRows,
 } from "@/lib/hackathon-shared-db";
+import { buildSourceCaveatFields } from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,33 @@ type CooperativeCandidateRow = {
   transactions: string;
   partnershipRequests: string;
 };
+
+const HEADLINE_EVIDENCE = {
+  source: "hackathon shared DB aggregate verification",
+  mode: "aggregate-only-no-pii",
+  caveat:
+    "Headline numbers are sample/exploration evidence from the hackathon shared DB scope, not production SIMKOPDES KPI.",
+  metrics: [
+    { id: "total_rows", label: "Total sample rows", value: 547_869, unit: "rows" },
+    { id: "total_tables", label: "Tables inspected", value: 27, unit: "tables" },
+    { id: "profiles", label: "Profil koperasi/desa/wilayah sample", value: 1_026, unit: "profiles" },
+    { id: "commodity_rows", label: "Commodity rows", value: 8_191, unit: "rows" },
+    { id: "product_inventory_rows", label: "Product/inventory rows", value: 13_974, unit: "rows" },
+    { id: "partnership_requests", label: "Partnership requests", value: 3_254, unit: "requests" },
+    { id: "paid_transactions", label: "Paid transactions", value: 1_000, unit: "transactions", amountIdr: 11_470_000_000 },
+    { id: "financing_requests", label: "Financing requests", value: 118, unit: "requests", amountIdr: 105_390_000_000 },
+    { id: "verified_financing", label: "Verified financing", value: 1, unit: "request" },
+  ],
+} as const;
+
+function pseudonymousCooperativeRef(value: string | null | undefined, index: number) {
+  const source = value || `row-${index}`;
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  return `sample-koperasi-${String((hash % 10_000) + 1).padStart(4, "0")}`;
+}
 
 async function getSharedMvpSummary() {
   const [tableCounts, coverage, provinceOpportunities, cooperativeCandidates] = await Promise.all([
@@ -157,6 +185,45 @@ async function getSharedMvpSummary() {
        LIMIT 10`,
     ),
   ]);
+  const countByTable = new Map(tableCounts.map((row) => [row.tableName, Number(row.total ?? 0)]));
+  const businessAnalystAggregate = {
+    label: "MVP business analyst aggregate",
+    source: "hackathon-shared-db-read-only table counts and aggregate joins",
+    sourceCaveat: buildSourceCaveatFields(
+      "hackathon shared DB aggregate",
+      tableCounts.length > 0 ? "medium" : "limited",
+      "shared-db-read-only-aggregate",
+    ),
+    evidenceRows: {
+      regions: countByTable.get("referensi_wilayah") ?? 0,
+      commodityRows: countByTable.get("referensi_komoditas_desa") ?? 0,
+      cooperativeProfiles: countByTable.get("profil_koperasi") ?? 0,
+      productRows: countByTable.get("produk_koperasi") ?? 0,
+      inventoryRows: countByTable.get("inventaris_produk") ?? 0,
+      transactionRows: countByTable.get("transaksi_penjualan") ?? 0,
+      partnershipRows: countByTable.get("pengajuan_kemitraan") ?? 0,
+      financingRows: countByTable.get("pengajuan_pembiayaan") ?? 0,
+    },
+    decisionModules: [
+      {
+        id: "opportunity-score",
+        sourceTables: ["referensi_wilayah", "referensi_komoditas_desa", "referensi_koperasi_wilayah"],
+        nextAction: "Rank aggregate areas, then verify village and commodity details before action.",
+      },
+      {
+        id: "buyer-matching-lite",
+        sourceTables: ["produk_koperasi", "inventaris_produk", "transaksi_penjualan", "pengajuan_kemitraan"],
+        nextAction: "Use buyer archetypes only until named buyer/offtaker records are verified.",
+      },
+      {
+        id: "financing-readiness",
+        sourceTables: ["pengajuan_pembiayaan"],
+        nextAction: "Build committee packet from aggregate readiness; no automatic approval.",
+      },
+    ],
+    caveat:
+      "This is aggregate analyst context for prioritization. It does not expose row-level PII and is not a production SIMKOPDES KPI.",
+  };
 
   return {
     source: "hackathon-shared-db-read-only",
@@ -174,7 +241,21 @@ async function getSharedMvpSummary() {
     tableCounts,
     coverage: coverage[0] ?? null,
     provinceOpportunities,
-    cooperativeCandidates,
+    headlineEvidence: HEADLINE_EVIDENCE,
+    cooperativeCandidates: cooperativeCandidates.map((candidate, index) => ({
+      cooperativeRef: pseudonymousCooperativeRef(candidate.cooperativeRef, index),
+      cooperativeName: null,
+      province: candidate.province,
+      regency: candidate.regency,
+      village: candidate.village ? "redacted-village" : null,
+      products: candidate.products,
+      stockItems: candidate.stockItems,
+      stockTotal: candidate.stockTotal,
+      transactions: candidate.transactions,
+      partnershipRequests: candidate.partnershipRequests,
+      privacyScope: "pseudonymous-profile-no-real-name",
+    })),
+    businessAnalystAggregate,
     dataQualityFlags: [
       "shared DB adalah representasi terbatas/sample eksplorasi, bukan referensi utama SIMKOPDES",
       "volume dan luas_area perlu parsing unit karena bertipe text",

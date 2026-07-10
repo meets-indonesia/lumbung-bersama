@@ -1,4 +1,9 @@
 import { checkRateLimit, fetchWithTimeout } from "@/lib/external-fetch";
+import {
+  buildCommodityMarketSignal,
+  buildPriceCheckNegotiationData,
+  type MarketSignalStatus,
+} from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -19,20 +24,37 @@ type NewsItem = {
   source: string;
 };
 
+type CommodityNewsPayload = {
+  source: string;
+  sourceUrl: string;
+  sourceStatus: MarketSignalStatus;
+  query: {
+    commodity: string;
+    area: string;
+    limit: number;
+  };
+  count: number;
+  items: NewsItem[];
+  freshness: {
+    generatedAt: string;
+    cacheTtlSeconds: number;
+    caveat: string;
+  };
+  confidence: {
+    level: "limited" | "medium";
+    basis: string;
+    caveat: string;
+  };
+  marketSignal: ReturnType<typeof buildCommodityMarketSignal>;
+  priceCheck: ReturnType<typeof buildPriceCheckNegotiationData>;
+  note: string;
+  error?: string;
+  message?: string;
+};
+
 type CachedNews = {
   expiresAt: number;
-  payload: {
-    source: string;
-    sourceUrl: string;
-    query: {
-      commodity: string;
-      area: string;
-      limit: number;
-    };
-    count: number;
-    items: NewsItem[];
-    note: string;
-  };
+  payload: CommodityNewsPayload;
 };
 
 const cache = new Map<string, CachedNews>();
@@ -43,6 +65,54 @@ function sanitizeQueryPart(value: string) {
 
 function getCacheKey(commodity: string, area: string, limit: number) {
   return `${commodity.toLowerCase()}::${area.toLowerCase()}::${limit}`;
+}
+
+function buildCommodityNewsPayload(input: {
+  commodity: string;
+  area: string;
+  limit: number;
+  items: NewsItem[];
+  sourceStatus: MarketSignalStatus;
+  note: string;
+  error?: string;
+  message?: string;
+}): CommodityNewsPayload {
+  const latestSeenDate = input.items.find((item) => item.seenDate)?.seenDate;
+  const marketSignal = buildCommodityMarketSignal({
+    commodity: input.commodity,
+    area: input.area,
+    itemCount: input.items.length,
+    status: input.sourceStatus,
+    latestSeenDate,
+    errorMessage: input.message,
+  });
+
+  return {
+    source: "gdelt-doc-api",
+    sourceUrl: "https://www.gdeltproject.org/",
+    sourceStatus: input.sourceStatus,
+    query: { commodity: input.commodity, area: input.area, limit: input.limit },
+    count: input.items.length,
+    items: input.items,
+    freshness: {
+      generatedAt: new Date().toISOString(),
+      cacheTtlSeconds: 600,
+      caveat: "Freshness follows the GDELT seen-date returned by the source and this endpoint cache window.",
+    },
+    confidence: {
+      level: input.items.length >= 3 && input.sourceStatus === "available" ? "medium" : "limited",
+      basis:
+        input.items.length > 0
+          ? `${input.items.length} contextual article(s) returned by GDELT for this query.`
+          : "No article context was returned, so the endpoint exposes a guarded unavailable-source caveat.",
+      caveat: "This is not an official price, demand, supply, stock, or production dataset.",
+    },
+    marketSignal,
+    priceCheck: buildPriceCheckNegotiationData(input.commodity, input.area),
+    note: input.note,
+    error: input.error,
+    message: input.message,
+  };
 }
 
 export async function GET(request: Request) {
@@ -85,14 +155,18 @@ export async function GET(request: Request) {
     }, { timeoutMs: 6500, label: "GDELT commodity news" });
 
     if (response.status === 429) {
-      return Response.json({
-        source: "gdelt-doc-api",
-        sourceUrl: "https://www.gdeltproject.org/",
-        query: { commodity, area, limit },
-        count: 0,
-        items: [],
-        note: "GDELT membatasi frekuensi request. Coba lagi beberapa detik lagi.",
-      });
+      return Response.json(
+        buildCommodityNewsPayload({
+          commodity,
+          area,
+          limit,
+          items: [],
+          sourceStatus: "rate-limited",
+          note: "GDELT membatasi frekuensi request. Endpoint tetap mengembalikan caveat dan price-check checklist.",
+          error: "COMMODITY_NEWS_RATE_LIMITED",
+          message: "GDELT membatasi frekuensi request. Coba lagi beberapa detik lagi.",
+        }),
+      );
     }
 
     if (!response.ok) throw new Error(`GDELT gagal dimuat: ${response.status}`);
@@ -108,30 +182,29 @@ export async function GET(request: Request) {
         source: "GDELT Doc API",
       }));
 
-    const apiPayload = {
-      source: "gdelt-doc-api",
-      sourceUrl: "https://www.gdeltproject.org/",
-      query: { commodity, area, limit },
-      count: items.length,
+    const apiPayload = buildCommodityNewsPayload({
+      commodity,
+      area,
+      limit,
       items,
+      sourceStatus: "available",
       note: "Sinyal berita adalah konteks pasar/isu daerah, bukan data pasokan resmi.",
-    };
+    });
 
     cache.set(cacheKey, { expiresAt: Date.now() + 1000 * 60 * 10, payload: apiPayload });
     return Response.json(apiPayload);
   } catch (error) {
     return Response.json(
-      {
-        source: "gdelt-doc-api",
-        sourceUrl: "https://www.gdeltproject.org/",
+      buildCommodityNewsPayload({
+        commodity,
+        area,
+        limit,
+        items: [],
+        sourceStatus: "unavailable",
         error: "COMMODITY_NEWS_FAILED",
         message: error instanceof Error ? error.message : "Sinyal berita komoditas gagal dimuat.",
-        query: { commodity, area, limit },
-        count: 0,
-        items: [],
-        note: "Sinyal berita tidak boleh menggantikan data produksi/pasokan resmi.",
-      },
-      { status: 502 },
+        note: "Sinyal berita tidak tersedia; gunakan caveat ini dan jangan menggantikan data produksi/pasokan resmi.",
+      }),
     );
   }
 }

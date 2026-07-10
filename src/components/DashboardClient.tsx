@@ -132,6 +132,131 @@ const dashboardTourSteps: TourStep[] = [
   },
 ];
 
+const demoFlowSteps = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    actionLabel: "Dashboard",
+    targetView: "overview",
+    detail: "Manager melihat evidence, role, queue, dan command center.",
+  },
+  {
+    id: "peta",
+    label: "Peta",
+    actionLabel: "Buka peta",
+    href: "/peta-unggulan",
+    detail: "Pilih wilayah atau komoditas tanpa klaim coverage nasional penuh.",
+  },
+  {
+    id: "score",
+    label: "Score",
+    actionLabel: "Score",
+    targetView: "lumbung-data",
+    detail: "Tampilkan score explainable dan caveat data.",
+  },
+  {
+    id: "buyer",
+    label: "Buyer",
+    actionLabel: "Buyer",
+    targetView: "pasar-mitra",
+    detail: "Gunakan archetype buyer, bukan buyer palsu.",
+  },
+  {
+    id: "laporan",
+    label: "Laporan",
+    actionLabel: "Laporan",
+    href: "/laporan",
+    detail: "Tutup demo dengan CSV/report tanpa PII.",
+  },
+] as const;
+
+const simkopdesRoleAccessMatrix = [
+  {
+    role: "Pengurus",
+    surfaces: "/dashboard, /laporan",
+    workflow: "Kebijakan, lock laporan, keputusan pembiayaan dan outreach.",
+    review: "Final approval required",
+  },
+  {
+    role: "Manager Koperasi",
+    surfaces: "/dashboard, /peta-unggulan, /laporan",
+    workflow: "Memantau transaksi, gudang, pengiriman, opportunity, dan buyer.",
+    review: "Owns command center",
+  },
+  {
+    role: "Staff/Admin Gudang",
+    surfaces: "Stok readiness",
+    workflow: "Produk, barang masuk/keluar, inventaris, lokasi penyimpanan.",
+    review: "Validasi stok dan bukti",
+  },
+  {
+    role: "Staff/Admin Logistik",
+    surfaces: "Logistik",
+    workflow: "Pickup, pilih kurir, tahap persiapan pengiriman, proof-of-delivery.",
+    review: "Validasi pengiriman",
+  },
+  {
+    role: "Kasir",
+    surfaces: "POS signal",
+    workflow: "Transaksi aggregate, pickup/delivery, subsidi bila tersedia.",
+    review: "No customer detail",
+  },
+  {
+    role: "Kurir",
+    surfaces: "Fulfillment",
+    workflow: "Mulai pengiriman, tandai tiba, bukti foto bila governed.",
+    review: "No public recipient data",
+  },
+  {
+    role: "Juri/Viewer demo",
+    surfaces: "/dashboard, /peta-unggulan, /laporan",
+    workflow: "Melihat flow sample/aggregate/no PII.",
+    review: "Read-only demo",
+  },
+] as const;
+
+const approvalWorkflowSteps = [
+  {
+    label: "Recommended",
+    detail: "AI atau rules membuat rekomendasi awal dengan source, confidence, dan caveat.",
+  },
+  {
+    label: "Needs verification",
+    detail: "Operator memeriksa stok, dokumen, harga, buyer requirement, dan bukti.",
+  },
+  {
+    label: "Approved",
+    detail: "Pengurus atau manager menyetujui tindak lanjut; bukan keputusan otomatis AI.",
+  },
+] as const;
+
+const simkopdesReadinessChecklist = [
+  "Produk punya satuan dan kategori jelas",
+  "Potensi desa terhubung ke source opportunity score",
+  "Pemasok lokal/UMKM/petani dicatat sebagai sumber, bukan data pribadi publik",
+  "Barang masuk dan barang keluar punya alasan dan evidence_ref",
+  "Inventaris tidak negatif, bukan label generik, dan tidak masih draft",
+  "Harga beli/jual atau market input operator tersedia sebelum negosiasi",
+  "Dokumentasi foto/status verifikasi tersedia tanpa raw media publik",
+  "Gudang, lokasi penyimpanan, kurir, dan proof-of-delivery menjadi readiness stage",
+] as const;
+
+const memberSavingsAlignment = [
+  "Simpanan Pokok",
+  "Simpanan Wajib",
+  "Simpanan Sukarela",
+  "Periode tagihan dan status lunas aggregate",
+  "Bukti bayar dan export Excel sebagai roadmap governed",
+  "Penarikan simpanan mengikuti aturan koperasi dan approval pengurus",
+] as const;
+
+const analystGuardrails = [
+  "Analisis memakai aggregate/pseudonymized signals, bukan NIK, phone, address, rekening, atau identitas anggota.",
+  "Output adalah early warning kesehatan koperasi, bukan audit resmi atau keputusan hukum/akuntansi final.",
+  "Pinjaman tidak otomatis disetujui atau ditolak; semua red flag butuh checklist verifikasi.",
+  "Market price tidak dikarang; bila source harga tidak tersedia, operator harus mengisi referensi.",
+] as const;
+
 function dashboardViewForFeature(slug: string) {
   if (slug === "suara-warga") return "wa";
   if (slug === "agen-ai") return "agents";
@@ -158,6 +283,18 @@ function formatInteger(value: string | number | null | undefined) {
 function formatPercentRatio(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
   return `${Math.round(value * 100)}%`;
+}
+
+function roleLabelForUser(role: string, title: string) {
+  const normalized = `${role} ${title}`.toLowerCase();
+  if (normalized.includes("juri") || normalized.includes("viewer")) return "Juri/Viewer demo";
+  if (normalized.includes("manager")) return "Manager Koperasi";
+  if (normalized.includes("gudang")) return "Staff/Admin Gudang";
+  if (normalized.includes("logistik")) return "Staff/Admin Logistik";
+  if (normalized.includes("kasir")) return "Kasir";
+  if (normalized.includes("kurir")) return "Kurir";
+  if (normalized.includes("pengurus") || normalized.includes("admin")) return "Pengurus";
+  return title || role || "Viewer demo";
 }
 
 function downloadTextFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
@@ -303,7 +440,6 @@ type PrefixedDbStatus = {
 
 type FinanceRequest = {
   id: string;
-  member: string;
   purpose: string;
   amount: string;
   risk: string;
@@ -394,6 +530,10 @@ type HackathonMvpSummary = {
     label: string;
     notPrimaryReference: boolean;
     description: string;
+  };
+  headlineEvidence?: {
+    metrics: Array<{ id: string; label: string; value: number; unit: string; amountIdr?: number }>;
+    caveat: string;
   };
   tableCounts: HackathonTableCount[];
   coverage: HackathonCoverage | null;
@@ -979,9 +1119,21 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     hackathonBuyerMatching,
     hackathonFinancingReadiness,
   ].filter(Boolean).length;
+  const roleBadgeLabel = roleLabelForUser(user.role, user.title);
 
   return (
     <main className={`lb-dashboard-type h-[100dvh] overflow-hidden ${shellClass}`}>
+      <GuidedDemoDock
+        isDark={isDark}
+        onSelect={(step) => {
+          if ("href" in step && step.href) {
+            window.location.href = step.href;
+            return;
+          }
+          setActiveView(step.targetView);
+          announce(`${step.label} dibuka dari guided demo mode.`, "info");
+        }}
+      />
       {mobileSidebarOpen ? (
         <button
           type="button"
@@ -1141,6 +1293,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                     <span className={mutedClass}>{cooperative.province}</span>
                   </div>
                   <div className="hidden items-center gap-2 xl:flex">
+                    <span className="rounded-[4px] border border-[#D79A2B]/45 bg-[#42302E] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#FFE5E2]">
+                      role: {roleBadgeLabel}
+                    </span>
                     <span className="rounded-[4px] border border-[#26323B] bg-[#101820] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
                       /api/dashboard: {dataStatus}
                     </span>
@@ -1818,6 +1973,45 @@ function SetupRequiredView({
   );
 }
 
+function GuidedDemoDock({
+  isDark,
+  onSelect,
+}: {
+  isDark: boolean;
+  onSelect: (step: (typeof demoFlowSteps)[number]) => void;
+}) {
+  return (
+    <aside
+      className={`fixed bottom-4 left-1/2 z-30 hidden max-w-[min(1120px,calc(100vw-32px))] -translate-x-1/2 items-center gap-2 rounded-[14px] border px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.28)] lg:flex ${
+        isDark
+          ? "border-white/10 bg-[#101820]/95 text-[#F8F4EA]"
+          : "border-[#D9CFC0] bg-[#FFFCF5]/95 text-[#172027]"
+      }`}
+      aria-label="Fixed MVP flow indicator"
+    >
+      <span className="whitespace-nowrap rounded-[8px] bg-[#C92A2A] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#FFF8EA]">
+        Demo Mode
+      </span>
+      <div className="flex min-w-0 items-center gap-1">
+        {demoFlowSteps.map((step, index) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => onSelect(step)}
+            className={`inline-flex min-h-9 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-xs font-black transition focus-visible:lb-focus ${
+              isDark ? "hover:bg-[#2B1C1A]" : "hover:bg-[#F3E7D5]"
+            }`}
+            title={step.detail}
+          >
+            <span className="font-mono text-[#D79A2B]">0{index + 1}</span>
+            <span className="whitespace-nowrap">{step.label}</span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function OverviewView({
   panelClass,
   innerClass,
@@ -1972,6 +2166,130 @@ function OverviewView({
     ["Buyer archetype", `${formatInteger(hackathonBuyerMatching?.matches.length ?? 0)} matches`, "Bukan named buyer atau PII"],
     ["Evidence media", `${formatInteger(mediaEvidence.length)} metadata`, "Label redacted dari /api/dashboard"],
   ];
+  const pendingQueueCount = filteredQueue.filter((item) => item.status !== "Sudah Disetujui").length;
+  const approvedQueueCount = filteredQueue.length - pendingQueueCount;
+  const criticalStockCount = stocks.filter((item) =>
+    ["Perlu Restok", "Terbatas", "Menunggu Grade", "Jadwal Pickup"].includes(item.state),
+  ).length;
+  const buyerNeedsReviewCount = buyers.filter((item) => !item.status.toLowerCase().includes("setuju")).length;
+  const topProvinceOpportunity = hackathonSummary?.provinceOpportunities[0] ?? null;
+  const managerCommandRows = [
+    {
+      label: "Sales/POS signal",
+      value: topProvinceOpportunity ? formatInteger(topProvinceOpportunity.transactions) : "Env gated",
+      note: "Aggregate transaction signal only; no customer detail.",
+      action: "Use as local demand signal, not national demand claim.",
+    },
+    {
+      label: "Inventory readiness",
+      value: `${formatInteger(criticalStockCount)} gaps`,
+      note: "Negative, limited, draft, generic, or missing grade data needs verification.",
+      action: "Assign admin gudang to validate stock and unit.",
+    },
+    {
+      label: "Delivery readiness",
+      value: `${formatInteger(stockLedger.length)} ledger rows`,
+      note: "Pickup, courier, and proof-of-delivery stay workflow stages.",
+      action: "Confirm warehouse location and courier before buyer outreach.",
+    },
+    {
+      label: "Buyer outreach",
+      value: `${formatInteger(buyerNeedsReviewCount)} need review`,
+      note: "All matches are buyer archetypes until verified buyer data exists.",
+      action: "Approve script only after grade, volume, packaging, and price check.",
+    },
+    {
+      label: "Financing health",
+      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} verified` : "Env gated",
+      note: "Aggregate readiness only, never automatic approval.",
+      action: "Send incomplete cases to pengurus or committee review.",
+    },
+    {
+      label: "Data quality alerts",
+      value: `${formatInteger(qualityIssueCount)} warnings`,
+      note: "Bad data becomes needs verification, not confident recommendation.",
+      action: "Ask operator for missing source, document, or field.",
+    },
+  ];
+  const simkopdesChecklistRows = simkopdesReadinessChecklist.map((item, index) => {
+    const status =
+      index === 0
+        ? stocks.length > 0
+          ? `${formatInteger(stocks.length)} stock rows`
+          : "Checklist"
+        : index === 1
+          ? topOpportunityArea
+            ? "Linked"
+            : "Needs source"
+          : index === 3
+            ? stockLedger.length > 0
+              ? `${formatInteger(stockLedger.length)} ledger`
+              : "Workflow"
+            : index === 6
+              ? mediaEvidence.length > 0
+                ? `${formatInteger(mediaEvidence.length)} evidence`
+                : "Needs proof"
+              : "Review";
+    return { item, status };
+  });
+  const approvalCounts = [
+    { label: "Recommended", value: formatInteger(buyers.length + (hackathonBuyerMatching?.matches.length ?? 0)) },
+    { label: "Needs verification", value: formatInteger(pendingQueueCount + buyerNeedsReviewCount + criticalStockCount) },
+    { label: "Approved", value: formatInteger(approvedQueueCount + buyers.filter((item) => item.status.toLowerCase().includes("setuju")).length) },
+  ];
+  const analystRows = [
+    {
+      label: "Health score koperasi",
+      value: financingTotals ? (financingTotals.verificationRate && financingTotals.verificationRate > 0.25 ? "Sehat terbatas" : "Perlu perhatian") : "Needs verification",
+      note: financingTotals
+        ? `${formatInteger(financingTotals.totalRequests)} aggregate financing requests; ${formatInteger(financingTotals.verifiedRequests)} verified.`
+        : "Shared financing endpoint belum tersedia.",
+    },
+    {
+      label: "Cashflow proxy",
+      value: topProvinceOpportunity ? `${formatInteger(topProvinceOpportunity.transactions)} POS signals` : "Source required",
+      note: "POS sample helps demand/cashflow reading, not audited financial truth.",
+    },
+    {
+      label: "Member savings alignment",
+      value: `${formatInteger(memberSavingsAlignment.length)} mapped fields`,
+      note: "Savings status is roadmap/aggregate alignment until governed member data exists.",
+    },
+  ];
+  const borrowerRiskRows = [
+    {
+      label: "Duplicate or inconsistent request",
+      status: finance.length > 1 ? "Check queue" : "Monitor",
+      note: "Use risk flag and missing evidence, never label a borrower as fraud.",
+    },
+    {
+      label: "Amount vs stock/business scale",
+      status: criticalStockCount > 0 ? "Needs verification" : "Ready for review",
+      note: "Compare request purpose with inventory and repayment plan before committee.",
+    },
+    {
+      label: "Document completeness",
+      status: qualityIssueCount > 0 ? "Missing evidence" : "Checklist ready",
+      note: "Committee must review documents before any status change.",
+    },
+  ];
+  const negotiationRows = [
+    {
+      label: "Market reference price",
+      value: "Source required",
+      note: "Use official/curated price source or operator input; do not invent real-time price.",
+    },
+    {
+      label: "Offer/floor/target price",
+      value: buyerRequirements.length > 0 ? "Draft after requirement review" : "Waiting requirement",
+      note: "Calculate after grade, packaging, logistics, and margin minimum are known.",
+    },
+    {
+      label: "Outreach script",
+      value: buyers.length > 0 ? "Human approval required" : "No buyer archetype",
+      note: "Script can be copied, but cannot be sent without operator/pengurus approval.",
+    },
+  ];
 
   return (
     <>
@@ -2018,6 +2336,44 @@ function OverviewView({
         })}
       </section>
 
+      <section className={`mt-5 rounded-[16px] border p-5 ${panelClass}`}>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Guided Demo Mode</p>
+            <h2 className="mt-2 text-xl font-black">Presenter path: dashboard to report.</h2>
+            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+              Banner ini menjaga demo tetap mengikuti flow MVP dan caveat: sample/aggregate/no PII, buyer archetype, dan human approval sebelum aksi bisnis.
+            </p>
+          </div>
+          <StatusBadge tone="service">MVP flow fixed</StatusBadge>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-5">
+          {demoFlowSteps.map((step, index) => (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => {
+                if ("href" in step && step.href) {
+                  window.location.href = step.href;
+                  return;
+                }
+                setActiveView(step.targetView);
+                setPanelMessage(`${step.label} dibuka dari guided demo mode.`, "info");
+              }}
+              className={`rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${innerClass}`}
+              title={step.detail}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-xs font-black text-[#D79A2B]">0{index + 1}</span>
+                <ChevronRight size={16} strokeWidth={2.2} className={mutedClass} aria-hidden="true" />
+              </div>
+              <p className="mt-3 text-sm font-black">{step.label}</p>
+              <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{step.detail}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2053,6 +2409,69 @@ function OverviewView({
                   <p className="font-black text-[#FFF8EA]">{value}</p>
                   <p className="mt-1 text-xs font-semibold leading-5 text-[#CFC3B2]/60">{note}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Role & access matrix</p>
+              <h2 className="mt-2 text-xl font-black">SIMKOPDES role alignment.</h2>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                Workflow mengikuti peran operasional koperasi. Connector resmi SIMKOPDES belum diaktifkan di demo ini.
+              </p>
+            </div>
+            <StatusBadge tone="warning">No employee PII</StatusBadge>
+          </div>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-current/10">
+                  {["Role", "Surface", "Workflow", "Review"].map((heading) => (
+                    <th key={heading} className={`px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] ${mutedClass}`}>
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-current/10">
+                {simkopdesRoleAccessMatrix.map((item) => (
+                  <tr key={item.role}>
+                    <td className="px-3 py-3 text-sm font-black">{item.role}</td>
+                    <td className={`px-3 py-3 text-xs font-bold ${mutedClass}`}>{item.surfaces}</td>
+                    <td className={`px-3 py-3 text-xs font-semibold leading-5 ${mutedClass}`}>{item.workflow}</td>
+                    <td className="px-3 py-3 text-xs font-black text-[#D79A2B]">{item.review}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Manager Command Center</p>
+              <h2 className="mt-2 text-xl font-black">Aksi manager, bukan analytics pasif.</h2>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                Small cooperative mode: satu manager bisa memantau beberapa fungsi, tetapi action tetap role-aware saat tim tumbuh.
+              </p>
+            </div>
+            <StatusBadge tone="service">Manager mode</StatusBadge>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {managerCommandRows.map((item) => (
+              <div key={item.label} className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-black">{item.label}</p>
+                  <span className="font-mono text-xs font-black text-[#D79A2B]">{item.value}</span>
+                </div>
+                <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{item.note}</p>
+                <p className="mt-3 text-xs font-black text-[#2F7D32]">{item.action}</p>
               </div>
             ))}
           </div>
@@ -2243,6 +2662,112 @@ function OverviewView({
         </aside>
       </section>
 
+      <section className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">SIMKOPDES alignment</p>
+              <h2 className="mt-2 text-xl font-black">Warehouse, product, POS, logistics, and savings readiness.</h2>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                Checklist ini menjawab apakah komoditas siap dipasarkan, bukan mengklaim stok live atau integrasi production.
+              </p>
+            </div>
+            <StatusBadge tone="review">Operational checklist</StatusBadge>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {simkopdesChecklistRows.map((row) => (
+              <div key={row.item} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 size={17} strokeWidth={2.2} className="mt-0.5 text-[#2F7D32]" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-black">{row.item}</p>
+                    <p className={`mt-1 text-xs font-bold ${mutedClass}`}>Status: {row.status}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black text-[#D79A2B]">Member savings and cooperative finance</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {memberSavingsAlignment.map((item) => (
+                <span key={item} className="rounded-[8px] border border-current/10 px-2.5 py-1.5 text-xs font-black">
+                  {item}
+                </span>
+              ))}
+            </div>
+            <p className={`mt-3 text-xs font-semibold leading-5 ${mutedClass}`}>
+              Simpanan anggota dipakai sebagai alignment kesehatan koperasi secara aggregate. Demo tidak mengubah status simpanan atau pinjaman tanpa approval pengurus.
+            </p>
+          </div>
+        </article>
+
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Human-in-the-loop workflow</p>
+              <h2 className="mt-2 text-xl font-black">Recommended to approved.</h2>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                Semua aksi AI, WA, buyer outreach, finance review, dan negotiation script masuk queue atau membutuhkan role review.
+              </p>
+            </div>
+            <StatusBadge tone="risk">No auto approval</StatusBadge>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {approvalWorkflowSteps.map((step, index) => (
+              <div key={step.label} className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <p className="font-mono text-xs font-black text-[#D79A2B]">0{index + 1}</p>
+                <p className="mt-2 text-sm font-black">{step.label}</p>
+                <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{step.detail}</p>
+                <p className="mt-3 text-lg font-black">{approvalCounts[index]?.value ?? "0"}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3">
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <p className="text-sm font-black text-[#D79A2B]">AI Business Analyst - Kesehatan Simpan Pinjam</p>
+              <div className="mt-3 grid gap-2">
+                {analystRows.map((row) => (
+                  <div key={row.label} className="grid gap-2 border-b border-current/10 pb-2 last:border-b-0 last:pb-0 sm:grid-cols-[0.38fr_0.62fr]">
+                    <p className="text-xs font-black">{row.label}</p>
+                    <div>
+                      <p className="text-sm font-black">{row.value}</p>
+                      <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{row.note}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <p className="text-sm font-black text-[#D79A2B]">Borrower risk and market negotiation summaries</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <div className="space-y-2">
+                  {borrowerRiskRows.map((row) => (
+                    <div key={row.label} className="rounded-[10px] bg-black/5 p-3">
+                      <p className="text-xs font-black">{row.label}</p>
+                      <p className="mt-1 text-xs font-bold text-[#C92A2A]">{row.status}</p>
+                      <p className={`mt-1 text-[11px] font-semibold leading-5 ${mutedClass}`}>{row.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  {negotiationRows.map((row) => (
+                    <div key={row.label} className="rounded-[10px] bg-black/5 p-3">
+                      <p className="text-xs font-black">{row.label}</p>
+                      <p className="mt-1 text-xs font-bold text-[#1D5D8F]">{row.value}</p>
+                      <p className={`mt-1 text-[11px] font-semibold leading-5 ${mutedClass}`}>{row.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className={`mt-3 text-xs font-semibold leading-5 ${mutedClass}`}>
+                {analystGuardrails.join(" ")}
+              </p>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section className="mt-5 grid gap-5 xl:grid-cols-3">
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex items-center gap-2">
@@ -2290,7 +2815,7 @@ function OverviewView({
             ))}
             {finance.slice(0, 1).map((request) => (
               <div key={request.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
-                <p className="font-black">{request.member} - {formatRupiah(request.amount)}</p>
+                <p className="font-black">Pengajuan produktif {request.id} - {formatRupiah(request.amount)}</p>
                 <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>Financing readiness: {request.purpose}</p>
               </div>
             ))}
@@ -2427,6 +2952,7 @@ function LumbungDataView({
   const selected = filteredQueue.find((item) => item.id === selectedId) ?? filteredQueue[0];
   const completed = filteredQueue.filter((item) => item.status === "Sudah Disetujui").length;
   const sharedCoverage = hackathonSummary?.coverage ?? null;
+  const headlineMetrics = hackathonSummary?.headlineEvidence?.metrics ?? [];
   const rowClass = isDark
     ? "border-white/10 bg-white/5"
     : "border-[#E7DED1] bg-[#FFFCF5]";
@@ -2445,6 +2971,13 @@ function LumbungDataView({
         ["Koperasi berstok", sharedCoverage.cooperativesWithStock, "punya catatan inventaris"],
       ]
     : [];
+  const visibleSharedMetrics = headlineMetrics.length
+    ? headlineMetrics.slice(0, 4).map((item) => [
+        item.label,
+        item.amountIdr ? `Rp${formatInteger(item.amountIdr)}` : item.value,
+        `${formatInteger(item.value)} ${item.unit}`,
+      ] as const)
+    : sharedMetrics;
   const sourceLabel =
     hackathonSummary?.source ??
     hackathonDataQuality?.source ??
@@ -2740,15 +3273,20 @@ function LumbungDataView({
         {hackathonStatus === "ready" && hackathonSummary ? (
           <>
             <div className="mt-5 grid gap-3 md:grid-cols-4">
-              {sharedMetrics.map(([label, value, note]) => (
+              {visibleSharedMetrics.map(([label, value, note]) => (
                 <div key={label} className={`rounded-[14px] border p-4 ${rowClass}`}>
                   <p className="text-xs font-black text-[#D79A2B]">{label}</p>
-                  <p className="mt-2 text-3xl font-black">{formatInteger(value)}</p>
+                  <p className="mt-2 text-3xl font-black">{typeof value === "number" ? formatInteger(value) : value}</p>
                   <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{note}</p>
                   <p className={`mt-2 text-[11px] font-black ${softLabelClass}`}>Source: /api/hackathon/mvp-summary</p>
                 </div>
               ))}
             </div>
+            {hackathonSummary.headlineEvidence?.caveat ? (
+              <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${alertRowClass}`}>
+                {hackathonSummary.headlineEvidence.caveat}
+              </p>
+            ) : null}
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
               <div className={`rounded-[14px] border p-4 ${innerClass}`}>
@@ -3546,7 +4084,7 @@ function SimpanPinjamView({
       "2. Review pengajuan produktif anggota.",
       ...finance.map(
         (request, index) =>
-          `${index + 3}. ${request.id} - ${request.member} - ${formatRupiah(request.amount)} - ${request.purpose} - Risiko: ${request.risk}.`,
+          `${index + 3}. ${request.id} - ${formatRupiah(request.amount)} - ${request.purpose} - Risk flag: ${request.risk}.`,
       ),
       `${finance.length + 3}. Tetapkan keputusan manual, tenor, jaminan bila perlu, dan catatan follow-up.`,
       `${finance.length + 4}. Simpan bukti rapat dan tanda tangan pengurus.`,
@@ -3572,7 +4110,7 @@ function SimpanPinjamView({
           {finance.map((request) => (
             <div key={request.id} className={`rounded-[14px] border p-4 ${innerClass}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-black">{request.id} · {request.member}</p>
+                <p className="font-black">Pengajuan produktif {request.id}</p>
                 <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
                   {request.status}
                 </span>

@@ -6,6 +6,7 @@ import {
   isHackathonSharedDbConfigured,
   queryHackathonRows,
 } from "@/lib/hackathon-shared-db";
+import { buildPriceCheckNegotiationData, buildSourceCaveatFields } from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -88,6 +89,10 @@ type MatchResult = {
     hasCoordinates: boolean;
   };
   componentScores: ComponentScores;
+  readinessGaps: string[];
+  nextAction: string;
+  sourceCaveat: ReturnType<typeof buildSourceCaveatFields>;
+  priceCheck: ReturnType<typeof buildPriceCheckNegotiationData>;
 };
 
 const BUYER_ARCHETYPES: BuyerArchetype[] = [
@@ -143,6 +148,15 @@ function toNumber(value: unknown) {
 function safeText(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function pseudonymousCooperativeRef(value: string | null | undefined) {
+  const source = value || "unknown";
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
+  }
+  return `sample-koperasi-${String((hash % 10_000) + 1).padStart(4, "0")}`;
 }
 
 function escapeRegex(value: string) {
@@ -257,6 +271,15 @@ function computeMatch(row: CooperativeSummaryRow, archetype: BuyerArchetype): Ma
       (componentScores.transactionPartnershipSignal * MATCH_WEIGHTS.transactionPartnershipSignal) / 100 +
       (componentScores.governanceApprovalReadiness * MATCH_WEIGHTS.governanceApprovalReadiness) / 100,
   );
+  const readinessGaps: string[] = [];
+  if (productNames.length === 0) readinessGaps.push("Product names are missing; operator must classify commodity before outreach.");
+  if (toNumber(row.lowOrNegativeStockItems) > 0) readinessGaps.push("Some stock rows are low or non-positive; physical stock check required.");
+  if (!row.registrationStatus) readinessGaps.push("Registration/governance status is missing; approval readiness is limited.");
+  if (!row.hasCoordinates) readinessGaps.push("Rounded coordinate is missing; logistics confidence is limited.");
+  if (matchedKeywords.length === 0) readinessGaps.push("No product keyword matched this buyer archetype; validate product fit manually.");
+
+  const focusCommodity = productNames[0] ?? archetype.label;
+  const area = [row.regency, row.province].filter(Boolean).join(", ");
 
   return {
     rank: 0,
@@ -264,8 +287,8 @@ function computeMatch(row: CooperativeSummaryRow, archetype: BuyerArchetype): Ma
     buyerArchetypeLabel: archetype.label,
     score,
     readinessCluster: readinessCluster(score),
-    cooperativeRef: row.cooperativeRef,
-    cooperativeName: row.cooperativeName,
+    cooperativeRef: pseudonymousCooperativeRef(row.cooperativeRef),
+    cooperativeName: null,
     location: {
       province: row.province,
       regency: row.regency,
@@ -288,6 +311,15 @@ function computeMatch(row: CooperativeSummaryRow, archetype: BuyerArchetype): Ma
       hasCoordinates: row.hasCoordinates,
     },
     componentScores,
+    readinessGaps,
+    nextAction:
+      "Validate stock unit, quality/grade, packaging, official price reference, and cooperative approval before drafting outreach.",
+    sourceCaveat: buildSourceCaveatFields(
+      "produk_koperasi + inventaris_produk + transaksi_penjualan + pengajuan_kemitraan aggregate",
+      score >= 60 ? "medium" : "limited",
+      "shared-db-read-only-aggregate",
+    ),
+    priceCheck: buildPriceCheckNegotiationData(focusCommodity, area),
   };
 }
 
@@ -421,6 +453,12 @@ async function getBuyerMatchingLite() {
     schemaScope: HACKATHON_SCHEMA_SCOPE,
     buyerArchetypes: BUYER_ARCHETYPES,
     matchWeights: MATCH_WEIGHTS,
+    sourceCaveat: buildSourceCaveatFields(
+      "buyer matching aggregate tables",
+      matches.length > 0 ? "medium" : "limited",
+      "shared-db-read-only-aggregate",
+    ),
+    priceCheckNegotiation: buildPriceCheckNegotiationData("operator-selected commodity", ""),
     matches,
     guardrails: [
       "Read-only aggregate ranking only; no INSERT, UPDATE, DELETE, or schema changes are performed.",

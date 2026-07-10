@@ -1,155 +1,271 @@
-# Lumbung Bersama App
+# Lumbung Bersama
 
-Next.js hackathon MVP app for Lumbung Bersama, focused on turning village-potential data into auditable cooperative action.
+Lumbung Bersama is a hackathon MVP for Tema 2, "Optimalisasi Potensi Desa Melalui Koperasi". The product is a cooperative operating and trust layer: it helps operators turn village-potential signals into explainable recommendations, buyer-readiness actions, stock/readiness checks, financing-readiness guardrails, and an auditable action report.
 
-Current MVP flow:
+Live demo target: https://lumbung-bersama.meetsin.id
 
-`Peta Potensi Desa -> Opportunity Score -> Buyer Matching Lite -> Aggregation/Stock Readiness -> Financing Readiness -> Laporan Aksi`
+Core MVP flow:
 
-WhatsApp remains an intake and verification support channel. Do not present the app as a full marketplace, POS, bank integration, autonomous AI decision system, or official government production system.
+`Login -> Peta Potensi Desa -> Opportunity Score -> Buyer Matching Lite -> Stock/Readiness -> Financing Readiness -> Laporan Aksi`
 
-## Routes
+Important boundaries:
 
-| Route | Purpose |
-|---|---|
-| `/` | Light, SEO-ready public MVP landing page |
-| `/wa` | WA intake operator untuk catatan inbound dan outbound env-gated |
-| `/dashboard` | Operator command center with dark/light check |
-| `/peta-unggulan` | Main MVP map surface for village potential, commodities, source checks, and opportunity analysis |
-| `/peta-potensi` | Legacy redirect to `/peta-unggulan` |
-| `/agents` | Three focused MVP agents: unggulan desa, pasar/mitra, laporan |
-| `/modules` | Core MVP modules first, support modules second |
-| `/modules/[slug]` | Detail page for each module |
-| `/laporan` | Lapor Siap report preview and CSV export |
-| `/integrasi` | Env-gated integration readiness and API health check |
-| `/api/health` | Integration/env health route |
-| `/api/agents/run` | Pilot agent execution route |
-| `/api/peta-unggulan/analyze` | Rule-backed pilot analysis for village opportunity |
-| `/api/peta-unggulan/source-check` | Reachability check for national data-source candidates |
-| `/api/open-data/sources` | Open-data catalog and import coverage |
-| `/api/admin-areas/search` | National administrative-area search after import |
-| `/api/hackathon/mvp-summary` | Authenticated, read-only aggregate summary from shared hackathon DB |
-| `/api/hackathon/data-quality` | Authenticated, read-only aggregate quality checks for MVP source tables |
-| `/api/hackathon/opportunity-scores` | Authenticated, read-only explainable area opportunity scoring |
-| `/api/hackathon/buyer-matching` | Authenticated, read-only buyer matching lite with generic buyer archetypes |
-| `/api/hackathon/financing-readiness` | Authenticated, read-only aggregate financing readiness by draft/requested/verified status |
+1. This is not a full marketplace checkout.
+2. This does not claim live production SIMKOPDES integration.
+3. Shared hackathon DB evidence is aggregate-only exploration material, not a canonical production reference.
+4. Buyer matching uses buyer archetypes unless verified buyer data is explicitly available.
+5. AI and WhatsApp agents create drafts, queues, scripts, summaries, and checklists. Final decisions stay with operators, managers, pengurus, or committees.
+6. Public/demo output must not expose credentials, NIK, phone numbers, email addresses, addresses, bank details, raw document paths, or other PII.
 
-## Project Sync Docs
+## Quick Start
 
-| Doc | Purpose |
-|---|---|
-| `docs/30-agent-exploration-sync-and-feature-backlog.md` | Sync snapshot between Agent Eksplorasi chat, local repo audit, and Kevin Dev Vault memory |
-| `docs/31-session-sync-runbook.md` | Repeatable procedure for the next full session-sync loop |
-| `docs/32-metadata-database-mvp-feature-analysis.md` | Metadata workbook analysis for hackathon MVP features, scoring, buyer matching, and supply-chain roadmap |
-| `docs/34-war-room-jury-qa-and-pitch-playbook.md` | Jury QA and pitch guardrails |
-| `docs/35-slide-presentation-guide.md` | Slide and presentation guide |
-| `docs/36-implementation-delegation-plan.md` | Implementation ownership and backlog |
-| `docs/37-external-data-source-map.md` | External data source registry |
-| `docs/38-agent-shortcuts-and-secret-activation.md` | Agent shortcuts and secret-safe server activation |
+Requirements:
 
-## Scripts
+1. Node.js 20 or 22 LTS.
+2. npm.
+3. PostgreSQL 14 or newer for DB-backed demo mode.
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create a local environment file. Do not commit this file:
+
+```bash
+cp .env.example .env
+```
+
+Minimum local env for app DB:
+
+```bash
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB_NAME"
+ADMIN_EMAIL="admin@example.local"
+ADMIN_PASSWORD_HASH="<hash from npm run auth:hash-password>"
+```
+
+Generate an admin password hash:
+
+```bash
+npm run auth:hash-password -- "your-local-long-password"
+```
+
+Run migrations and seed data:
+
+```bash
+npm run db:setup
+```
+
+Start the dev server:
 
 ```bash
 npm run dev
+```
+
+Open http://127.0.0.1:3000.
+
+For production-style local run:
+
+```bash
+npm run build
+npm run start
+```
+
+## Environment Variables
+
+Use environment variables only. Never place passwords, tokens, API keys, or shared DB credentials in source files, README, logs, screenshots, or deck assets.
+
+Core app:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Application PostgreSQL for auth, queue, stock, report, WA drafts, and app-owned tables. |
+| `ADMIN_EMAIL` | Seed/login admin email. |
+| `ADMIN_PASSWORD_HASH` | Password hash generated by `npm run auth:hash-password`. |
+| `PGSSLMODE=require` | Optional SSL mode when required by hosted Postgres. |
+
+Shared hackathon evidence DB:
+
+| Variable | Purpose |
+|---|---|
+| `HACKATHON_SHARED_DATABASE_URL` or `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | Read-only aggregate evidence source. |
+| `HACKATHON_SHARED_DB_SSL=require` or `PGSSLMODE=require` | Required SSL posture for shared DB access. |
+| `HACKATHON_TABLE_PREFIX=anak_sarengklek_` | Team prefix for any app-owned derived table if DB write permission is granted. |
+
+AI provider:
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | API key for OpenAI-compatible AI gateway. |
+| `OPENAI_BASE_URL` | Optional compatible gateway base URL. |
+| `OPENAI_MODEL` | Optional model name. |
+| `OPENAI_WIRE_API` | `responses` or `chat-completions`. |
+| `AI_PROVIDER_TIMEOUT_MS` | Optional provider timeout. |
+
+WhatsApp Cloud API:
+
+| Variable | Purpose |
+|---|---|
+| `WHATSAPP_BUSINESS_TOKEN` | Required for real outbound Graph API send. |
+| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp sender identity. |
+| `WHATSAPP_VERIFY_TOKEN` | Webhook verification token. |
+| `WHATSAPP_APP_SECRET` | Webhook signature verification secret. |
+| `WEBHOOK_COOPERATIVE_ID` or `DEFAULT_COOPERATIVE_ID` | Cooperative scope for inbound webhook records. |
+
+Data connectors:
+
+| Variable | Purpose |
+|---|---|
+| `BPS_API_KEY` | Future official BPS connector. |
+| `WILAYAH_SOURCE_URL` | Optional override for administrative area import. |
+| `OVERPASS_API_URL` | Optional OSM/Overpass enrichment endpoint. |
+| `S3_OR_R2_BUCKET` and related credentials | Future media storage. |
+
+## Architecture
+
+Technology stack:
+
+1. Next.js 16 App Router with React 19.
+2. TypeScript.
+3. Tailwind CSS v4 through `@tailwindcss/postcss`.
+4. PostgreSQL via `pg`.
+5. Leaflet and OpenStreetMap tiles for `/peta-unggulan`.
+6. WhatsApp Business Platform Cloud API adapter for env-gated webhook/send.
+7. OpenAI-compatible AI provider adapter for XAI/OpenAI-style endpoints, with rules fallback when the AI env is missing.
+
+Main layers:
+
+| Layer | Files | Responsibility |
+|---|---|---|
+| UI pages | `src/app/*`, `src/components/*` | Landing, login, dashboard command center, WA center, map, integration, report. |
+| API routes | `src/app/api/*` | Auth, dashboard, WA, agents, peta, open-data registry, hackathon aggregate endpoints. |
+| Data access | `src/lib/postgres.ts`, `src/lib/hackathon-shared-db.ts` | Application DB and read-only shared DB access. |
+| Domain helpers | `src/lib/commodity-intelligence.ts`, `src/lib/wa-operator-queue.ts`, `src/lib/ai-provider.ts` | Explainable scoring helpers, WA intent routing, provider integration. |
+| DB schema | `db/schema.sql`, `db/seed.sql` | Auth/session, cooperative workspace, queue, stock, buyer readiness, report, map data, team-prefixed tables. |
+| QA scripts | `scripts/qa-*.mjs` | Repeatable smoke tests for setup, auth, WA, and hackathon demo flow. |
+
+App-owned team-prefixed tables:
+
+1. `anak_sarengklek_buyer_requirements`
+2. `anak_sarengklek_stock_ledger`
+3. `anak_sarengklek_media_evidence`
+
+These tables are application-owned. They are separate from the organizer shared DB evidence source.
+
+## Main Routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Public landing page explaining MVP thesis and flow. |
+| `/login` | Operator/jury login page. |
+| `/dashboard` | Protected command center: evidence, role matrix, score cards, buyer/readiness, WA queue, SIMKOPDES alignment. |
+| `/wa` | Protected WA center for local intent simulation, draft save, and operator queue. |
+| `/peta-unggulan` | Main map surface for wilayah drilldown, polygon boundary, commodity search, and source caveats. |
+| `/agents` | Protected agent center. |
+| `/laporan` | Protected action report and CSV export. |
+| `/integrasi` | Protected integration readiness and source/API health. |
+| `/modules` | Protected module catalog. |
+
+Key API endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `/api/health` | Integration/env readiness. |
+| `/api/auth/login`, `/api/auth/logout`, `/api/me` | Auth and profile. |
+| `/api/dashboard` | Authenticated operational workspace payload. |
+| `/api/wa/messages`, `/api/wa/send`, `/api/wa/webhook` | WA draft intake, env-gated send, env-gated webhook. |
+| `/api/peta-unggulan/data`, `/api/peta-unggulan/analyze`, `/api/peta-unggulan/source-check` | Map data, opportunity analysis, source readiness. |
+| `/api/admin-areas/search`, `/api/admin-areas/drilldown`, `/api/admin-areas/boundaries` | Administrative area search and polygon drilldown. |
+| `/api/open-data/sources` | Source registry and integration claims. |
+| `/api/commodity-news` | Market-context signal and price-check caveat payload. |
+| `/api/hackathon/mvp-summary` | Shared DB aggregate evidence summary. |
+| `/api/hackathon/data-quality` | Aggregate data-quality guardrails. |
+| `/api/hackathon/opportunity-scores` | Explainable opportunity score. |
+| `/api/hackathon/buyer-matching` | Buyer matching lite using archetypes. |
+| `/api/hackathon/financing-readiness` | Aggregate financing readiness, business analyst, and borrower-risk guardrails. |
+
+## QA And Verification
+
+Run the setup-safe smoke gate:
+
+```bash
 npm run lint
 npm run build
 npm run qa:smoke
+npm run qa:hackathon-demo
+node --check scripts/qa-auth-smoke.mjs
+node --check scripts/qa-wa-smoke.mjs
+```
+
+Run authenticated DB-backed QA after `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, and `QA_ADMIN_PASSWORD` are configured:
+
+```bash
 npm run qa:auth-smoke
+npm run qa:wa-smoke
+```
+
+Optional live route check:
+
+```bash
+QA_LIVE_BASE_URL="https://lumbung-bersama.meetsin.id" npm run qa:hackathon-demo
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:QA_LIVE_BASE_URL="https://lumbung-bersama.meetsin.id"
+npm run qa:hackathon-demo
+```
+
+## Data Import Utilities
+
+Administrative area import:
+
+```bash
+npm run data:import-wilayah
+```
+
+Commodity baseline import:
+
+```bash
+npm run data:import-commodity-baseline
+npm run data:import-bps-commodities
+```
+
+Boundary cache warmup:
+
+```bash
+npm run data:warm-boundaries
+```
+
+## Deployment Notes
+
+Production deployment should set environment variables on the server or secret manager, then run:
+
+```bash
+npm ci
+npm run build
+npm run db:migrate
+npm run db:seed
+npm run start
+```
+
+The MeetsIn deployment uses Docker Compose on the server path managed by the deployment operator. Do not copy secrets from chat into repository files. Use the secret-safe merge helper only when applying env updates on the server:
+
+```bash
 npm run env:merge
-npm run db:setup
-npm run data:import-wilayah
 ```
 
-`npm run qa:smoke` is the setup-required gate. It must pass even when local Postgres is not configured.
+## Submission Checklist
 
-`npm run qa:auth-smoke` is the DB-backed authenticated gate. Run it only after Postgres is reachable, `npm run db:setup` has completed, and local admin login env is configured:
-
-```bash
-export DATABASE_URL="postgresql://lumbung:lumbung_local_password@localhost:5432/lumbung_bersama"
-export ADMIN_EMAIL="admin@lumbung-bersama.local"
-export ADMIN_PASSWORD_HASH="<hash from npm run auth:hash-password>"
-export QA_ADMIN_PASSWORD="<plaintext local QA password>"
-npm run qa:auth-smoke
-```
-
-On Windows PowerShell, use `$env:NAME="value"` instead of `export`.
-
-## Data Rules
-
-The dashboard reads operational records from Postgres when `DATABASE_URL` is configured. Seed data is only the starter dataset for hackathon presentation and local development.
-
-The public map has a read-only local demo fallback when `DATABASE_URL` is missing. This keeps cloned-repo QA usable, but it is explicitly labeled as demo data and must not be used for production claims.
-
-The shared hackathon PostgreSQL database is treated as a separate read-only exploration source. The organizer clarified that this schema and sample data are a limited representation of the running SIMKOPDES system and are not the primary reference. Configure it with `HACKATHON_SHARED_DATABASE_URL` or the `DB_HOST` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` variables, set `HACKATHON_SHARED_DB_SSL=require` or `PGSSLMODE=require`, keep `HACKATHON_TABLE_PREFIX=anak_sarengklek_`, and use `/api/hackathon/mvp-summary`, `/api/hackathon/data-quality`, `/api/hackathon/opportunity-scores`, `/api/hackathon/buyer-matching`, and `/api/hackathon/financing-readiness` for aggregate MVP evidence. Do not point `DATABASE_URL` at the shared schema unless a compatibility migration is intentionally built.
-
-The national administrative-code importer can load province, regency/city, district, and village/kelurahan codes from the open-source `cahyadsn/wilayah` dataset:
-
-```bash
-npm run data:import-wilayah
-```
-
-Commodity, koperasi, UMKM, warehouse, sawah, and livestock coverage must not be invented. They need verified operator input, citizen reports, official connector imports, authorized uploads, or clearly attributed open-data enrichment.
-
-Do not claim:
-
-1. Official Kemenkop endorsement.
-2. Live SIMKOPDES integration.
-3. Real WhatsApp delivery.
-4. Real village production metrics.
-5. Full national commodity or boundary coverage before import and verification.
-
-## Env-Gated Features
-
-Future production features should be gated by environment variables:
-
-1. `OPENAI_API_KEY` for live AI extraction and analysis. Optional OpenAI-compatible gateway env: `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_WIRE_API` (`responses` or `chat-completions`), and `AI_PROVIDER_TIMEOUT_MS`.
-2. `WHATSAPP_BUSINESS_TOKEN` for real WhatsApp messaging.
-3. `WHATSAPP_PHONE_NUMBER_ID` for WhatsApp sender identity.
-4. `DATABASE_URL` for persistent records.
-5. `HACKATHON_SHARED_DATABASE_URL` or `DB_HOST` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` for read-only shared DB evidence, plus `HACKATHON_SHARED_DB_SSL=require`.
-6. `S3_OR_R2_BUCKET` for uploaded media.
-7. `BPS_API_KEY` for official BPS connector work.
-8. `WILAYAH_SOURCE_URL` for national administrative-code import.
-9. `OVERPASS_API_URL` for OSM/Overpass physical-asset enrichment.
-
-The WhatsApp implementation uses WhatsApp Business Platform Cloud API webhook/send semantics. QR pairing is not part of Cloud API; a QR sync mode would require a separate adapter/service and should not be described as active until implemented and tested.
-
-## Design Rules
-
-Read these before frontend work:
-
-1. `..\docs\09-lumbung-bersama-brand-system.md`
-2. `..\docs\10-uiux-pro-max-frontend-workflow.md`
-3. `..\docs\11-domain-and-naming-decision.md`
-
-Important:
-
-1. Public pages are light and SEO-ready.
-2. Dashboard pages must be checked in dark mode.
-3. No fake metrics.
-4. No dead buttons.
-5. Inputs must expose complete states.
-6. Browser desktop/mobile checks should run when practical.
-
-## Verified
-
-Last verified on 2026-07-10:
-
-1. `npm run lint`
-2. `npm run build`
-3. `npm run qa:smoke`
-4. `node --check scripts/qa-auth-smoke.mjs`
-5. `node --check scripts/load-local-env.mjs`
-6. `npm audit --audit-level=moderate` reports a transitive PostCSS advisory through `next@16.2.9`; do not run `npm audit fix --force` because it proposes a breaking downgrade path.
-
-## Full Feature Surface
-
-The app now prioritizes:
-
-1. Peta Unggulan Desa as the main demo surface.
-2. Explainable commodity/product recommendation.
-3. Buyer Matching Lite with human approval.
-4. Stock and cooperative readiness.
-5. Laporan Aksi / Lapor Siap.
-6. Lumbung Data and WA intake as verification support.
-7. Integration readiness and source-check APIs.
+1. Public repo has latest source pushed.
+2. Root `README.md` includes installation guide and architecture.
+3. Live demo URL responds.
+4. Jury test account is provided in the private submission description, not in public docs.
+5. Pitch deck PDF is 10-12 slides.
+6. `npm run lint` passes.
+7. `npm run build` passes.
+8. `npm run qa:smoke` passes.
+9. `npm run qa:hackathon-demo` passes.
+10. Live routes used in the pitch do not return 404.

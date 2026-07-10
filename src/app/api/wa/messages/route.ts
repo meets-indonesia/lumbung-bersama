@@ -1,4 +1,3 @@
-import { waIntents } from "@/lib/demo-data";
 import { requireAuthenticatedRequest, requireOperationalMutationRole } from "@/lib/auth";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 import {
@@ -6,7 +5,15 @@ import {
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
 import { formatFormalWaReply } from "@/lib/formal-replies";
-import { ensureOperatorQueueForWaMessage } from "@/lib/wa-operator-queue";
+import {
+  buildWaAgentDraft,
+  displayTextForPayload,
+  ensureOperatorQueueForWaMessage,
+  fallbackIntentForPayload,
+  normalizeWaPayloadType,
+  queueSourceForPayload,
+  selectWaAgentIntent,
+} from "@/lib/wa-operator-queue";
 import { getWaSetupStatus, normalizeWaDisplayName } from "../status";
 
 export const runtime = "nodejs";
@@ -57,8 +64,13 @@ export async function POST(request: Request) {
     messageId?: string;
     localMessageId?: string;
     clientMessageId?: string;
+    payloadType?: string;
+    mediaType?: string;
+    caption?: string;
   };
-  const message = body.message?.trim();
+  const payloadType = normalizeWaPayloadType(body.payloadType ?? body.mediaType);
+  const rawMessage = payloadType === "text" ? body.message : body.message ?? body.caption;
+  const message = displayTextForPayload(payloadType, rawMessage ?? "");
 
   if (!message) {
     return Response.json({ error: "MESSAGE_REQUIRED" }, { status: 400 });
@@ -73,32 +85,35 @@ export async function POST(request: Request) {
     return Response.json({ error: "COOPERATIVE_NOT_FOUND" }, { status: 404 });
   }
 
-  const selected =
-    waIntents.find((intent) => intent.id === body.intentId) ??
-    waIntents.find((intent) =>
-      message.toLowerCase().includes(intent.sample.split(" ")[0].toLowerCase()),
-    ) ??
-    waIntents[0];
+  const hasHumanText = Boolean(rawMessage?.trim());
+  const selected = body.intentId
+    ? selectWaAgentIntent(message, body.intentId)
+    : hasHumanText
+      ? selectWaAgentIntent(message)
+      : fallbackIntentForPayload(payloadType);
 
   const setup = getWaSetupStatus();
+  const draft = buildWaAgentDraft({
+    intent: selected,
+    payloadType,
+    source: "WA local draft",
+  });
   const status = setup.send.status === "ready"
-    ? "Draft tersimpan; env WhatsApp tersedia untuk pengiriman terpisah"
+    ? "Draft tersimpan; pengiriman live belum dilakukan dan wajib approval operator"
     : "Draft tersimpan; pengiriman live menunggu env WhatsApp";
   const commodityProfiles = await findCommodityProfilesForMessage(message, cooperative.province).catch(() => []);
   const commodityDetails = describeCommodityProfiles(commodityProfiles);
   const botReply = formatFormalWaReply({
     summary: selected.bot,
-    details: commodityDetails.length
-      ? [
-        `Modul tujuan: ${selected.module}.`,
-        ...commodityDetails,
-      ]
-      : [`Modul tujuan: ${selected.module}.`],
-    nextSteps: [
-      "Operator koperasi mengecek kelengkapan data.",
-      "Bila perlu, sistem mengirim pertanyaan lanjutan lewat WhatsApp.",
-      "Data yang sudah valid masuk ke dashboard untuk tindak lanjut.",
+    details: [
+      `Modul tujuan: ${draft.module}.`,
+      `Source: ${draft.source}. Confidence: ${draft.confidence}.`,
+      `Caveat: ${draft.caveat}`,
+      `Status review: ${draft.humanReviewStatus}`,
+      draft.mediaStatus,
+      ...commodityDetails,
     ],
+    nextSteps: draft.nextSteps,
   });
 
   const sender = normalizeWaDisplayName(body.sender) ?? "Warga";
@@ -125,7 +140,7 @@ export async function POST(request: Request) {
       sender,
       message,
       selected.label,
-      selected.module,
+      draft.module,
       botReply,
       status,
     ],
@@ -136,14 +151,25 @@ export async function POST(request: Request) {
   }
 
   const queue = await ensureOperatorQueueForWaMessage({
+    queryOne,
     waMessageId: row.id,
     providerMessageId: row.providerMessageId,
     cooperativeId: row.cooperativeId,
     sender: row.sender,
-    source: "Local WA message",
+    source: queueSourceForPayload(payloadType),
     message: row.message,
     module: row.module,
+    status: draft.queueStatus,
   });
 
-  return Response.json({ message: row, queue, setup });
+  return Response.json({
+    message: row,
+    queue,
+    setup,
+    agent: {
+      ...draft,
+      lbQueueId: queue?.id ?? null,
+      deliveryStatus: status,
+    },
+  });
 }

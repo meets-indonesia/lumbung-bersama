@@ -6,6 +6,7 @@ import {
   isHackathonSharedDbConfigured,
   queryHackathonRows,
 } from "@/lib/hackathon-shared-db";
+import { buildSourceCaveatFields } from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,8 @@ type InventoryRow = {
   missingNamaProduk: number;
   missingStok: number;
   negativeStock: number;
+  genericProductLabels: number;
+  productNameVariants: number;
 };
 
 type PartnershipRow = {
@@ -128,7 +131,11 @@ async function getDataQualityChecks() {
          COUNT(*) FILTER (WHERE NULLIF(BTRIM(koperasi_ref::text), '') IS NULL)::int AS "missingKoperasiRef",
          COUNT(*) FILTER (WHERE NULLIF(BTRIM(nama_produk::text), '') IS NULL)::int AS "missingNamaProduk",
          COUNT(*) FILTER (WHERE stok IS NULL)::int AS "missingStok",
-         COUNT(*) FILTER (WHERE stok < 0)::int AS "negativeStock"
+         COUNT(*) FILTER (WHERE stok < 0)::int AS "negativeStock",
+         COUNT(*) FILTER (
+           WHERE LOWER(COALESCE(nama_produk::text, '')) ~ '(barang lainnya|barang lain|lainnya|produk lainnya|other)'
+         )::int AS "genericProductLabels",
+         COUNT(DISTINCT LOWER(NULLIF(BTRIM(nama_produk::text), '')))::int AS "productNameVariants"
        FROM inventaris_produk`,
     ),
     queryHackathonRows<PartnershipRow>(
@@ -165,6 +172,8 @@ async function getDataQualityChecks() {
     missingNamaProduk: 0,
     missingStok: 0,
     negativeStock: 0,
+    genericProductLabels: 0,
+    productNameVariants: 0,
   };
   const partnership = partnershipRows[0] ?? {
     totalRows: 0,
@@ -231,6 +240,18 @@ async function getDataQualityChecks() {
       ],
       quality: [
         qualityMetric(inventory.totalRows, "stok", "negative-or-null-stock-risk", inventory.negativeStock),
+        qualityMetric(
+          inventory.totalRows,
+          "nama_produk",
+          "generic-product-label-needs-reclassification",
+          inventory.genericProductLabels,
+        ),
+        qualityMetric(
+          inventory.totalRows,
+          "nama_produk",
+          "product-name-variants-need-normalization",
+          inventory.productNameVariants,
+        ),
       ],
     },
     {
@@ -250,6 +271,11 @@ async function getDataQualityChecks() {
     mode: "aggregate-only-no-pii",
     tablePrefix: HACKATHON_TABLE_PREFIX,
     schemaScope: HACKATHON_SCHEMA_SCOPE,
+    sourceCaveat: buildSourceCaveatFields(
+      "data-quality aggregate checks",
+      checks.some((check) => check.totalRows > 0) ? "medium" : "limited",
+      "shared-db-read-only-aggregate",
+    ),
     checks,
     piiGuardrails: {
       enforcement:

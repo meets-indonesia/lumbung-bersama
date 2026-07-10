@@ -1,5 +1,11 @@
 import type { QueryResultRow } from "pg";
 import { requireAuthenticatedRequest } from "@/lib/auth";
+import {
+  buildBorrowerRiskGuardrails,
+  buildFinancingBusinessAnalystAggregate,
+  buildPriceCheckNegotiationData,
+  buildSourceCaveatFields,
+} from "@/lib/commodity-intelligence";
 import { dbRequiredResponse, isDatabaseConfigured, queryRows } from "@/lib/postgres";
 
 export const runtime = "nodejs";
@@ -22,6 +28,16 @@ type BuyerRow = {
   reason: string;
   status: string;
   approvedAt?: string | null;
+  updatedAt?: string | null;
+};
+
+type FinanceRow = {
+  id: string;
+  purpose: string;
+  amount: string;
+  risk: string;
+  status: string;
+  reviewedAt?: string | null;
   updatedAt?: string | null;
 };
 
@@ -93,6 +109,16 @@ function buyerReadinessStatus(status: string) {
   if (normalizedStatus.includes("siap") && normalizedStatus.includes("kontak")) return "Perlu review operator";
   if (normalizedStatus.includes("disetujui")) return "Readiness disetujui pengurus";
   return status;
+}
+
+function parseAmount(value: string) {
+  const parsed = Number(value.replace(/[^0-9-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function statusIncludes(status: string, patterns: RegExp[]) {
+  const normalized = status.toLowerCase();
+  return patterns.some((pattern) => pattern.test(normalized));
 }
 
 function toBuyerReadinessEvidence(row: BuyerRow, index: number) {
@@ -185,8 +211,8 @@ export async function GET(request: Request) {
       "SELECT id, buyer, need, match_score AS \"matchScore\", reason, status, approved_at AS \"approvedAt\", updated_at AS \"updatedAt\" FROM buyer_matches WHERE cooperative_id = $1 ORDER BY match_score DESC",
       [cooperativeId],
     ),
-    queryRows(
-      "SELECT id, member, purpose, amount::text AS amount, risk, status, reviewed_at AS \"reviewedAt\", updated_at AS \"updatedAt\" FROM finance_requests WHERE cooperative_id = $1 ORDER BY updated_at DESC",
+    queryRows<FinanceRow>(
+      "SELECT id, purpose, amount::text AS amount, risk, status, reviewed_at AS \"reviewedAt\", updated_at AS \"updatedAt\" FROM finance_requests WHERE cooperative_id = $1 ORDER BY updated_at DESC",
       [cooperativeId],
     ),
     queryRows(
@@ -301,6 +327,32 @@ export async function GET(request: Request) {
     mediaEvidenceResult.status,
   ];
   const prefixedDbReady = prefixedTables.every((table) => table.status === "ready");
+  const financeTotalAmount = finance.reduce((total, row) => total + parseAmount(row.amount), 0);
+  const financeDraftRequests = finance.filter((row) =>
+    statusIncludes(row.status, [/draft/, /analisis/, /menunggu/]),
+  ).length;
+  const financeRequestedRequests = finance.filter((row) =>
+    statusIncludes(row.status, [/request/, /pengajuan/, /diajukan/, /komite/, /review/]),
+  ).length;
+  const financeVerifiedRequests = finance.filter((row) =>
+    statusIncludes(row.status, [/verified/, /verifikasi/, /disetujui/, /approved/]),
+  ).length;
+  const dashboardFinancingInput = {
+    totalRequests: finance.length,
+    totalAmount: String(financeTotalAmount),
+    draftRequests: financeDraftRequests,
+    requestedRequests: financeRequestedRequests,
+    verifiedRequests: financeVerifiedRequests,
+    unverifiedRequests: Math.max(finance.length - financeVerifiedRequests, 0),
+    verificationRate: finance.length > 0 ? Number((financeVerifiedRequests / finance.length).toFixed(4)) : null,
+    missingStatus: finance.filter((row) => !row.status?.trim()).length,
+    missingChannel: finance.filter((row) => !row.purpose?.trim()).length,
+    missingAmount: finance.filter((row) => parseAmount(row.amount) <= 0).length,
+  };
+  const negotiationCommodity =
+    buyerRequirements[0]?.productName ??
+    stocks.find((item) => String(item.name ?? "").trim())?.name ??
+    "operator-selected commodity";
 
   return Response.json({
     source: "postgres",
@@ -324,6 +376,14 @@ export async function GET(request: Request) {
     buyerRequirements,
     stockLedger,
     mediaEvidence,
+    sourceCaveat: buildSourceCaveatFields(
+      "dashboard cooperative workspace",
+      cooperative ? "medium" : "limited",
+      "app-db-authenticated-workspace",
+    ),
+    priceCheckNegotiation: buildPriceCheckNegotiationData(String(negotiationCommodity), cooperative?.regency ?? ""),
+    financingBusinessAnalystAggregate: buildFinancingBusinessAnalystAggregate(dashboardFinancingInput),
+    borrowerRiskGuardrails: buildBorrowerRiskGuardrails(dashboardFinancingInput),
     teamTablePrefix: TEAM_TABLE_PREFIX,
     prefixedDbStatus: {
       prefix: TEAM_TABLE_PREFIX,

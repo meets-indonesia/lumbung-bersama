@@ -6,6 +6,11 @@ import {
   isHackathonSharedDbConfigured,
   queryHackathonRows,
 } from "@/lib/hackathon-shared-db";
+import {
+  buildBorrowerRiskGuardrails,
+  buildFinancingBusinessAnalystAggregate,
+  buildSourceCaveatFields,
+} from "@/lib/commodity-intelligence";
 
 export const runtime = "nodejs";
 
@@ -210,6 +215,18 @@ async function getFinancingReadiness() {
   const verifiedRequests = findRequests(statusSummary, "verified");
   const totalRequests = Number(totals.totalRequests ?? 0);
   const verificationRate = totalRequests > 0 ? Number((verifiedRequests / totalRequests).toFixed(4)) : null;
+  const analystInput = {
+    totalRequests,
+    totalAmount: totals.totalAmount,
+    draftRequests,
+    requestedRequests,
+    verifiedRequests,
+    unverifiedRequests: Math.max(totalRequests - verifiedRequests, 0),
+    verificationRate,
+    missingStatus: totals.missingStatus,
+    missingChannel: totals.missingChannel,
+    missingAmount: totals.missingAmount,
+  };
 
   return {
     source: "hackathon-shared-db-read-only",
@@ -228,6 +245,11 @@ async function getFinancingReadiness() {
         : "status column not found; endpoint returns guarded unknown aggregates",
       caveat: "Aggregate readiness signal only; no row-level documents, borrowers, or approvals are returned.",
     },
+    sourceCaveat: buildSourceCaveatFields(
+      "pengajuan_pembiayaan aggregate",
+      statusColumn && amountColumn ? "medium" : "limited",
+      "shared-db-read-only-aggregate",
+    ),
     detectedColumns: {
       status: statusColumn,
       amount: amountColumn,
@@ -247,6 +269,8 @@ async function getFinancingReadiness() {
     },
     statusSummary,
     channelSummary,
+    businessAnalystAggregate: buildFinancingBusinessAnalystAggregate(analystInput),
+    borrowerRiskGuardrails: buildBorrowerRiskGuardrails(analystInput),
     actionChecklist: [
       {
         id: "draft-to-requested",
