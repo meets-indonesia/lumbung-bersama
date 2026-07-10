@@ -9,6 +9,7 @@
     "lint": "eslint",
     "qa:smoke": "node scripts/qa-smoke.mjs",
     "qa:auth-smoke": "node scripts/qa-auth-smoke.mjs",
+    "env:merge": "node scripts/merge-env.mjs --file .env --stdin",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",
     "db:setup": "npm run db:migrate && npm run db:seed",

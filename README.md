@@ -41,6 +41,11 @@ WhatsApp remains an intake and verification support channel. Do not present the 
 | `docs/30-agent-exploration-sync-and-feature-backlog.md` | Sync snapshot between Agent Eksplorasi chat, local repo audit, and Kevin Dev Vault memory |
 | `docs/31-session-sync-runbook.md` | Repeatable procedure for the next full session-sync loop |
 | `docs/32-metadata-database-mvp-feature-analysis.md` | Metadata workbook analysis for hackathon MVP features, scoring, buyer matching, and supply-chain roadmap |
+| `docs/34-war-room-jury-qa-and-pitch-playbook.md` | Jury QA and pitch guardrails |
+| `docs/35-slide-presentation-guide.md` | Slide and presentation guide |
+| `docs/36-implementation-delegation-plan.md` | Implementation ownership and backlog |
+| `docs/37-external-data-source-map.md` | External data source registry |
+| `docs/38-agent-shortcuts-and-secret-activation.md` | Agent shortcuts and secret-safe server activation |
 
 ## Scripts
 
@@ -50,6 +55,7 @@ npm run lint
 npm run build
 npm run qa:smoke
 npm run qa:auth-smoke
+npm run env:merge
 npm run db:setup
 npm run data:import-wilayah
 ```
