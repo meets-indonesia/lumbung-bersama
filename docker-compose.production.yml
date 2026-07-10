@@ -26,6 +26,8 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
       PORT: "3000"
+      APP_URL: ${APP_URL:-https://lumbung-bersama.meetsin.id}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://lumbung-bersama.meetsin.id}
       DATABASE_URL: postgres://lumbung_bersama:${LUMBUNG_DB_PASSWORD}@lumbung-bersama-db:5432/lumbung_bersama
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in remote .env}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH in remote .env}

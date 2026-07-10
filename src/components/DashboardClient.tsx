@@ -209,10 +209,10 @@ const simkopdesRoleAccessMatrix = [
     review: "No public recipient data",
   },
   {
-    role: "Juri/Viewer demo",
+    role: "Juri/Viewer",
     surfaces: "/dashboard, /peta-unggulan, /laporan",
     workflow: "Melihat flow sample/aggregate/no PII.",
-    review: "Read-only demo",
+    review: "Read-only",
   },
 ] as const;
 
@@ -288,14 +288,14 @@ function formatPercentRatio(value: number | null | undefined) {
 
 function roleLabelForUser(role: string, title: string) {
   const normalized = `${role} ${title}`.toLowerCase();
-  if (normalized.includes("juri") || normalized.includes("viewer")) return "Juri/Viewer demo";
+  if (normalized.includes("juri") || normalized.includes("viewer")) return "Juri/Viewer";
   if (normalized.includes("manager")) return "Manager Koperasi";
   if (normalized.includes("gudang")) return "Staff/Admin Gudang";
   if (normalized.includes("logistik")) return "Staff/Admin Logistik";
   if (normalized.includes("kasir")) return "Kasir";
   if (normalized.includes("kurir")) return "Kurir";
   if (normalized.includes("pengurus") || normalized.includes("admin")) return "Pengurus";
-  return title || role || "Viewer demo";
+  return title || role || "Viewer";
 }
 
 function downloadTextFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
@@ -1326,7 +1326,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             return;
           }
           setActiveView(step.targetView);
-          announce(`${step.label} dibuka dari guided demo mode.`, "info");
+          announce(`${step.label} dibuka dari guided flow.`, "info");
         }}
       />
       {mobileSidebarOpen ? (
@@ -2659,7 +2659,7 @@ function GuidedDemoDock({
       aria-label="Fixed MVP flow indicator"
     >
       <span className="whitespace-nowrap rounded-[8px] bg-[#C92A2A] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#FFF8EA]">
-        Demo Mode
+        Flow MVP
       </span>
       <div className="flex min-w-0 items-center gap-1">
         {demoFlowSteps.map((step, index) => (
@@ -3242,10 +3242,10 @@ function OverviewView({
       <section className={`mt-5 rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Guided Demo Mode</p>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Guided MVP Flow</p>
             <h2 className="mt-2 text-xl font-black">Presenter path: dashboard to report.</h2>
             <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
-              Banner ini menjaga demo tetap mengikuti flow MVP dan caveat: sample/aggregate/no PII, buyer archetype, dan human approval sebelum aksi bisnis.
+              Banner ini menjaga flow kerja tetap mengikuti MVP dan caveat: sample/aggregate/no PII, buyer archetype, dan human approval sebelum aksi bisnis.
             </p>
           </div>
           <StatusBadge tone="service">MVP flow fixed</StatusBadge>
@@ -3261,7 +3261,7 @@ function OverviewView({
                   return;
                 }
                 setActiveView(step.targetView);
-                setPanelMessage(`${step.label} dibuka dari guided demo mode.`, "info");
+                setPanelMessage(`${step.label} dibuka dari guided flow.`, "info");
               }}
               className={`rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${innerClass}`}
               title={step.detail}

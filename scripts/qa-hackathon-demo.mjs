@@ -409,6 +409,29 @@ async function assertAuthAndWaGates() {
   );
   if (loginCsrf.payload.error !== "CSRF_REJECTED") fail("/api/auth/login CSRF gate mismatch");
 
+  const sameOriginLoginValidation = await expectJsonStatusOneOf(
+    "/api/auth/login",
+    [400, 503],
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: baseUrl,
+      },
+      body: JSON.stringify({}),
+    },
+  );
+  if (sameOriginLoginValidation.response.status === 400 && sameOriginLoginValidation.payload.error !== "LOGIN_REQUIRED") {
+    fail("/api/auth/login same-origin validation did not reach login validation");
+  }
+  if (
+    sameOriginLoginValidation.response.status === 503 &&
+    !["DATABASE_URL_REQUIRED", "ADMIN_AUTH_NOT_CONFIGURED"].includes(sameOriginLoginValidation.payload.error)
+  ) {
+    fail("/api/auth/login same-origin setup gate mismatch");
+  }
+  pass("/api/auth/login accepts same-origin mutation before validating credentials");
+
   const logoutCsrf = await expectJsonStatusOneOf(
     "/api/auth/logout",
     [403],

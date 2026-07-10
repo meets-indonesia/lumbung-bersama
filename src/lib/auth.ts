@@ -131,16 +131,57 @@ export function getRequestIp(request: Request) {
 
 function requestOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if (origin) return origin;
+  if (origin) return normalizeOrigin(origin);
 
   const referer = request.headers.get("referer");
   if (!referer) return null;
 
+  return normalizeOrigin(referer);
+}
+
+function normalizeOrigin(value: string | null | undefined) {
+  if (!value) return null;
   try {
-    return new URL(referer).origin;
+    return new URL(value).origin.toLowerCase();
   } catch {
     return null;
   }
+}
+
+function firstForwardedValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || null;
+}
+
+function publicRequestOrigins(request: Request) {
+  const origins = new Set<string>();
+  const requestUrlOrigin = normalizeOrigin(request.url);
+  if (requestUrlOrigin) origins.add(requestUrlOrigin);
+
+  const forwardedHost = firstForwardedValue(request.headers.get("x-forwarded-host")) ?? request.headers.get("host");
+  const forwardedProto =
+    firstForwardedValue(request.headers.get("x-forwarded-proto")) ??
+    (request.headers.get("x-forwarded-ssl") === "on" ? "https" : null);
+
+  if (forwardedHost) {
+    const host = forwardedHost.trim();
+    const protocols = forwardedProto ? [forwardedProto] : ["https", "http"];
+    for (const proto of protocols) {
+      const forwardedOrigin = normalizeOrigin(`${proto}://${host}`);
+      if (forwardedOrigin) origins.add(forwardedOrigin);
+    }
+  }
+
+  for (const configuredUrl of [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.APP_URL,
+    process.env.PUBLIC_APP_URL,
+    process.env.NEXTAUTH_URL,
+  ]) {
+    const configuredOrigin = normalizeOrigin(configuredUrl);
+    if (configuredOrigin) origins.add(configuredOrigin);
+  }
+
+  return origins;
 }
 
 export function csrfRequiredResponse() {
@@ -165,7 +206,7 @@ export function isSameOriginMutation(request: Request) {
   if (!origin) return true;
 
   try {
-    return origin === new URL(request.url).origin;
+    return publicRequestOrigins(request).has(origin);
   } catch {
     return false;
   }

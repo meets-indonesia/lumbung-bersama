@@ -102,7 +102,7 @@ const faqItems = [
       "MVP memakai archetype buyer agar tidak membuat klaim komitmen palsu. Outreach tetap butuh verifikasi pengurus.",
   },
   {
-    question: "Apa demo pertama yang harus dibuka?",
+    question: "Alur pertama yang harus dibuka?",
     answer:
       "Mulai dari Peta Unggulan, lalu masuk dashboard operator untuk rekomendasi, readiness, buyer matching, dan laporan aksi.",
   },
@@ -116,6 +116,39 @@ const mapShapes = [
   ["M312 103 C349 70 428 72 470 104 C509 134 502 191 465 219 C423 251 348 239 313 203 C281 169 281 132 312 103 Z", 4, "Kalimantan", 400, 159],
   ["M554 121 C581 100 616 112 625 143 C649 131 676 144 674 170 C672 196 638 200 623 183 C616 211 630 237 610 253 C589 269 562 245 574 218 C583 196 558 187 544 166 C532 148 536 132 554 121 Z", 5, "Sulawesi", 611, 174],
   ["M698 170 C724 147 755 154 774 177 C807 148 862 152 888 185 C916 221 884 260 837 252 C803 247 778 224 756 208 C738 224 706 219 690 197 C681 186 685 178 698 170 Z", 6, "Papua", 794, 202],
+] as const;
+
+const mapHotspots = [
+  {
+    label: "Stok siap",
+    detail: "82%",
+    x: 592,
+    y: 274,
+    boxX: 646,
+    boxY: 278,
+    path: "M592 274 C610 266 626 276 646 296",
+    color: "#2F7D32",
+  },
+  {
+    label: "Buyer fit",
+    detail: "High",
+    x: 694,
+    y: 220,
+    boxX: 738,
+    boxY: 198,
+    path: "M694 220 C715 216 719 202 738 216",
+    color: "#D79A2B",
+  },
+  {
+    label: "Harga risiko",
+    detail: "Watch",
+    x: 470,
+    y: 210,
+    boxX: 514,
+    boxY: 174,
+    path: "M470 210 C494 210 494 184 514 192",
+    color: "#C92A2A",
+  },
 ] as const;
 
 function PrimaryCta({ href, children }: { href: string; children: ReactNode }) {
@@ -174,7 +207,7 @@ export default function Home() {
                   href="/peta-unggulan"
                   className="inline-flex w-full items-center justify-center gap-3 rounded-xl border border-[#E7DED1] bg-white px-8 py-4 text-sm font-black text-[#1F2933] shadow-[0_14px_32px_rgba(122,78,45,0.08)] transition-all duration-300 hover:border-[#D79A2B] hover:bg-[#FFFCF5] active:scale-[0.98] focus-visible:lb-focus sm:w-auto"
                 >
-                  Lihat Demo
+                  Lihat Alur
                   <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[#C92A2A] text-[#C92A2A]">
                     <ArrowRight size={13} strokeWidth={3} aria-hidden="true" />
                   </span>
@@ -220,7 +253,7 @@ export default function Home() {
                 Satu alur, bukan kumpulan fitur terpisah.
               </h2>
               <p className="mt-6 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
-                Flow demo sengaja pendek agar juri melihat masalah, bukti,
+                Flow MVP sengaja pendek agar juri melihat masalah, bukti,
                 rekomendasi, kesiapan operasional, dan keputusan pengurus dalam
                 satu narasi.
               </p>
@@ -310,13 +343,38 @@ export default function Home() {
                       </text>
                     </g>
                   ))}
-                  <g fill="#172027">
-                    <circle className="lb-soft-pulse" cx="592" cy="274" r="5" />
-                    <circle cx="614" cy="279" r="4" />
-                    <circle cx="637" cy="284" r="4" />
-                    <circle className="lb-soft-pulse" cx="694" cy="220" r="5" />
-                    <circle cx="723" cy="232" r="4" />
-                  </g>
+                  {mapHotspots.map((item) => (
+                    <g key={item.label}>
+                      <path
+                        d={item.path}
+                        fill="none"
+                        stroke={item.color}
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeDasharray="7 8"
+                        opacity="0.86"
+                      />
+                      <circle className="lb-soft-pulse" cx={item.x} cy={item.y} r="7" fill="#FFFCF5" stroke={item.color} strokeWidth="4" />
+                      <circle cx={item.x} cy={item.y} r="3.2" fill={item.color} />
+                      <circle cx={item.boxX} cy={item.boxY + 18} r="4" fill={item.color} />
+                      <rect
+                        x={item.boxX}
+                        y={item.boxY}
+                        width="122"
+                        height="46"
+                        rx="13"
+                        fill="#FFFCF5"
+                        stroke={item.color}
+                        strokeWidth="2"
+                      />
+                      <text x={item.boxX + 14} y={item.boxY + 19} className="fill-[#172027] text-[12px] font-black">
+                        {item.label}
+                      </text>
+                      <text x={item.boxX + 14} y={item.boxY + 35} className="fill-[#53606A] text-[11px] font-bold">
+                        {item.detail}
+                      </text>
+                    </g>
+                  ))}
                 </svg>
               </div>
             </div>
@@ -430,7 +488,7 @@ export default function Home() {
         <section className="px-4 py-24 sm:px-6 lg:px-8">
           <div className="lb-view-reveal mx-auto grid max-w-7xl gap-8 rounded-[2.5rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_80px_rgba(31,41,51,0.24)] lg:grid-cols-[1fr_0.75fr] lg:p-10">
             <div>
-              <p className="text-sm font-black text-[#D79A2B]">Siap demo</p>
+              <p className="text-sm font-black text-[#D79A2B]">Siap operasional</p>
               <h2 className="lb-display mt-4 max-w-3xl text-4xl font-black leading-[0.98] sm:text-6xl">
                 Mulai dari peta, tutup dengan laporan aksi.
               </h2>
