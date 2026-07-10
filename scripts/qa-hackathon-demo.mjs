@@ -60,6 +60,14 @@ function expectRedirectStatus(response, label) {
   }
 }
 
+function sessionCookieFrom(response, label) {
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  const cookie = setCookie.split(";")[0];
+  if (!cookie.includes("=")) fail(`${label} did not return a session cookie`);
+  if (!/;\s*HttpOnly\b/i.test(setCookie)) fail(`${label} session cookie is not HttpOnly`);
+  return cookie;
+}
+
 function assertNoSecretValues(value, label, trail = []) {
   const secretValuePatterns = [
     /postgres(?:ql)?:\/\/[^/\s:]+:[^@\s]+@/i,
@@ -446,6 +454,72 @@ async function assertAuthAndWaGates() {
   ]);
 }
 
+async function maybeAssertAuthenticatedDashboard() {
+  const email = process.env.QA_AUTH_EMAIL;
+  const password = process.env.QA_AUTH_PASSWORD;
+  if (!email || !password) {
+    pass("authenticated dashboard check skipped; set QA_AUTH_EMAIL and QA_AUTH_PASSWORD to enable it");
+    return;
+  }
+
+  const loginResponse = await request("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (loginResponse.status !== 200) {
+    const payload = await loginResponse.json().catch(() => null);
+    fail(`/api/auth/login returned ${loginResponse.status}: ${payload?.error ?? "LOGIN_FAILED"}`);
+  }
+  const cookie = sessionCookieFrom(loginResponse, "/api/auth/login");
+  pass("/api/auth/login created an HttpOnly session cookie");
+
+  const dashboardResponse = await request("/api/dashboard", {
+    headers: { Cookie: cookie },
+  });
+  if (dashboardResponse.status !== 200) {
+    const payload = await dashboardResponse.json().catch(() => null);
+    fail(`/api/dashboard authenticated returned ${dashboardResponse.status}: ${payload?.error ?? "DASHBOARD_FAILED"}`);
+  }
+
+  const dashboard = await json(dashboardResponse, "/api/dashboard authenticated");
+  expectPlainObject(dashboard.cooperative, "/api/dashboard cooperative");
+  expectArray(dashboard.queue, "/api/dashboard queue");
+  expectArray(dashboard.stocks, "/api/dashboard stocks");
+  expectArray(dashboard.buyerRequirements, "/api/dashboard buyerRequirements");
+  expectArray(dashboard.stockLedger, "/api/dashboard stockLedger");
+  expectArray(dashboard.mediaEvidence, "/api/dashboard mediaEvidence");
+  expectPlainObject(dashboard.prefixedDbStatus, "/api/dashboard prefixedDbStatus");
+  expectPlainObject(dashboard.hackathonSharedDb, "/api/dashboard hackathonSharedDb");
+
+  const sharedDb = dashboard.hackathonSharedDb;
+  if (!["setup-required", "ready", "query-error"].includes(sharedDb.status)) {
+    fail(`/api/dashboard hackathonSharedDb returned unexpected status ${sharedDb.status}`);
+  }
+  if (!sharedDb.tables || typeof sharedDb.tables !== "object") {
+    fail("/api/dashboard hackathonSharedDb missing tables object");
+  }
+  for (const key of ["productRows", "areaRows", "financingRows", "transactionRows"]) {
+    expectArray(sharedDb.tables[key], `/api/dashboard hackathonSharedDb.tables.${key}`);
+  }
+
+  if (process.env.QA_EXPECT_SHARED_DB_READY === "1" && sharedDb.status === "setup-required") {
+    fail("/api/dashboard hackathonSharedDb is setup-required, expected configured shared DB");
+  }
+  if (process.env.QA_EXPECT_SHARED_DB_ROWS === "1") {
+    const rowCount =
+      sharedDb.tables.productRows.length +
+      sharedDb.tables.areaRows.length +
+      sharedDb.tables.financingRows.length +
+      sharedDb.tables.transactionRows.length;
+    if (rowCount <= 0) {
+      fail("/api/dashboard hackathonSharedDb returned zero aggregate rows");
+    }
+  }
+
+  pass(`/api/dashboard authenticated exposes hackathonSharedDb status ${sharedDb.status}`);
+}
+
 async function maybeAssertLiveRoutes() {
   if (!liveBaseUrl) {
     pass("live route check skipped; set QA_LIVE_BASE_URL to verify deployed demo routes");
@@ -468,6 +542,7 @@ async function run() {
   await assertPublicApiBacklog();
   await assertHackathonApiGates();
   await assertAuthAndWaGates();
+  await maybeAssertAuthenticatedDashboard();
   await maybeAssertLiveRoutes();
 }
 

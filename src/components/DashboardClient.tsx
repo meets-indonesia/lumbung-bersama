@@ -657,6 +657,7 @@ type HackathonFinancingReadiness = {
 };
 
 type HackathonDashboardEvidenceStatus = "auth-required" | "setup-required" | "ready" | "query-error";
+type HackathonEndpointStatus = "loading" | "ready" | "partial" | "unavailable" | "error";
 
 type HackathonDashboardSourceRow = {
   source: string;
@@ -718,6 +719,16 @@ type HackathonDashboardEvidence = {
     code: string;
     message: string;
   } | null;
+  evidenceSummary?: {
+    totalAggregateRows: number;
+    aggregateGroups: Array<{
+      id: string;
+      label: string;
+      status: "ready" | "query-error";
+      rows: number;
+      errorCode?: string;
+    }>;
+  };
   tables: {
     productRows: HackathonDashboardProductRow[];
     areaRows: HackathonDashboardAreaRow[];
@@ -858,7 +869,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [hackathonOpportunityScores, setHackathonOpportunityScores] = useState<HackathonOpportunityScores | null>(null);
   const [hackathonBuyerMatching, setHackathonBuyerMatching] = useState<HackathonBuyerMatching | null>(null);
   const [hackathonFinancingReadiness, setHackathonFinancingReadiness] = useState<HackathonFinancingReadiness | null>(null);
-  const [hackathonStatus, setHackathonStatus] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
+  const [hackathonStatus, setHackathonStatus] = useState<HackathonEndpointStatus>("loading");
   const [hackathonError, setHackathonError] = useState("");
   const [signalSpine, setSignalSpine] = useState<SignalSpinePayload | null>(null);
   const [signalSpineStatus, setSignalSpineStatus] = useState<SignalSpineStatus>("loading");
@@ -1035,25 +1046,35 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
         window.location.href = "/login?next=/dashboard";
         return;
       }
-      const failed = responses.find((item) => !item.response.ok);
-      if (failed) {
+      const payloadByKey = Object.fromEntries(
+        responses.filter((item) => item.response.ok).map((item) => [item.key, item.payload]),
+      );
+      const failed = responses.filter((item) => !item.response.ok);
+      const readyCount = Object.keys(payloadByKey).length;
+      if (readyCount === 0 && failed.length) {
+        const firstFailed = failed[0];
         setHackathonSummary(null);
         setHackathonDataQuality(null);
         setHackathonOpportunityScores(null);
         setHackathonBuyerMatching(null);
         setHackathonFinancingReadiness(null);
-        setHackathonStatus(failed.response.status === 503 ? "unavailable" : "error");
-        setHackathonError(failed.payload?.message ?? failed.payload?.error ?? "Shared DB hackathon belum tersedia.");
+        setHackathonStatus(firstFailed.response.status === 503 ? "unavailable" : "error");
+        setHackathonError(firstFailed.payload?.message ?? firstFailed.payload?.error ?? "Shared DB hackathon belum tersedia.");
         return;
       }
-      const payloadByKey = Object.fromEntries(responses.map((item) => [item.key, item.payload]));
-      setHackathonSummary(payloadByKey.summary as HackathonMvpSummary);
-      setHackathonDataQuality(payloadByKey.dataQuality as HackathonDataQuality);
-      setHackathonOpportunityScores(payloadByKey.opportunityScores as HackathonOpportunityScores);
-      setHackathonBuyerMatching(payloadByKey.buyerMatching as HackathonBuyerMatching);
-      setHackathonFinancingReadiness(payloadByKey.financingReadiness as HackathonFinancingReadiness);
-      setHackathonStatus("ready");
-      setHackathonError("");
+      setHackathonSummary((payloadByKey.summary as HackathonMvpSummary | undefined) ?? null);
+      setHackathonDataQuality((payloadByKey.dataQuality as HackathonDataQuality | undefined) ?? null);
+      setHackathonOpportunityScores((payloadByKey.opportunityScores as HackathonOpportunityScores | undefined) ?? null);
+      setHackathonBuyerMatching((payloadByKey.buyerMatching as HackathonBuyerMatching | undefined) ?? null);
+      setHackathonFinancingReadiness(
+        (payloadByKey.financingReadiness as HackathonFinancingReadiness | undefined) ?? null,
+      );
+      setHackathonStatus(failed.length ? "partial" : "ready");
+      setHackathonError(
+        failed.length
+          ? `${readyCount}/5 endpoint evidence berhasil. ${failed[0]?.payload?.message ?? failed[0]?.payload?.error ?? "Sebagian endpoint belum tersedia."}`
+          : "",
+      );
     } catch (error) {
       setHackathonSummary(null);
       setHackathonDataQuality(null);
@@ -2801,7 +2822,7 @@ function OverviewView({
   hackathonOpportunityScores: HackathonOpportunityScores | null;
   hackathonBuyerMatching: HackathonBuyerMatching | null;
   hackathonFinancingReadiness: HackathonFinancingReadiness | null;
-  hackathonStatus: "loading" | "ready" | "unavailable" | "error";
+  hackathonStatus: HackathonEndpointStatus;
   hackathonError: string;
   signalSpine: SignalSpinePayload | null;
   signalSpineStatus: SignalSpineStatus;
@@ -2879,7 +2900,9 @@ function OverviewView({
       : hackathonSharedDb?.status === "setup-required"
         ? "env missing"
         : hackathonSharedDb?.status === "query-error"
-          ? "query check"
+          ? dashboardSharedDbRowCount > 0
+            ? `${formatInteger(dashboardSharedDbRowCount)} partial rows`
+            : "query check"
           : "auth gated";
   const evidenceCards = [
     {
@@ -2904,11 +2927,13 @@ function OverviewView({
       value:
         hackathonStatus === "ready"
           ? `${hackathonReadyCount}/5 endpoints`
-          : hackathonStatus === "loading"
+          : hackathonStatus === "partial"
+            ? `${hackathonReadyCount}/5 endpoints`
+            : hackathonStatus === "loading"
             ? "loading"
             : "blocked",
       detail:
-        hackathonStatus === "ready"
+        hackathonStatus === "ready" || hackathonStatus === "partial"
           ? `${formatInteger(hackathonSummary?.coverage?.totalVillages ?? 0)} wilayah sample, ${formatInteger(hackathonSummary?.coverage?.commodityAreas ?? 0)} area komoditas`
           : hackathonError || "Tidak ada fallback angka demo.",
       source: "read-only aggregate evidence",
@@ -3770,7 +3795,7 @@ function LumbungDataView({
   hackathonOpportunityScores: HackathonOpportunityScores | null;
   hackathonBuyerMatching: HackathonBuyerMatching | null;
   hackathonFinancingReadiness: HackathonFinancingReadiness | null;
-  hackathonStatus: "loading" | "ready" | "unavailable" | "error";
+  hackathonStatus: HackathonEndpointStatus;
   hackathonError: string;
   signalSpine: SignalSpinePayload | null;
   signalSpineStatus: SignalSpineStatus;
@@ -3833,6 +3858,8 @@ function LumbungDataView({
   const endpointStatus =
     hackathonStatus === "ready"
       ? `${readyEndpointCount}/5 siap`
+      : hackathonStatus === "partial"
+        ? `${readyEndpointCount}/5 partial`
       : hackathonStatus === "loading"
         ? "Memuat 5 endpoint"
         : hackathonStatus === "unavailable"
@@ -3841,6 +3868,8 @@ function LumbungDataView({
   const gateState =
     hackathonStatus === "ready"
       ? "Configured"
+      : hackathonStatus === "partial"
+        ? "Partial"
       : hackathonStatus === "loading"
         ? "Checking"
         : hackathonStatus === "unavailable"
@@ -4262,6 +4291,8 @@ function LumbungDataView({
             <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
               {hackathonStatus === "ready"
                 ? "Shared DB env reachable; semua endpoint dibaca sebagai agregat read-only."
+                : hackathonStatus === "partial"
+                  ? hackathonError || "Sebagian endpoint evidence berhasil dan tetap ditampilkan tanpa fallback angka demo."
                 : hackathonStatus === "loading"
                   ? "Menunggu response dari lima endpoint evidence."
                   : hackathonStatus === "unavailable"
@@ -4296,7 +4327,7 @@ function LumbungDataView({
                 <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
                   endpoint.payloadReady ? "bg-[#E7F5E8] text-[#236327]" : "bg-[#FFF3D8] text-[#7A4E2D]"
                 }`}>
-                  {endpoint.payloadReady ? "payload" : hackathonStatus === "loading" ? "loading" : "blocked"}
+                  {endpoint.payloadReady ? "payload" : hackathonStatus === "loading" ? "loading" : "not ready"}
                 </span>
               </div>
               <p className={`mt-2 break-all font-mono text-[11px] font-bold ${mutedClass}`}>{endpoint.path}</p>
@@ -4329,7 +4360,7 @@ function LumbungDataView({
           embedded
         />
 
-        {hackathonStatus === "ready" && hackathonSummary ? (
+        {hackathonSummary ? (
           <>
             <div className="mt-5 grid gap-3 md:grid-cols-4">
               {visibleSharedMetrics.map(([label, value, note]) => (
@@ -4582,6 +4613,8 @@ function LumbungDataView({
             <p className="font-black">
               {hackathonStatus === "loading"
                 ? "Memuat lima endpoint hackathon."
+                : hackathonStatus === "partial"
+                  ? "Sebagian endpoint hackathon berhasil."
                 : hackathonStatus === "unavailable"
                   ? "Shared DB missing atau belum configured."
                   : "Shared DB evidence gagal dimuat."}

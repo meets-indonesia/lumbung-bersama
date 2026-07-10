@@ -254,6 +254,8 @@ npm run qa:auth-smoke
 npm run qa:wa-smoke
 ```
 
+`qa:hackathon-demo` also performs an optional authenticated dashboard check when `QA_AUTH_EMAIL` and `QA_AUTH_PASSWORD` are provided. Add `QA_EXPECT_SHARED_DB_READY=1` or `QA_EXPECT_SHARED_DB_ROWS=1` only when the hackathon shared DB env has been configured in that runtime.
+
 Optional live route check:
 
 ```bash

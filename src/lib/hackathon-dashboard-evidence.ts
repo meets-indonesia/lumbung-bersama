@@ -64,6 +64,14 @@ type SourceFields = {
   caveat: string;
 };
 
+type AggregateGroupStatus = {
+  id: "products" | "areas" | "financing" | "transactions";
+  label: string;
+  status: "ready" | "query-error";
+  rows: number;
+  errorCode?: string;
+};
+
 function withSource<T extends object>(rows: T[], source: string, caveat: string): Array<T & SourceFields> {
   return rows.map((row) => ({
     ...row,
@@ -123,6 +131,14 @@ function queryErrorCode(error: unknown) {
     return "HACKATHON_SHARED_DB_READ_ONLY";
   }
   return "QUERY_FAILED";
+}
+
+async function safeAggregate<T>(loader: () => Promise<T>, fallback: T) {
+  try {
+    return { value: await loader(), errorCode: null };
+  } catch (error) {
+    return { value: fallback, errorCode: queryErrorCode(error) };
+  }
 }
 
 function quoteIdentifier(identifier: string) {
@@ -348,15 +364,57 @@ export async function getHackathonDashboardEvidence(authenticated: boolean) {
   if (!isHackathonSharedDbConfigured()) return emptyEvidence("setup-required", "authenticated");
 
   try {
-    const [productRows, areaRows, financingResult, transactionResult] = await Promise.all([
-      getProductRows(),
-      getAreaRows(),
-      getFinancingRows(),
-      getTransactionRows(),
+    const [productResult, areaResult, financingResult, transactionResult] = await Promise.all([
+      safeAggregate(getProductRows, [] as ProductAggregateRow[]),
+      safeAggregate(getAreaRows, [] as AreaAggregateRow[]),
+      safeAggregate(getFinancingRows, {
+        rows: [] as FinancingAggregateRow[],
+        detectedColumns: { status: null, channel: null, amount: null },
+      }),
+      safeAggregate(getTransactionRows, {
+        rows: [] as TransactionAggregateRow[],
+        detectedColumns: { status: null, channel: null, amount: null, cooperative: null },
+      }),
     ]);
+    const productRows = productResult.value;
+    const areaRows = areaResult.value;
+    const aggregateGroups: AggregateGroupStatus[] = [
+      {
+        id: "products",
+        label: PRODUCT_SOURCE,
+        status: productResult.errorCode ? "query-error" : "ready",
+        rows: productRows.length,
+        errorCode: productResult.errorCode ?? undefined,
+      },
+      {
+        id: "areas",
+        label: AREA_SOURCE,
+        status: areaResult.errorCode ? "query-error" : "ready",
+        rows: areaRows.length,
+        errorCode: areaResult.errorCode ?? undefined,
+      },
+      {
+        id: "financing",
+        label: FINANCING_SOURCE,
+        status: financingResult.errorCode ? "query-error" : "ready",
+        rows: financingResult.value.rows.length,
+        errorCode: financingResult.errorCode ?? undefined,
+      },
+      {
+        id: "transactions",
+        label: TRANSACTION_SOURCE,
+        status: transactionResult.errorCode ? "query-error" : "ready",
+        rows: transactionResult.value.rows.length,
+        errorCode: transactionResult.errorCode ?? undefined,
+      },
+    ];
+    const failedGroups = aggregateGroups.filter((group) => group.status === "query-error");
+    const totalAggregateRows = aggregateGroups.reduce((total, group) => total + group.rows, 0);
+    const status = failedGroups.length ? "query-error" : "ready";
+    const uniqueErrorCodes = Array.from(new Set(failedGroups.map((group) => group.errorCode).filter(Boolean)));
 
     return {
-      status: "ready" as const,
+      status,
       authState: "authenticated" as const,
       source: "hackathon-shared-db-read-only",
       mode: "aggregate-only-no-pii-dashboard",
@@ -365,17 +423,31 @@ export async function getHackathonDashboardEvidence(authenticated: boolean) {
       generatedAt: new Date().toISOString(),
       sourceCaveat: buildSourceCaveatFields(
         "hackathon shared DB dashboard aggregate",
-        productRows.length || areaRows.length || financingResult.rows.length || transactionResult.rows.length ? "medium" : "limited",
+        totalAggregateRows ? "medium" : "limited",
         "shared-db-read-only-aggregate",
       ),
       setup: {
         required: false,
-        message: "Shared DB hackathon dikonfigurasi dan dibaca sebagai aggregate read-only.",
+        message: failedGroups.length
+          ? `Shared DB hackathon terhubung, tetapi ${failedGroups.length}/${aggregateGroups.length} aggregate group gagal. Payload tetap menampilkan group yang berhasil.`
+          : totalAggregateRows
+            ? "Shared DB hackathon dikonfigurasi dan dibaca sebagai aggregate read-only."
+            : "Shared DB hackathon terhubung, tetapi aggregate query belum mengembalikan rows. Perlakukan sebagai gap verifikasi data.",
       },
-      error: null,
+      error: failedGroups.length
+        ? {
+            code: uniqueErrorCodes.join(",") || "QUERY_FAILED",
+            message:
+              "Sebagian aggregate shared DB gagal. Dashboard tetap menampilkan evidence group yang berhasil dan tidak memilih PII/raw records.",
+          }
+        : null,
       detectedColumns: {
-        financing: financingResult.detectedColumns,
-        transactions: transactionResult.detectedColumns,
+        financing: financingResult.value.detectedColumns,
+        transactions: transactionResult.value.detectedColumns,
+      },
+      evidenceSummary: {
+        totalAggregateRows,
+        aggregateGroups,
       },
       tables: {
         productRows: withSource(
@@ -389,12 +461,12 @@ export async function getHackathonDashboardEvidence(authenticated: boolean) {
           "Province-level aggregate only; no member, customer, or address-level records are returned.",
         ),
         financingRows: withSource(
-          financingResult.rows,
+          financingResult.value.rows,
           FINANCING_SOURCE,
           "Readiness aggregate only; not an approval, disbursement, credit score, or borrower identity.",
         ),
         transactionRows: withSource(
-          transactionResult.rows,
+          transactionResult.value.rows,
           TRANSACTION_SOURCE,
           "Historical/sample transaction aggregate only; not live demand, named buyer data, or guaranteed offtake.",
         ),
