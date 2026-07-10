@@ -11,6 +11,7 @@
     "qa:auth-smoke": "node scripts/qa-auth-smoke.mjs",
     "qa:wa-smoke": "node scripts/qa-wa-smoke.mjs",
     "qa:hackathon-demo": "node scripts/qa-hackathon-demo.mjs",
+    "qa:shared-db": "node scripts/qa-shared-db-aggregate.mjs",
     "env:merge": "node scripts/merge-env.mjs --file .env --stdin",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",

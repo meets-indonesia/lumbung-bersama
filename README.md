@@ -241,8 +241,10 @@ npm run lint
 npm run build
 npm run qa:smoke
 npm run qa:hackathon-demo
+npm run qa:shared-db
 node --check scripts/qa-smoke.mjs
 node --check scripts/qa-hackathon-demo.mjs
+node --check scripts/qa-shared-db-aggregate.mjs
 node --check scripts/qa-auth-smoke.mjs
 node --check scripts/qa-wa-smoke.mjs
 ```
@@ -255,6 +257,8 @@ npm run qa:wa-smoke
 ```
 
 `qa:hackathon-demo` also performs an optional authenticated dashboard check when `QA_AUTH_EMAIL` and `QA_AUTH_PASSWORD` are provided. Add `QA_EXPECT_SHARED_DB_READY=1` or `QA_EXPECT_SHARED_DB_ROWS=1` only when the hackathon shared DB env has been configured in that runtime.
+
+`qa:shared-db` reads `.env.local` / `.env`, opens the hackathon shared DB in a read-only transaction, and prints aggregate-only counts/categories. It must not print connection strings, passwords, member/customer identities, named buyers, documents, media paths, phone numbers, or addresses.
 
 Optional live route check:
 
