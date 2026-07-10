@@ -70,6 +70,8 @@ export async function GET() {
   const auth = {
     configured: Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD_HASH),
     required: ["ADMIN_EMAIL", "ADMIN_PASSWORD_HASH"],
+    juryConfigured: Boolean(process.env.JURY_EMAIL && process.env.JURY_PASSWORD_HASH),
+    optional: ["JURY_EMAIL", "JURY_PASSWORD_HASH"],
     sessionCookie: "httpOnly",
   };
 

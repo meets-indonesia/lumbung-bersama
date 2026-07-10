@@ -6,11 +6,11 @@ Live demo target: https://lumbung-bersama.meetsin.id
 
 Core MVP flow:
 
-`Login -> Peta Potensi Desa -> Signal Snapshot Adapter -> Evidence Ledger -> Opportunity Score -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue -> Laporan Aksi`
+`Login -> Peta Potensi Desa -> Rekomendasi Komoditas/Produk -> Buyer Matching Lite -> Stok/Readiness -> Laporan Aksi`
 
 Demo-critical signal spine:
 
-`Signal Snapshot Adapter -> Evidence Ledger -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue`
+`Peta -> Rekomendasi Produk -> Buyer Awal -> Kesiapan Stok -> Laporan Aksi`
 
 Important boundaries:
 
@@ -27,7 +27,7 @@ Requirements:
 
 1. Node.js 20 or 22 LTS.
 2. npm.
-3. Database relasional yang kompatibel dengan driver `pg` untuk demo DB-backed.
+3. Data store relasional yang kompatibel dengan driver `pg` untuk demo DB-backed.
 
 Install dependencies:
 
@@ -194,9 +194,9 @@ For a GCP-grade production path, use this target architecture:
 
 Dashboard troubleshooting:
 
-1. `DATABASE_URL_REQUIRED` means the app DB is not configured or not visible to the runtime. Set the app DB env, run `npm run db:setup`, and restart.
-2. `COOPERATIVE_SCOPE_REQUIRED` means the logged-in user has no `cooperative_id`. Logout/login with the configured admin account or run the seed/migration so `kop-wanasari` exists.
-3. Shared DB `setup-required` does not block the dashboard. It only means aggregate hackathon evidence is not configured for that runtime.
+1. `OPERATIONAL_DATA_REQUIRED` means the app runtime has not activated its operational data store. Activate the runtime data env, run the setup script, and restart.
+2. `COOPERATIVE_SCOPE_REQUIRED` means the logged-in operator account is not linked to a cooperative workspace. Login again with the configured admin account or refresh the seed/migration.
+3. `EVIDENCE_SOURCE_REQUIRED` does not block the dashboard. It only means aggregate hackathon evidence is not active for that runtime.
 
 ## Main Routes
 
@@ -217,9 +217,10 @@ Key API endpoints:
 | Endpoint | Purpose |
 |---|---|
 | `/api/health` | Integration/env readiness. |
+| `/api/docs`, `/api/openapi.json` | Browser API docs and OpenAPI contract for demo/integration review. |
 | `/api/auth/login`, `/api/auth/logout`, `/api/me` | Auth and profile. |
 | `/api/dashboard` | Authenticated operational workspace payload. |
-| `/api/wa/messages`, `/api/wa/send`, `/api/wa/webhook` | WA draft intake, env-gated send, env-gated webhook. |
+| `/api/wa/messages`, `/api/wa/send`, `/api/wa/webhook`, `/api/wa/personal/status` | WA draft intake, env-gated send, env-gated webhook, and QR bridge status for regular WhatsApp testing. |
 | `/api/peta-unggulan/data`, `/api/peta-unggulan/analyze`, `/api/peta-unggulan/source-check` | Map data, opportunity analysis, source readiness. |
 | `/api/admin-areas/search`, `/api/admin-areas/drilldown`, `/api/admin-areas/boundaries` | Administrative area search and polygon drilldown. |
 | `/api/open-data/sources` | Source registry and integration claims. |
@@ -236,8 +237,10 @@ Key API endpoints:
 1. Start at `/dashboard` after login.
 2. Show `/api/hackathon/signal-spine` as the safe adapter layer: Signal Snapshot Adapter -> Evidence Ledger -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue.
 3. Open `/peta-unggulan` to inspect wilayah, commodity, source, and caveat signals.
-4. Return to `/dashboard` for opportunity scoring, readiness blockers, remediation tasks, and manager-owned next actions.
-5. Close in `/laporan` with an action report/export that preserves source, confidence, caveat, and human approval status.
+4. Return to `/dashboard`, open `Rekomendasi Produk`, add one input operasional, then show it becomes a verification case with search, filter, pagination, and detail drawer.
+5. Open `AI Agent`, pick that case, and run one case-backed recommendation. Explain that provider output is optional and human review remains final.
+6. Open `WA Agent`; if the personal bridge is running, scan QR for regular WhatsApp testing and send one message/file so it enters the verification queue.
+7. Close in `/laporan` with an action report/export that preserves source, confidence, caveat, and human approval status.
 
 Signal spine boundary: Lumbung reads or simulates aggregate signals from existing Kopdes/SIMKOPDES feature families. It does not call the dev API, mutate records, expose secrets/PII, or claim official production integration without an approved connector contract.
 

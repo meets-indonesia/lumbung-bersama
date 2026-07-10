@@ -84,7 +84,7 @@ function publicProductText(value: unknown, fallback = "Belum tersedia") {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return fallback;
   if (
-    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|postgres|env\b|environment/i.test(
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|OPERATIONAL_DATA_REQUIRED|EVIDENCE_SOURCE_REQUIRED|COOPERATIVE_SCOPE_REQUIRED|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|postgres|env\b|environment/i.test(
       raw,
     )
   ) {

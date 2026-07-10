@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, Loader2, Play, ShieldCheck } from "lucide-react";
 import { aiAgents } from "@/lib/pilot-data";
 
@@ -15,22 +15,58 @@ type AgentResult = {
   nextAction: string;
 };
 
+type QueueCase = {
+  id: string;
+  module: string;
+  summary: string;
+  status: string;
+};
+
 export function AgentCenterClient() {
   const [activeAgent, setActiveAgent] = useState(aiAgents[0].name);
-  const [recordId, setRecordId] = useState("LB-1024");
+  const [recordId, setRecordId] = useState("");
+  const [queue, setQueue] = useState<QueueCase[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AgentResult | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadCases() {
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(payload.message ?? "Case antrean belum bisa dimuat.");
+        return;
+      }
+      const cases = Array.isArray(payload.queue) ? (payload.queue as QueueCase[]) : [];
+      setQueue(cases);
+      if (cases[0]?.id) setRecordId(cases[0].id);
+    }
+
+    void loadCases();
+  }, []);
 
   async function runAgent(agentName = activeAgent) {
+    if (!recordId) {
+      setError("Pilih case antrean dulu sebelum menjalankan agent.");
+      return;
+    }
     setActiveAgent(agentName);
     setLoading(true);
+    setError("");
     const response = await fetch("/api/agents/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agentName, recordId }),
     });
-    const data = (await response.json()) as AgentResult;
-    setResult(data);
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.message ?? "Agent belum berhasil dijalankan.");
+      setLoading(false);
+      return;
+    }
+    const resultData = data as AgentResult;
+    setResult(resultData);
     setLoading(false);
   }
 
@@ -50,14 +86,29 @@ export function AgentCenterClient() {
         </p>
 
         <label htmlFor="record-id" className="mt-6 block text-sm font-extrabold text-[#1F2933]">
-          Nomor catatan
+          Case antrean
         </label>
-        <input
+        <select
           id="record-id"
           value={recordId}
           onChange={(event) => setRecordId(event.target.value)}
           className="mt-2 w-full rounded-[14px] border border-[#E7DED1] bg-white px-4 py-3 font-mono text-sm font-bold text-[#1F2933] outline-none focus:border-[#D79A2B]"
-        />
+        >
+          {queue.length ? (
+            queue.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id} - {item.module}
+              </option>
+            ))
+          ) : (
+            <option value="">Belum ada case antrean</option>
+          )}
+        </select>
+        {queue.find((item) => item.id === recordId) ? (
+          <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+            {queue.find((item) => item.id === recordId)?.summary}
+          </p>
+        ) : null}
 
         <div className="mt-6 grid gap-3">
           {aiAgents.map((agent) => (
@@ -101,7 +152,7 @@ export function AgentCenterClient() {
         <button
           type="button"
           onClick={() => runAgent()}
-          disabled={loading}
+          disabled={loading || !recordId}
           className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#C92A2A] px-5 py-3 text-sm font-extrabold text-[#FFF8EA] disabled:cursor-not-allowed disabled:bg-[#C9B8A4] focus-visible:lb-focus"
         >
           {loading ? (
@@ -111,6 +162,12 @@ export function AgentCenterClient() {
           )}
           Jalankan agent aktif
         </button>
+
+        {error ? (
+          <div className="mt-5 rounded-[16px] border border-[#C92A2A]/40 bg-[#FFE3E3] p-4 text-sm font-bold text-[#9B1C1C]">
+            {error}
+          </div>
+        ) : null}
 
         {result ? (
           <div className="mt-5 space-y-4">

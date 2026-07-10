@@ -53,7 +53,13 @@ export async function POST(request: Request) {
   const cooperativeId = auth.user.cooperativeId;
 
   if (!cooperativeId) {
-    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+    return Response.json(
+      {
+        error: "COOPERATIVE_SCOPE_REQUIRED",
+        message: "Akun operator belum tersambung ke workspace koperasi untuk mencatat pesan WA.",
+      },
+      { status: 409 },
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as {

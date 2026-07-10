@@ -31,7 +31,7 @@ export async function queryRows<T extends QueryResultRow = QueryResultRow>(
 ) {
   const pool = getPool();
   if (!pool) {
-    throw new Error("DATABASE_URL_REQUIRED");
+    throw new Error("OPERATIONAL_DATA_REQUIRED");
   }
 
   const result = await pool.query<T>(sql, params);
@@ -53,9 +53,9 @@ export function newId(prefix: string) {
 export function dbRequiredResponse() {
   return Response.json(
     {
-      error: "DATABASE_URL_REQUIRED",
+      error: "OPERATIONAL_DATA_REQUIRED",
       message:
-        "Data operasional aplikasi belum dikonfigurasi. Aktifkan koneksi data, lalu jalankan setup schema dan seed.",
+        "Data operasional aplikasi belum aktif. Hubungi operator teknis untuk mengaktifkan data awal, lalu muat ulang halaman.",
     },
     { status: 503 },
   );

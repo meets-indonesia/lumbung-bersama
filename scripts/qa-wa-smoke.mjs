@@ -214,6 +214,9 @@ async function smokeUnauthenticatedGates() {
     body: JSON.stringify({ sender: "QA", message: "QA smoke local intake" }),
   });
   expectOneOf(local, [401, 503], "unauthenticated local intake gate");
+
+  const personalStatus = await request("/api/wa/personal/status");
+  expectOneOf(personalStatus, [401, 503], "unauthenticated personal WA status gate");
 }
 
 async function maybeLogin() {
@@ -221,7 +224,7 @@ async function maybeLogin() {
   const adminPassword = process.env.QA_ADMIN_PASSWORD ?? process.env.ADMIN_PASSWORD;
 
   if (!process.env.DATABASE_URL || !adminEmail || !process.env.ADMIN_PASSWORD_HASH || !adminPassword) {
-    pass("authenticated WA mutation smoke skipped; DATABASE_URL/admin QA credentials are not fully configured");
+    pass("authenticated WA mutation smoke skipped; operational data/admin QA credentials are not fully configured");
     return null;
   }
 
@@ -278,6 +281,25 @@ async function smokeLocalIntake(cookie) {
   pass("local WA intake is idempotent by clientMessageId");
 }
 
+async function smokePersonalStatus(cookie) {
+  const response = await authedRequest(cookie, "/api/wa/personal/status");
+  expectStatus(response, 200, "personal WA status");
+
+  const payload = await json(response);
+  const allowedStatuses = ["disabled", "waiting-for-bridge", "qr", "connected", "disconnected", "logged-out"];
+  if (!allowedStatuses.includes(payload.status)) {
+    fail(`personal WA status returned unexpected status ${payload.status}`);
+  }
+  const serialized = JSON.stringify(payload);
+  if (/token|secret|password|jid|phoneNumber|clientId/i.test(serialized)) {
+    fail("personal WA status leaked a credential or account identifier field");
+  }
+  if (payload.status === "qr" && !String(payload.qrImage ?? "").startsWith("data:image/png;base64,")) {
+    fail("personal WA QR status did not return a PNG data URL");
+  }
+  pass(`personal WA status is safe with state ${payload.status}`);
+}
+
 async function smokeWebhookPost() {
   const body = JSON.stringify({
     object: "whatsapp_business_account",
@@ -314,9 +336,9 @@ async function smokeWebhookPost() {
   });
 
   if (!process.env.DATABASE_URL) {
-    expectStatus(response, 503, "webhook POST database setup gate");
+    expectStatus(response, 503, "webhook POST operational data setup gate");
     const payload = await json(response);
-    if (payload.error !== "DATABASE_URL_REQUIRED") fail("webhook POST did not report database setup gate");
+    if (payload.error !== "OPERATIONAL_DATA_REQUIRED") fail("webhook POST did not report operational data setup gate");
     return;
   }
 
@@ -376,6 +398,7 @@ async function run() {
 
   const cookie = await maybeLogin();
   if (cookie) {
+    await smokePersonalStatus(cookie);
     await smokeLocalIntake(cookie);
     await smokeSendSetup(cookie);
   }

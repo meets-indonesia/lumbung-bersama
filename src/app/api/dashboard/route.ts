@@ -175,7 +175,7 @@ export async function GET(request: Request) {
     return Response.json(
       {
         error: "COOPERATIVE_SCOPE_REQUIRED",
-        message: "User belum memiliki cooperative_id untuk membatasi workspace.",
+        message: "Akun operator belum tersambung ke workspace koperasi. Login ulang atau hubungi operator teknis.",
       },
       { status: 409 },
     );

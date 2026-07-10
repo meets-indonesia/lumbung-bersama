@@ -16,7 +16,13 @@ export async function PATCH(request: Request, context: RouteContext) {
   const cooperativeId = auth.user.cooperativeId;
 
   if (!cooperativeId) {
-    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+    return Response.json(
+      {
+        error: "COOPERATIVE_SCOPE_REQUIRED",
+        message: "Akun operator belum tersambung ke workspace koperasi untuk memperbarui laporan.",
+      },
+      { status: 409 },
+    );
   }
 
   const { id } = await context.params;

@@ -334,7 +334,7 @@ Existing stack:
 
 1. Next.js 16.
 2. React 19.
-3. PostgreSQL via `pg`.
+3. Relational data layer via `pg`.
 4. Leaflet for map.
 5. Tailwind v4.
 6. ESLint.
@@ -343,7 +343,7 @@ Existing trust features:
 
 1. Auth with HttpOnly session cookie.
 2. PBKDF2 password hash.
-3. Session rows in Postgres.
+3. Session rows in the app data store.
 4. Logout session revoke.
 5. Same-origin CSRF rejection for mutations.
 6. Operational role gate helpers.
@@ -376,7 +376,7 @@ Suggested architecture:
 3. Cloud Logging: audit and route errors.
 4. Cloud Scheduler/Cloud Run Jobs: data import refresh.
 5. Cloud Storage: evidence files only if upload/media pipeline is enabled.
-6. Cloud SQL/Postgres: only if not using provided shared DB for demo evidence.
+6. Cloud SQL relational database: only if not using the provided shared evidence source for demo evidence.
 
 ## 7. Verification Gates
 

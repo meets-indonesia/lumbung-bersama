@@ -30,7 +30,9 @@ import {
   Search,
   Send,
   Settings,
+  CircleDollarSign,
   Sun,
+  Store,
   Warehouse,
   X,
 } from "lucide-react";
@@ -62,6 +64,8 @@ const navGroups = [
     items: [
       { label: "WA Agent", view: "wa", icon: MessageCircle },
       { label: "AI Agent", view: "agents", icon: Bot },
+      { label: "Gerai Pintar", view: "gerai-pintar", icon: Store },
+      { label: "Simpan Pinjam", view: "simpan-pinjam", icon: CircleDollarSign },
       { label: "Kesiapan Sistem", view: "integrasi", icon: Settings },
     ],
   },
@@ -302,7 +306,7 @@ function publicSetupMessage(message: unknown, fallback: string) {
   const raw = typeof message === "string" ? message.trim() : "";
   if (!raw) return fallback;
   if (
-    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|shared[-_\s]?db|db-read|database|setup[-_\s]?required|operator-ready|credential|secret|schema|seed/i.test(
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|OPERATIONAL_DATA_REQUIRED|EVIDENCE_SOURCE_REQUIRED|COOPERATIVE_SCOPE_REQUIRED|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|shared[-_\s]?db|db-read|database|setup[-_\s]?required|operator-ready|credential|secret|schema|seed/i.test(
       raw,
     )
   ) {
@@ -316,7 +320,7 @@ function publicStatusLabel(value: unknown) {
   if (!raw) return "Belum dicek";
   if (/configured|implemented|ready|available|application/i.test(raw)) return "Aktif";
   if (/loading/i.test(raw)) return "Memuat";
-  if (/env|setup|activation|static|not-configured/i.test(raw)) return "Perlu aktivasi";
+  if (/env|setup|required|activation|static|not-configured/i.test(raw)) return "Perlu aktivasi";
   if (/source-discovery|discovery/i.test(raw)) return "Discovery";
   if (/planned|connector/i.test(raw)) return "Direncanakan";
   if (/manual|reference/i.test(raw)) return "Referensi";
@@ -520,9 +524,31 @@ type DashboardData = {
   buyerRequirements?: BuyerRequirement[];
   stockLedger?: StockLedgerEntry[];
   mediaEvidence?: MediaEvidence[];
+  recentWa?: RecentWaMessage[];
+  recentAgentRuns?: RecentAgentRun[];
   teamTablePrefix?: string;
   prefixedDbStatus?: PrefixedDbStatus;
   hackathonSharedDb?: HackathonDashboardEvidence;
+};
+
+type RecentWaMessage = {
+  id: string;
+  sender: string;
+  message: string;
+  intent: string;
+  module: string;
+  status: string;
+  createdAt: string;
+};
+
+type RecentAgentRun = {
+  id: string;
+  agentName: string;
+  recordId: string;
+  status: string;
+  output: string;
+  nextAction: string;
+  createdAt: string;
 };
 
 type HackathonTableCount = {
@@ -857,6 +883,8 @@ const EMPTY_STOCK_LEDGER: StockLedgerEntry[] = [];
 const EMPTY_MEDIA_EVIDENCE: MediaEvidence[] = [];
 const EMPTY_FINANCE: FinanceRequest[] = [];
 const EMPTY_REPORTS: ReportSection[] = [];
+const EMPTY_AGENT_RUNS: RecentAgentRun[] = [];
+const EMPTY_RECENT_WA: RecentWaMessage[] = [];
 
 type AgentRunResult = {
   agent: string;
@@ -901,6 +929,22 @@ type HealthPayload = {
     };
   };
   message?: string;
+};
+
+type WaPersonalStatus = {
+  status: "disabled" | "waiting-for-bridge" | "qr" | "connected" | "disconnected" | "logged-out";
+  qrImage: string | null;
+  updatedAt: string | null;
+  connectedAt: string | null;
+  lastDisconnect: string | null;
+  command: string;
+  message: string;
+  capabilities: {
+    qrPairing?: boolean;
+    mediaDownload?: boolean;
+    pdfTextExtraction?: boolean;
+    imageOcr?: boolean;
+  };
 };
 
 type ToastTone = "success" | "info" | "warning" | "error";
@@ -951,7 +995,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "scope" | "error">("loading");
   const [dataError, setDataError] = useState("");
-  const [panelMessage, setPanelMessage] = useState(
+  const [, setPanelMessage] = useState(
     "Memuat data operasional.",
   );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -1087,7 +1131,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       setDashboardData(payload as DashboardData);
       setDataStatus("ready");
       setDataError("");
-      setPanelMessage("Data operasional berhasil dimuat.");
+      setPanelMessage("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal memuat data dashboard.";
       setDashboardData(null);
@@ -1301,6 +1345,8 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const finance = dashboardData?.finance ?? EMPTY_FINANCE;
   const reports = dashboardData?.reportSections ?? EMPTY_REPORTS;
   const reportPeriod = dashboardData?.reportPeriod ?? null;
+  const recentWa = dashboardData?.recentWa ?? EMPTY_RECENT_WA;
+  const recentAgentRuns = dashboardData?.recentAgentRuns ?? EMPTY_AGENT_RUNS;
 
   const filteredQueue = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -1388,17 +1434,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       : activeNavItem?.label ?? featureDetails[activeView]?.title ?? "Ruang Kerja";
   return (
     <main className={`lb-dashboard-type h-[100dvh] overflow-hidden ${shellClass}`}>
-      <GuidedDemoDock
-        isDark={isDark}
-        onSelect={(step) => {
-          if ("href" in step && step.href) {
-            window.location.href = step.href;
-            return;
-          }
-          setActiveView(step.targetView);
-          announce(`${step.label} dibuka dari guided flow.`, "info");
-        }}
-      />
       {mobileSidebarOpen ? (
         <button
           type="button"
@@ -1828,9 +1863,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 onStartTour={openTour}
               />
             ) : activeView === "wa" ? (
-              <WhatsAppView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} setPanelMessage={announce} requestConfirm={requestConfirm} />
+              <WhatsAppView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} recentWa={recentWa} setPanelMessage={announce} requestConfirm={requestConfirm} />
             ) : activeView === "agents" ? (
-              <AgentsView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} setPanelMessage={announce} />
+              <AgentsView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} queue={queue} recentAgentRuns={recentAgentRuns} setPanelMessage={announce} />
             ) : activeView === "laporan" ? (
               <ReportsView
                 panelClass={panelClass}
@@ -1863,9 +1898,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 signalSpineError={signalSpineError}
                 hackathonSharedDb={hackathonSharedDb}
                 reloadHackathon={loadHackathonEvidence}
+                reload={loadDashboard}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
                 openModule={openModule}
+                setPanelMessage={announce}
               />
             ) : activeView === "gerai-pintar" ? (
               <GeraiPintarView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} stocks={stocks} reload={loadDashboard} setPanelMessage={announce} requestConfirm={requestConfirm} />
@@ -1885,10 +1922,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
               />
             )}
 
-            <div className={`mt-5 rounded-[14px] border border-dashed p-4 ${panelClass}`}>
-              <p className="text-sm font-black">Panel aksi terakhir</p>
-              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{panelMessage}</p>
-            </div>
           </div>
         </section>
       </div>
@@ -2749,6 +2782,47 @@ function ConfirmDialog({
   );
 }
 
+function DetailDrawer({
+  title,
+  eyebrow,
+  children,
+  panelClass,
+  innerClass,
+  mutedClass,
+  onClose,
+}: ViewClassProps & {
+  title: string;
+  eyebrow: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="lb-modal-layer fixed inset-0 z-50 flex justify-end bg-[#081014]/55 backdrop-blur-sm">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Tutup detail" onClick={onClose} />
+      <aside className={`relative h-full w-full max-w-[720px] overflow-y-auto border-l p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] ${panelClass}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">{eyebrow}</p>
+            <h2 className="mt-2 text-2xl font-black">{title}</h2>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+              Buka detail hanya saat perlu memeriksa sumber, skor, caveat, dan aksi lanjutan.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`shrink-0 rounded-[10px] border p-2 focus-visible:lb-focus ${innerClass}`}
+            aria-label="Tutup detail"
+          >
+            <X size={17} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
 function SetupRequiredView({
   panelClass,
   innerClass,
@@ -2810,45 +2884,6 @@ function SetupRequiredView({
         {isScope ? "Cek ulang workspace" : "Cek ulang data"}
       </button>
     </section>
-  );
-}
-
-function GuidedDemoDock({
-  isDark,
-  onSelect,
-}: {
-  isDark: boolean;
-  onSelect: (step: (typeof demoFlowSteps)[number]) => void;
-}) {
-  return (
-    <aside
-      className={`fixed bottom-4 left-1/2 z-30 hidden max-w-[min(1120px,calc(100vw-32px))] -translate-x-1/2 items-center gap-2 rounded-[14px] border px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.28)] lg:flex ${
-        isDark
-          ? "border-white/10 bg-[#101820]/95 text-[#F8F4EA]"
-          : "border-[#D9CFC0] bg-[#FFFCF5]/95 text-[#172027]"
-      }`}
-      aria-label="Fixed MVP flow indicator"
-    >
-      <span className="whitespace-nowrap rounded-[8px] bg-[#C92A2A] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#FFF8EA]">
-        Alur MVP
-      </span>
-      <div className="flex min-w-0 items-center gap-1">
-        {demoFlowSteps.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            onClick={() => onSelect(step)}
-            className={`inline-flex min-h-9 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-xs font-black transition focus-visible:lb-focus ${
-              isDark ? "hover:bg-[#2B1C1A]" : "hover:bg-[#F3E7D5]"
-            }`}
-            title={step.detail}
-          >
-            <span className="font-mono text-[#D79A2B]">0{index + 1}</span>
-            <span className="whitespace-nowrap">{step.label}</span>
-          </button>
-        ))}
-      </div>
-    </aside>
   );
 }
 
@@ -3848,7 +3883,7 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex items-center gap-2">
             <ClipboardCheck size={20} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
-            <h2 className="text-xl font-black">Laporan dan integrasi</h2>
+            <h2 className="text-xl font-black">Laporan dan bukti</h2>
           </div>
           <div className="mt-4 grid gap-2">
             {reports.slice(0, 4).map((section) => (
@@ -3858,12 +3893,6 @@ function OverviewView({
             ))}
           </div>
           <div className="mt-4 grid gap-2">
-            {integrationChecks.slice(0, 2).map((item) => (
-              <div key={item.name} className={`rounded-[10px] border px-3 py-2 text-sm ${innerClass}`}>
-                <p className="font-black">{item.name}</p>
-                <p className={`mt-1 font-semibold ${mutedClass}`}>{item.status}</p>
-              </div>
-            ))}
             {mediaEvidence.slice(0, 1).map((item) => (
               <div key={item.id} className={`rounded-[10px] border px-3 py-2 text-sm ${innerClass}`}>
                 <p className="font-black">{item.redactedLabel}</p>
@@ -3947,9 +3976,11 @@ function LumbungDataView({
   signalSpineError,
   hackathonSharedDb,
   reloadHackathon,
+  reload,
   approveDraft,
   askFarmer,
   openModule,
+  setPanelMessage,
 }: ViewClassProps & {
   isDark: boolean;
   filteredQueue: QueueItem[];
@@ -3965,12 +3996,20 @@ function LumbungDataView({
   signalSpineError: string;
   hackathonSharedDb: HackathonDashboardEvidence | null;
   reloadHackathon: () => Promise<void>;
+  reload: () => Promise<void>;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
   openModule: (moduleTitle: string) => void;
+  setPanelMessage: (message: string, tone?: ToastTone) => void;
 }) {
   const [selectedId, setSelectedId] = useState(filteredQueue[0]?.id ?? "");
   const [dataTab, setDataTab] = useState<"flow" | "evidence" | "opportunity" | "shared" | "queue">("flow");
+  const [quickInput, setQuickInput] = useState("Saya panen padi minggu depan sekitar 5 kuintal dan butuh cek buyer/stok.");
+  const [quickIntentId, setQuickIntentId] = useState(waIntents[0]?.id ?? "");
+  const [quickSaving, setQuickSaving] = useState(false);
+  const [queueDetailOpen, setQueueDetailOpen] = useState(false);
+  const [opportunityDetailKey, setOpportunityDetailKey] = useState<string | null>(null);
+  const [buyerDetailKey, setBuyerDetailKey] = useState<string | null>(null);
   const selected = filteredQueue.find((item) => item.id === selectedId) ?? filteredQueue[0];
   const completed = filteredQueue.filter((item) => item.status === "Sudah Disetujui").length;
   const rowClass = isDark
@@ -4126,14 +4165,20 @@ function LumbungDataView({
     })) ?? [];
   const topOpportunityAreas = hackathonOpportunityScores?.topAreas.slice(0, 5) ?? [];
   const buyerReadiness = hackathonBuyerMatching?.matches.slice(0, 5) ?? [];
+  const opportunityKeyFor = (item: HackathonOpportunityScores["topAreas"][number]) =>
+    item.area.kodeWilayah ?? [item.area.province, item.area.regency, item.area.district, item.area.village].filter(Boolean).join("|") ?? `score-${item.score}`;
+  const buyerKeyFor = (item: HackathonBuyerMatching["matches"][number]) =>
+    `${item.rank}-${item.cooperativeRef}-${item.buyerArchetypeLabel}`;
+  const selectedOpportunityDetail = opportunityDetailKey
+    ? topOpportunityAreas.find((item) => opportunityKeyFor(item) === opportunityDetailKey) ?? null
+    : null;
+  const selectedBuyerDetail = buyerDetailKey
+    ? buyerReadiness.find((item) => buyerKeyFor(item) === buyerDetailKey) ?? null
+    : null;
   const financingStatusSummary = hackathonFinancingReadiness?.statusSummary ?? [];
   const financingChecklist = hackathonFinancingReadiness?.actionChecklist ?? [];
   const financingChannelSummary = hackathonFinancingReadiness?.channelSummary.slice(0, 3) ?? [];
   const financingTotals = hackathonFinancingReadiness?.totals;
-  const buyerClusterCounts = buyerReadiness.reduce<Record<string, number>>((counts, item) => {
-    counts[item.readinessCluster] = (counts[item.readinessCluster] ?? 0) + 1;
-    return counts;
-  }, {});
   const clusterLabel: Record<string, string> = {
     pilot_ready: "Siap pilot",
     qualified: "Layak",
@@ -4220,7 +4265,10 @@ function LumbungDataView({
       render: (item) => (
         <button
           type="button"
-          onClick={() => setSelectedId(item.id)}
+          onClick={() => {
+            setSelectedId(item.id);
+            setQueueDetailOpen(true);
+          }}
           className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${
             selected?.id === item.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
           }`}
@@ -4295,10 +4343,10 @@ function LumbungDataView({
     },
   ];
   const lumbungDataTabs = [
-    { id: "flow" as const, label: "Alur", meta: "5 langkah" },
-    { id: "evidence" as const, label: "Bukti data", meta: endpointStatus },
-    { id: "opportunity" as const, label: "Peluang", meta: `${formatInteger(topOpportunityAreas.length)} area` },
-    { id: "shared" as const, label: "Sumber agregat", meta: dashboardSharedDbStatusLabel },
+    { id: "flow" as const, label: "Input data", meta: "buat case" },
+    { id: "evidence" as const, label: "Bukti & alasan", meta: endpointStatus },
+    { id: "opportunity" as const, label: "Rekomendasi", meta: `${formatInteger(topOpportunityAreas.length)} area` },
+    { id: "shared" as const, label: "Tabel sumber", meta: dashboardSharedDbStatusLabel },
     { id: "queue" as const, label: "Verifikasi", meta: `${formatInteger(completed)}/${formatInteger(filteredQueue.length)}` },
   ];
   const sharedProductColumns: ManagedTableColumn<HackathonDashboardProductRow>[] = [
@@ -4437,15 +4485,155 @@ function LumbungDataView({
     },
   ];
 
+  async function saveQuickInput() {
+    const trimmed = quickInput.trim();
+    if (!trimmed) {
+      setPanelMessage("Isi input warga/operator dulu sebelum disimpan.", "warning");
+      return;
+    }
+    setQuickSaving(true);
+    const response = await fetch("/api/wa/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: trimmed,
+        intentId: quickIntentId,
+        sender: "Input operator",
+        payloadType: "text",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setQuickSaving(false);
+
+    if (!response.ok) {
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Input operasional gagal disimpan."), "error");
+      return;
+    }
+
+    const queueId = payload.queue?.id as string | undefined;
+    if (queueId) setSelectedId(queueId);
+    setDataTab("queue");
+    setQuickInput("");
+    await reload();
+    setPanelMessage(
+      queueId
+        ? `${queueId}: input tersimpan sebagai antrean verifikasi.`
+        : "Input tersimpan sebagai antrean verifikasi.",
+      "success",
+    );
+  }
+
+  const opportunityColumns: ManagedTableColumn<HackathonOpportunityScores["topAreas"][number]>[] = [
+    {
+      key: "area",
+      heading: "Area prioritas",
+      render: (item) => (
+        <div>
+          <p className="font-black">
+            {[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area belum lengkap"}
+          </p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
+            {item.area.kodeWilayah ? `Kode ${item.area.kodeWilayah}` : "Kode wilayah belum tersedia"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "score",
+      heading: "Skor",
+      render: (item) => <span className="font-mono text-base font-black text-[#2F7D32]">{formatInteger(item.score)}</span>,
+    },
+    {
+      key: "signals",
+      heading: "Sinyal utama",
+      render: (item) => (
+        <p className={`max-w-[360px] text-xs font-semibold leading-5 ${mutedClass}`}>
+          Komoditas {formatInteger(item.rawSignals.commodityRows)}, koperasi {formatInteger(item.rawSignals.cooperatives)}, produk {formatInteger(item.rawSignals.products)}, stok {formatInteger(item.rawSignals.stockItems)}
+        </p>
+      ),
+    },
+    {
+      key: "readiness",
+      heading: "Kesiapan",
+      render: (item) => (
+        <p className="font-mono text-xs font-black">
+          K {formatInteger(item.componentScores.commodityPotential)} / Ko {formatInteger(item.componentScores.cooperativeReadiness)} / S {formatInteger(item.componentScores.productStockReadiness)}
+        </p>
+      ),
+    },
+    {
+      key: "detail",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => (
+        <button
+          type="button"
+          onClick={() => setOpportunityDetailKey(opportunityKeyFor(item))}
+          className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${innerClass}`}
+        >
+          Detail
+        </button>
+      ),
+    },
+  ];
+
+  const buyerReadinessColumns: ManagedTableColumn<HackathonBuyerMatching["matches"][number]>[] = [
+    {
+      key: "buyer",
+      heading: "Tipe buyer",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.buyerArchetypeLabel}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.cooperativeName ?? item.cooperativeRef}</p>
+        </div>
+      ),
+    },
+    {
+      key: "cluster",
+      heading: "Cluster",
+      render: (item) => <span className="text-sm font-black text-[#D79A2B]">{clusterLabel[item.readinessCluster] ?? item.readinessCluster}</span>,
+    },
+    {
+      key: "score",
+      heading: "Skor",
+      render: (item) => <span className="font-mono text-base font-black text-[#2F7D32]">{formatInteger(item.score)}</span>,
+    },
+    {
+      key: "signals",
+      heading: "Sinyal",
+      render: (item) => (
+        <p className={`max-w-[340px] text-xs font-semibold leading-5 ${mutedClass}`}>
+          Produk {formatInteger(item.productSnapshot.productsTotal)}, stok {formatInteger(item.signals.stockItems)}, transaksi {formatInteger(item.signals.transactions)}, kemitraan {formatInteger(item.signals.partnershipRequests)}
+        </p>
+      ),
+    },
+    {
+      key: "detail",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => (
+        <button
+          type="button"
+          onClick={() => setBuyerDetailKey(buyerKeyFor(item))}
+          className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${innerClass}`}
+        >
+          Detail
+        </button>
+      ),
+    },
+  ];
+
   return (
     <section data-tour="lumbung-data" className="grid gap-5">
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-[#D79A2B]">Lumbung Data</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-normal">Meja kerja bukti, peluang, dan verifikasi.</h2>
+            <p className="text-sm font-semibold text-[#D79A2B]">Rekomendasi Produk</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-normal">Input, bukti, rekomendasi, lalu verifikasi.</h2>
             <p className={`mt-2 max-w-4xl text-sm font-normal leading-6 ${mutedClass}`}>
-              Buka tab dari kiri ke kanan: alur data, bukti eksplorasi, peluang bisnis, sumber agregat, lalu verifikasi. Semua angka berasal dari layanan aplikasi, tanpa fallback metrik palsu.
+              Buka tab dari kiri ke kanan: buat case operasional, cek alasan data, pilih rekomendasi produk, lihat tabel sumber, lalu kunci verifikasi. Semua angka berasal dari layanan aplikasi, tanpa fallback metrik palsu.
             </p>
           </div>
           <StatusBadge tone="service">Review manusia</StatusBadge>
@@ -4494,6 +4682,65 @@ function LumbungDataView({
                     <p className={`mt-2 text-xs font-normal leading-5 ${mutedClass}`}>{body}</p>
                   </div>
                 ))}
+              </div>
+              <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-[#D79A2B]">Tambah input operasional</p>
+                    <p className={`mt-1 max-w-2xl text-xs font-semibold leading-5 ${mutedClass}`}>
+                      Gunakan ini saat juri bertanya data masuk dari mana. Input disimpan lewat API WA intake, lalu muncul sebagai case antrean untuk diverifikasi dan dijalankan agent.
+                    </p>
+                  </div>
+                  <StatusBadge tone="service">Membuat case nyata</StatusBadge>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                  <label htmlFor="lumbung-quick-input" className="sr-only">Input warga atau operator</label>
+                  <textarea
+                    id="lumbung-quick-input"
+                    value={quickInput}
+                    onChange={(event) => setQuickInput(event.target.value)}
+                    rows={4}
+                    className={`min-h-28 rounded-[14px] border px-4 py-3 text-sm font-semibold outline-none focus-visible:lb-focus ${innerClass}`}
+                    placeholder="Contoh: Panen padi 5 kuintal minggu depan, butuh cek stok dan buyer awal."
+                  />
+                  <div className="grid gap-2">
+                    <label htmlFor="lumbung-quick-intent" className={`text-xs font-black ${mutedClass}`}>
+                      Arahkan ke modul
+                    </label>
+                    <select
+                      id="lumbung-quick-intent"
+                      value={quickIntentId}
+                      onChange={(event) => setQuickIntentId(event.target.value)}
+                      className={`rounded-[12px] border px-3 py-2.5 text-sm font-extrabold outline-none focus-visible:lb-focus ${innerClass}`}
+                    >
+                      {waIntents.map((intent) => (
+                        <option key={intent.id} value={intent.id}>
+                          {intent.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={saveQuickInput}
+                      disabled={quickSaving}
+                      className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#C92A2A] px-4 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60 focus-visible:lb-focus"
+                    >
+                      {quickSaving ? (
+                        <Loader2 size={17} strokeWidth={2.2} className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Database size={17} strokeWidth={2.2} aria-hidden="true" />
+                      )}
+                      Simpan ke antrean
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDataTab("queue")}
+                      className={`inline-flex items-center justify-center rounded-[12px] border px-4 py-3 text-sm font-extrabold focus-visible:lb-focus ${innerClass}`}
+                    >
+                      Buka verifikasi
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
             <div className={`rounded-[14px] border p-4 ${innerClass}`}>
@@ -4690,100 +4937,95 @@ function LumbungDataView({
 
       {dataTab === "opportunity" ? (
         <section className="grid gap-5">
-          <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black">Area peluang utama</h3>
-                <span className="text-xs font-black text-[#D79A2B]">Sumber: skor peluang</span>
+          <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+            <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <div>
+                <p className="text-sm font-black text-[#D79A2B]">Rekomendasi produk</p>
+                <h3 className="mt-2 text-2xl font-black">Pilih area atau tipe buyer, lalu buka detail.</h3>
+                <p className={`mt-2 max-w-3xl text-sm font-semibold leading-6 ${mutedClass}`}>
+                  Layar utama hanya menampilkan ranking, sinyal, dan aksi. Angka detail, caveat, serta langkah lanjut dibuka di panel detail agar operator tidak kehilangan alur.
+                </p>
               </div>
-              <div className="mt-4 grid gap-4 lg:grid-cols-[0.72fr_1.28fr]">
-                <MiniBarChart title="Skor area prioritas" data={opportunityChartData} mutedClass={mutedClass} innerClass={rowClass} />
-                <div className="space-y-3">
-                  {topOpportunityAreas.length > 0 ? (
-                    topOpportunityAreas.map((item) => (
-                      <div
-                        key={item.area.kodeWilayah ?? `${item.area.province}-${item.area.regency}-${item.area.village}`}
-                        className={`grid gap-3 rounded-[12px] border p-3 md:grid-cols-[1fr_auto] md:items-center ${rowClass}`}
-                      >
-                        <div>
-                          <p className="font-black">
-                            {[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area belum lengkap"}
-                          </p>
-                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
-                            Komoditas {formatInteger(item.rawSignals.commodityRows)}, koperasi {formatInteger(item.rawSignals.cooperatives)}, produk {formatInteger(item.rawSignals.products)}, stok {formatInteger(item.rawSignals.stockItems)}
-                          </p>
-                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                            {[
-                              ["Komoditas", item.componentScores.commodityPotential],
-                              ["Koperasi", item.componentScores.cooperativeReadiness],
-                              ["Stok", item.componentScores.productStockReadiness],
-                            ].map(([label, score]) => (
-                              <div key={label} className={`rounded-[8px] border px-2 py-1.5 ${alertRowClass}`}>
-                                <p className="text-[11px] font-black text-[#7A4E2D]">{label}</p>
-                                <p className="font-mono text-sm font-black">{formatInteger(score)}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-left md:text-right">
-                          <p className="text-xs font-black text-[#D79A2B]">Skor</p>
-                          <p className="font-mono text-2xl font-black">{item.score}</p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                      Skor peluang belum mengirim area prioritas.
-                    </p>
-                  )}
-                </div>
-              </div>
+              <MiniBarChart title="Skor area prioritas" data={opportunityChartData} mutedClass={mutedClass} innerClass={rowClass} />
             </div>
+          </article>
 
-            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black">Kecocokan buyer awal</h3>
-                <span className="text-xs font-black text-[#D79A2B]">Sumber: kecocokan buyer</span>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {Object.entries(buyerClusterCounts).map(([cluster, count]) => (
-                  <div key={cluster} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
-                    <p className="text-xs font-black text-[#D79A2B]">{clusterLabel[cluster] ?? cluster}</p>
-                    <p className="mt-1 font-mono text-lg font-black">{formatInteger(count)}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 space-y-3">
-                {buyerReadiness.length > 0 ? (
-                  buyerReadiness.map((item) => (
-                    <div key={`${item.rank}-${item.cooperativeRef}-${item.buyerArchetypeLabel}`} className={`rounded-[12px] border p-3 ${rowClass}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-black">{item.buyerArchetypeLabel}</p>
-                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.cooperativeName ?? item.cooperativeRef}</p>
-                        </div>
-                        <span className="font-mono text-sm font-black text-[#2F7D32]">{item.score}</span>
-                      </div>
-                      <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
-                        {[item.location.regency, item.location.province].filter(Boolean).join(", ") || "Lokasi belum lengkap"} - {clusterLabel[item.readinessCluster] ?? item.readinessCluster}
-                      </p>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
-                        <span>Produk {formatInteger(item.productSnapshot.productsTotal)}</span>
-                        <span>Stok {formatInteger(item.signals.stockItems)}</span>
-                        <span>Kemitraan {formatInteger(item.signals.partnershipRequests)}</span>
-                      </div>
-                      <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
-                        Tipe kebutuhan generik, bukan buyer bernama; perlu review operator sebelum kontak buyer.
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                    Kecocokan buyer belum mengirim ringkasan kesiapan.
-                  </p>
-                )}
-              </div>
-            </div>
+          <div className="grid gap-5 2xl:grid-cols-2">
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Area prioritas produk"
+              description="Ranking area dari sinyal komoditas, koperasi, produk, stok, transaksi, dan kemitraan."
+              sourceLabel="Sumber: skor peluang agregat"
+              rows={topOpportunityAreas}
+              columns={opportunityColumns}
+              rowKey={opportunityKeyFor}
+              getSearchText={(item) =>
+                [
+                  item.area.kodeWilayah,
+                  item.area.province,
+                  item.area.regency,
+                  item.area.district,
+                  item.area.village,
+                  item.score,
+                  item.rawSignals.commodityRows,
+                  item.rawSignals.products,
+                  item.rawSignals.stockItems,
+                ].join(" ")
+              }
+              filters={[
+                ...createValueFilters(topOpportunityAreas, (item) => item.area.province ?? "Provinsi belum lengkap").map((filter) => ({
+                  ...filter,
+                  value: `province:${filter.value}`,
+                  label: `Provinsi: ${filter.label}`,
+                })),
+                {
+                  value: "score-70",
+                  label: "Skor 70+",
+                  predicate: (item) => item.score >= 70,
+                },
+              ]}
+              filterLabel="Provinsi/skor"
+              emptyTitle="Belum ada rekomendasi area."
+              emptyBody="Skor peluang belum mengirim area prioritas."
+              pageSize={5}
+              tableMinWidth={940}
+            />
+
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Kesiapan buyer awal"
+              description="Tipe buyer dipakai sebagai lensa readiness, bukan nama buyer atau komitmen permintaan."
+              sourceLabel="Sumber: buyer matching lite agregat"
+              rows={buyerReadiness}
+              columns={buyerReadinessColumns}
+              rowKey={buyerKeyFor}
+              getSearchText={(item) =>
+                [
+                  item.buyerArchetypeLabel,
+                  item.readinessCluster,
+                  item.cooperativeRef,
+                  item.cooperativeName,
+                  item.location.regency,
+                  item.location.province,
+                  item.score,
+                  item.productSnapshot.productExamples.join(" "),
+                ].join(" ")
+              }
+              filters={createValueFilters(buyerReadiness, (item) => clusterLabel[item.readinessCluster] ?? item.readinessCluster).map((filter) => ({
+                ...filter,
+                value: `cluster:${filter.value}`,
+                label: `Cluster: ${filter.label}`,
+              }))}
+              filterLabel="Cluster"
+              emptyTitle="Belum ada kesiapan buyer."
+              emptyBody="Kecocokan buyer belum mengirim ringkasan kesiapan."
+              pageSize={5}
+              tableMinWidth={900}
+            />
           </div>
 
           <div className={`rounded-[14px] border p-4 ${innerClass}`}>
@@ -5002,7 +5244,7 @@ function LumbungDataView({
       ) : null}
 
       {dataTab === "queue" ? (
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-5">
           <ManagedTablePanel
             panelClass={panelClass}
             innerClass={innerClass}
@@ -5022,62 +5264,148 @@ function LumbungDataView({
             tableMinWidth={880}
             rowClassName={(item) => (selected?.id === item.id ? "bg-[#D79A2B]/10" : "")}
           />
-
-          <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-            {selected ? (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-black text-[#2F7D32]">Catatan terpilih</p>
-                    <h3 className="mt-2 text-3xl font-black">{selected.id}</h3>
-                  </div>
-                  <span className={`rounded-[12px] border px-3 py-2 text-xs font-black ${innerClass}`}>
-                    {selected.module}
-                  </span>
-                </div>
-                <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-                  <p className="text-sm font-black">Ringkasan masuk</p>
-                  <p className={`mt-2 text-lg font-extrabold leading-7 ${mutedClass}`}>{selected.summary}</p>
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  {["Validasi warga", "Cek bukti", "Kunci modul"].map((step, index) => (
-                    <div key={step} className={`rounded-[12px] border p-3 ${innerClass}`}>
-                      <p className="text-xs font-black text-[#D79A2B]">0{index + 1}</p>
-                      <p className="mt-2 text-sm font-black">{step}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    onClick={() => askFarmer(selected.id)}
-                    className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
-                  >
-                    Tanya warga
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => approveDraft(selected.id)}
-                    className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-                  >
-                    Setujui data
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openModule(selected.module)}
-                    className="inline-flex justify-center rounded-[12px] bg-[#1D5D8F] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-                  >
-                    Buka modul
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
-                Pilih catatan dari daftar untuk melihat detail verifikasi.
-              </div>
-            )}
-          </article>
         </div>
+      ) : null}
+
+      {queueDetailOpen && selected ? (
+        <DetailDrawer
+          title={selected.id}
+          eyebrow="Detail verifikasi data"
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          onClose={() => setQueueDetailOpen(false)}
+        >
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black">Ringkasan masuk</p>
+            <p className={`mt-2 text-lg font-extrabold leading-7 ${mutedClass}`}>{selected.summary}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Sumber", selected.source],
+              ["Modul", selected.module],
+              ["Status", selected.status],
+            ].map(([label, value]) => (
+              <div key={label} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <p className="text-xs font-black text-[#D79A2B]">{label}</p>
+                <p className="mt-2 text-sm font-black">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => askFarmer(selected.id)}
+              className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
+            >
+              Tanya warga
+            </button>
+            <button
+              type="button"
+              onClick={() => approveDraft(selected.id)}
+              className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+            >
+              Setujui data
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQueueDetailOpen(false);
+                openModule(selected.module);
+              }}
+              className="inline-flex justify-center rounded-[12px] bg-[#1D5D8F] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+            >
+              Buka modul
+            </button>
+          </div>
+        </DetailDrawer>
+      ) : null}
+
+      {selectedOpportunityDetail ? (
+        <DetailDrawer
+          title={[selectedOpportunityDetail.area.village, selectedOpportunityDetail.area.regency, selectedOpportunityDetail.area.province].filter(Boolean).join(", ") || "Area prioritas"}
+          eyebrow="Detail rekomendasi area"
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          onClose={() => setOpportunityDetailKey(null)}
+        >
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Skor total", selectedOpportunityDetail.score],
+              ["Komoditas", selectedOpportunityDetail.rawSignals.commodityRows],
+              ["Stok", selectedOpportunityDetail.rawSignals.stockItems],
+              ["Produk", selectedOpportunityDetail.rawSignals.products],
+              ["Koperasi", selectedOpportunityDetail.rawSignals.cooperatives],
+              ["Transaksi", selectedOpportunityDetail.rawSignals.transactions],
+            ].map(([label, value]) => (
+              <div key={label} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <p className="text-xs font-black text-[#D79A2B]">{label}</p>
+                <p className="mt-2 font-mono text-lg font-black">{formatInteger(value)}</p>
+              </div>
+            ))}
+          </div>
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black">Komponen skor</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {[
+                ["Potensi komoditas", selectedOpportunityDetail.componentScores.commodityPotential],
+                ["Kesiapan koperasi", selectedOpportunityDetail.componentScores.cooperativeReadiness],
+                ["Produk dan stok", selectedOpportunityDetail.componentScores.productStockReadiness],
+              ].map(([label, value]) => (
+                <div key={label} className={`rounded-[10px] border px-3 py-2 ${alertRowClass}`}>
+                  <p className="text-xs font-black text-[#7A4E2D]">{label}</p>
+                  <p className="mt-1 font-mono text-sm font-black">{formatInteger(value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className={`rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass} ${mutedClass}`}>
+            Gunakan rekomendasi ini untuk memilih area eksplorasi, lalu buka Buyer Awal atau Kesiapan Stok. Angka bersifat agregat dan harus direview operator sebelum dijadikan keputusan lapangan.
+          </p>
+        </DetailDrawer>
+      ) : null}
+
+      {selectedBuyerDetail ? (
+        <DetailDrawer
+          title={selectedBuyerDetail.buyerArchetypeLabel}
+          eyebrow="Detail buyer matching lite"
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          onClose={() => setBuyerDetailKey(null)}
+        >
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black">Koperasi dan lokasi</p>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+              {selectedBuyerDetail.cooperativeName ?? selectedBuyerDetail.cooperativeRef} - {[selectedBuyerDetail.location.regency, selectedBuyerDetail.location.province].filter(Boolean).join(", ") || "Lokasi belum lengkap"}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Skor", selectedBuyerDetail.score],
+              ["Produk", selectedBuyerDetail.productSnapshot.productsTotal],
+              ["Stok item", selectedBuyerDetail.signals.stockItems],
+              ["Transaksi", selectedBuyerDetail.signals.transactions],
+              ["Kemitraan", selectedBuyerDetail.signals.partnershipRequests],
+              ["Stok positif", selectedBuyerDetail.signals.positiveStockItems],
+            ].map(([label, value]) => (
+              <div key={label} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <p className="text-xs font-black text-[#D79A2B]">{label}</p>
+                <p className="mt-2 font-mono text-lg font-black">{formatInteger(value)}</p>
+              </div>
+            ))}
+          </div>
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black">Contoh produk terdeteksi</p>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+              {selectedBuyerDetail.productSnapshot.productExamples.slice(0, 6).join(", ") || "Contoh produk belum tersedia."}
+            </p>
+          </div>
+          <p className={`rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass} ${mutedClass}`}>
+            Ini tipe buyer readiness, bukan buyer bernama. Kontak buyer hanya boleh lanjut setelah kualitas, packaging, stok, dan persetujuan pengurus sudah lengkap.
+          </p>
+        </DetailDrawer>
       ) : null}
     </section>
   );
@@ -6055,9 +6383,11 @@ function WhatsAppView({
   panelClass,
   innerClass,
   mutedClass,
+  recentWa,
   setPanelMessage,
   requestConfirm,
 }: ViewClassProps & {
+  recentWa: RecentWaMessage[];
   setPanelMessage: (message: string, tone?: ToastTone) => void;
   requestConfirm: (config: ConfirmConfig) => void;
 }) {
@@ -6065,6 +6395,8 @@ function WhatsAppView({
   const [message, setMessage] = useState(waIntents[0]?.sample ?? "");
   const [recipient, setRecipient] = useState("");
   const [waLoading, setWaLoading] = useState<"inbound" | "outbound" | "">("");
+  const [personalStatus, setPersonalStatus] = useState<WaPersonalStatus | null>(null);
+  const [personalLoading, setPersonalLoading] = useState(true);
   const [conversation, setConversation] = useState([
     {
       from: "bot",
@@ -6073,12 +6405,29 @@ function WhatsAppView({
   ]);
   const selectedIntent = waIntents.find((intent) => intent.id === selectedIntentId) ?? waIntents[0];
 
+  async function loadPersonalStatus() {
+    try {
+      const response = await fetch("/api/wa/personal/status", { cache: "no-store" });
+      if (!response.ok) return;
+      setPersonalStatus((await response.json()) as WaPersonalStatus);
+    } finally {
+      setPersonalLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadPersonalStatus();
+    const timer = window.setInterval(() => {
+      void loadPersonalStatus();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   function chooseIntent(intentId: string) {
     const intent = waIntents.find((item) => item.id === intentId);
     if (!intent) return;
     setSelectedIntentId(intent.id);
     setMessage(intent.sample);
-    setPanelMessage(`Intent ${intent.label} dipilih untuk modul ${intent.module}.`, "info");
   }
 
   async function sendMessage() {
@@ -6112,7 +6461,7 @@ function WhatsAppView({
   async function sendOutbound() {
     const trimmed = message.trim();
     if (!trimmed || !recipient.trim()) {
-      setPanelMessage("Kirim live membutuhkan nomor tujuan dan isi pesan.", "warning");
+      setPanelMessage("Kirim resmi membutuhkan nomor tujuan dan isi pesan.", "warning");
       return;
     }
 
@@ -6143,8 +6492,50 @@ function WhatsAppView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h2 className="text-2xl font-black">WA Center</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Pesan warga, voice-to-data, dan routing modul. Kirim WhatsApp live membutuhkan aktivasi kanal resmi.
+          Pesan warga, foto, dan PDF masuk ke meja verifikasi. Untuk testing WA biasa, jalankan bridge personal lalu scan QR di panel ini.
         </p>
+        <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Pairing WA testing</p>
+              <p className="mt-2 text-lg font-black">
+                {personalLoading
+                  ? "Mengecek bridge"
+                  : personalStatus?.status === "connected"
+                    ? "Terhubung"
+                    : personalStatus?.status === "qr"
+                      ? "Scan QR"
+                      : personalStatus?.status === "disabled"
+                        ? "Belum aktif"
+                        : "Menunggu bridge"}
+              </p>
+            </div>
+            <StatusBadge tone={personalStatus?.status === "connected" ? "success" : personalStatus?.status === "qr" ? "service" : "warning"}>
+              {personalStatus?.status === "connected" ? "terhubung" : personalStatus?.status === "qr" ? "QR" : "siaga"}
+            </StatusBadge>
+          </div>
+          {personalStatus?.status === "qr" && personalStatus.qrImage ? (
+            <div className="mt-4 grid place-items-center rounded-[12px] bg-[#FFF8EA] p-3">
+              <img src={personalStatus.qrImage} alt="QR pairing WhatsApp personal" className="h-56 w-56 object-contain" />
+            </div>
+          ) : null}
+          <p className={`mt-3 text-xs font-bold leading-5 ${mutedClass}`}>
+            {personalStatus?.message ?? "Jalankan `npm run wa:personal` di server/terminal untuk membuat QR testing."}
+          </p>
+          {personalStatus?.status === "connected" ? (
+            <p className="mt-2 text-xs font-black text-[#2F7D32]">
+              Pesan berikutnya dari WA personal akan masuk ke antrean verifikasi.
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void loadPersonalStatus()}
+            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${innerClass}`}
+          >
+            <RefreshCcw size={14} strokeWidth={2.2} aria-hidden="true" />
+            Cek status QR
+          </button>
+        </div>
         <div className="mt-5 space-y-2">
           {waIntents.map((intent) => (
             <button
@@ -6224,7 +6615,7 @@ function WhatsAppView({
                 requestConfirm({
                   title: "Kirim WhatsApp live?",
                   message: "Pesan akan dikirim ke nomor tujuan melalui kanal WhatsApp resmi bila aktivasi produksi sudah aktif.",
-                  confirmLabel: "Kirim live",
+                  confirmLabel: "Kirim resmi",
                   onConfirm: sendOutbound,
                 })
               }
@@ -6236,10 +6627,23 @@ function WhatsAppView({
               ) : (
                 <Send size={17} strokeWidth={2.2} aria-hidden="true" />
               )}
-              Kirim live
+              Kirim resmi
             </button>
           </div>
         </div>
+        {recentWa.length ? (
+          <div className="mt-5">
+            <p className="text-sm font-black">Riwayat intake terbaru</p>
+            <div className="mt-2 grid gap-2">
+              {recentWa.slice(0, 3).map((item) => (
+                <div key={item.id} className={`rounded-[10px] border px-3 py-2 text-xs font-bold ${innerClass}`}>
+                  <p className="font-black">{item.intent}</p>
+                  <p className={`mt-1 line-clamp-2 ${mutedClass}`}>{item.message}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </article>
     </section>
   );
@@ -6249,16 +6653,27 @@ function AgentsView({
   panelClass,
   innerClass,
   mutedClass,
+  queue,
+  recentAgentRuns,
   setPanelMessage,
-}: ViewClassProps & { setPanelMessage: (message: string, tone?: ToastTone) => void }) {
+}: ViewClassProps & {
+  queue: QueueItem[];
+  recentAgentRuns: RecentAgentRun[];
+  setPanelMessage: (message: string, tone?: ToastTone) => void;
+}) {
   const [activeAgent, setActiveAgent] = useState(aiAgents[0]?.name ?? "");
-  const [recordId, setRecordId] = useState("LB-1024");
+  const [recordId, setRecordId] = useState(queue[0]?.id ?? "");
   const [loadingAgent, setLoadingAgent] = useState("");
   const [result, setResult] = useState<AgentRunResult | null>(null);
   const [error, setError] = useState("");
   const selectedAgent = aiAgents.find((agent) => agent.name === activeAgent) ?? aiAgents[0];
+  const selectedCase = queue.find((item) => item.id === recordId) ?? null;
 
   async function runAgent(agentName = activeAgent) {
+    if (!recordId) {
+      setError("Pilih case dari antrean verifikasi dulu.");
+      return;
+    }
     setLoadingAgent(agentName);
     setError("");
     setResult(null);
@@ -6290,17 +6705,33 @@ function AgentsView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h2 className="text-2xl font-black">Agent Center</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Jalankan agent satu per satu terhadap record operasional. Output selalu butuh persetujuan manusia sebelum data dikunci.
+          Pilih case dari antrean verifikasi, lalu jalankan agent. Output menjadi rekomendasi review, bukan keputusan otomatis.
         </p>
         <label htmlFor="agent-record" className={`mt-5 block text-sm font-black ${mutedClass}`}>
-          Record ID
+          Case antrean
         </label>
-        <input
+        <select
           id="agent-record"
           value={recordId}
           onChange={(event) => setRecordId(event.target.value)}
           className={`mt-2 w-full rounded-[12px] border px-3 py-2.5 text-sm font-extrabold outline-none focus-visible:lb-focus ${innerClass}`}
-        />
+        >
+          {queue.length ? (
+            queue.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id} - {item.module}
+              </option>
+            ))
+          ) : (
+            <option value="">Belum ada case antrean</option>
+          )}
+        </select>
+        {selectedCase ? (
+          <div className={`mt-3 rounded-[12px] border p-3 ${innerClass}`}>
+            <p className="text-xs font-black text-[#D79A2B]">Ringkasan case</p>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{selectedCase.summary}</p>
+          </div>
+        ) : null}
         <div className="mt-5 space-y-2">
           {aiAgents.map((agent) => (
             <button
@@ -6332,7 +6763,7 @@ function AgentsView({
           <button
             type="button"
             onClick={() => runAgent(selectedAgent?.name)}
-            disabled={Boolean(loadingAgent)}
+            disabled={Boolean(loadingAgent) || !recordId}
             data-testid="dashboard-agent-run"
             className="inline-flex min-w-40 items-center justify-center gap-2 rounded-[12px] bg-[#1D5D8F] px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60 focus-visible:lb-focus"
           >
@@ -6341,7 +6772,7 @@ function AgentsView({
             ) : (
               <Play size={17} strokeWidth={2.2} aria-hidden="true" />
             )}
-            {loadingAgent ? "Menjalankan" : "Jalankan"}
+            {loadingAgent ? "Menjalankan" : "Jalankan case"}
           </button>
         </div>
 
@@ -6380,10 +6811,26 @@ function AgentsView({
             </div>
           ) : (
             <p className={`text-sm font-semibold leading-6 ${mutedClass}`}>
-              Belum ada run di sesi ini. Pilih agent dan tekan Jalankan untuk melihat output API.
+              Belum ada run di sesi ini. Pilih case antrean dan tekan Jalankan case untuk melihat rekomendasi review.
             </p>
           )}
         </div>
+        {recentAgentRuns.length ? (
+          <div className="mt-5">
+            <p className="text-sm font-black">Riwayat agent terbaru</p>
+            <div className="mt-3 grid gap-2">
+              {recentAgentRuns.slice(0, 4).map((run) => (
+                <div key={run.id} className={`rounded-[12px] border p-3 text-sm ${innerClass}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black">{run.agentName}</p>
+                    <span className="font-mono text-[11px] font-black text-[#D79A2B]">{run.recordId}</span>
+                  </div>
+                  <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{run.output}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </article>
     </section>
   );
@@ -6521,9 +6968,6 @@ function ReportsView({
             <Download size={16} strokeWidth={2.2} aria-hidden="true" />
             Export CSV
           </button>
-        </div>
-        <div className={`mt-5 rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass}`}>
-          Dokumen setup produksi: <code>docs/15-feature-audit-and-production-setup.md</code>
         </div>
       </article>
     </section>
@@ -6709,12 +7153,28 @@ function ModuleView({
   async function runModuleAgent() {
     setWorkingAction("agent");
     try {
+      const draftResponse = await fetch("/api/wa/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: activeFeatureModule.waCommand,
+          sender: "Operator",
+        }),
+      });
+      const draftPayload = await draftResponse.json().catch(() => ({}));
+      if (!draftResponse.ok) {
+        throw new Error(publicSetupMessage(draftPayload.message ?? draftPayload.error, "Case operasional belum berhasil dibuat."));
+      }
+      const queueId = draftPayload.agent?.lbQueueId ?? draftPayload.queue?.id;
+      if (!queueId) {
+        throw new Error("Case operasional belum memiliki ID antrean untuk agent.");
+      }
       const response = await fetch("/api/agents/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           agentName: moduleAgent.name,
-          recordId: activeFeatureModule.slug,
+          recordId: queueId,
         }),
       });
       const payload = await response.json().catch(() => ({}));

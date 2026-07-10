@@ -19,7 +19,7 @@ export async function POST(request: Request, context: RouteContext) {
     return Response.json(
       {
         error: "COOPERATIVE_SCOPE_REQUIRED",
-        message: "User belum memiliki cooperative_id untuk membatasi buyer readiness.",
+        message: "Akun operator belum tersambung ke workspace koperasi untuk review buyer awal.",
       },
       { status: 409 },
     );

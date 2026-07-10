@@ -345,7 +345,7 @@ Security:
 
 Speaker notes:
 
-> Karena ada Google Cloud credit, kami desain yang realistis: Cloud Run cocok untuk Next.js karena container bisa scale-to-zero saat sepi dan autoscale saat traffic naik. Database tidak ikut dimasukkan ke docker-compose produksi; database dipisah ke Cloud SQL agar backup, koneksi, monitoring, dan operasi nasional lebih aman. Secret tidak masuk code, tetapi di Secret Manager. Shared DB hackathon dipakai sebagai exploration evidence layer, bukan production source of truth SIMKOPDES.
+> Karena ada Google Cloud credit, kami desain yang realistis: Cloud Run cocok untuk Next.js karena container bisa scale-to-zero saat sepi dan autoscale saat traffic naik. Data operasional tidak ikut dimasukkan ke docker-compose produksi; data dipisah ke Cloud SQL agar backup, koneksi, monitoring, dan operasi nasional lebih aman. Secret tidak masuk code, tetapi di Secret Manager. Sumber eksplorasi hackathon dipakai sebagai evidence layer, bukan production source of truth SIMKOPDES.
 
 ### Slide 13 - Impact and Business Model
 
@@ -478,6 +478,7 @@ Use when a Google Cloud judge asks why this can scale beyond the hackathon:
 | Image build | Cloud Build + Artifact Registry | Reproducible build pipeline, immutable image tags, no image pushed from laptops for production. |
 | Operational database | Cloud SQL relational database | Managed backups, point-in-time recovery, IAM/network controls, easier operations than running a stateful database inside the app container. |
 | Secrets | Secret Manager | Credentials are mounted/injected at runtime; no plaintext `.env` in Git, Docker image, logs, or slides. |
+| AI brain | Hashmicro XAI-compatible gateway via Cloud Run env + Secret Manager | The app uses `https://xai.hashmicro.co/v1` with the Responses wire API; the key is injected as a secret, not copied from Codex config files. |
 | Evidence files | Cloud Storage | Object lifecycle rules for OCR/media evidence, generated reports, and export artifacts. |
 | Data refresh | Cloud Run Jobs + Cloud Scheduler | Import/warm-up jobs run on demand or schedule; no always-on worker required for the MVP. |
 | Observability | Cloud Logging, Error Reporting, Cloud Monitoring | Request logs, app logs, error grouping, uptime checks, and latency/error alerts. |

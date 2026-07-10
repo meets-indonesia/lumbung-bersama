@@ -25,6 +25,8 @@ if (!process.env.DATABASE_URL) {
 
 const authDir = path.resolve(root, process.env.WA_PERSONAL_AUTH_DIR || ".wa-personal-auth");
 const mediaDir = path.resolve(root, process.env.WA_PERSONAL_MEDIA_DIR || "tmp/wa-media");
+const stateDir = path.resolve(root, process.env.WA_PERSONAL_STATE_DIR || ".wa-personal-state");
+const stateFile = path.join(stateDir, "status.json");
 const cooperativeId =
   process.env.WA_PERSONAL_COOPERATIVE_ID?.trim() ||
   process.env.WEBHOOK_COOPERATIVE_ID?.trim() ||
@@ -34,6 +36,7 @@ const ocrEnabled = process.env.WA_PERSONAL_OCR_ENABLED === "1";
 const ocrLang = process.env.WA_PERSONAL_OCR_LANG || "ind+eng";
 
 await mkdir(mediaDir, { recursive: true });
+await mkdir(stateDir, { recursive: true });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -60,6 +63,23 @@ function maskJid(value) {
   if (digits.length <= 4) return `WA Personal ****${digits}`;
   const prefix = digits.length > 8 ? digits.slice(0, 2) : "";
   return `WA Personal ${prefix}****${digits.slice(-4)}`;
+}
+
+async function writeBridgeState(state) {
+  const payload = {
+    status: state.status,
+    qr: typeof state.qr === "string" ? state.qr : null,
+    updatedAt: new Date().toISOString(),
+    connectedAt: state.connectedAt ?? null,
+    lastDisconnect: state.lastDisconnect ?? null,
+    capabilities: {
+      qrPairing: true,
+      mediaDownload: true,
+      pdfTextExtraction: true,
+      imageOcr: ocrEnabled,
+    },
+  };
+  await writeFile(stateFile, JSON.stringify(payload, null, 2), "utf8");
 }
 
 function summarize(text) {
@@ -358,15 +378,21 @@ async function main() {
   sock.ev.on("creds.update", saveCreds);
   sock.ev.on("connection.update", (update) => {
     if (update.qr) {
+      void writeBridgeState({ status: "qr", qr: update.qr });
       console.log("\nScan QR ini dari WhatsApp biasa: Perangkat tertaut > Tautkan perangkat.\n");
       qrcode.generate(update.qr, { small: true });
     }
     if (update.connection === "open") {
+      void writeBridgeState({ status: "connected", connectedAt: new Date().toISOString() });
       console.log("WA personal bridge terhubung. Pesan masuk akan dicatat ke queue.");
     }
     if (update.connection === "close") {
       const statusCode = update.lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      void writeBridgeState({
+        status: shouldReconnect ? "disconnected" : "logged-out",
+        lastDisconnect: `status-${statusCode ?? "unknown"}`,
+      });
       console.log(`WA personal bridge terputus. reconnect=${shouldReconnect}`);
       if (shouldReconnect) {
         setTimeout(() => {

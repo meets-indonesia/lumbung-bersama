@@ -215,7 +215,7 @@ def slide_03():
 def slide_04():
     img = base("slide-04-db-funnel.raw.png")
     d = ImageDraw.Draw(img, "RGBA")
-    title(d, "Slide 04", "Sample DB kaya, tetapi belum menjadi alur keputusan.", "Aggregate-only dari shared PostgreSQL hackathon; skema sample terbatas, bukan referensi utama SIMKOPDES.")
+    title(d, "Slide 04", "Sample kaya, tetapi belum menjadi alur keputusan.", "Aggregate-only dari sumber eksplorasi hackathon; skema sample terbatas, bukan referensi utama SIMKOPDES.")
     metric_card(d, (105, 345, 505, 555), "547.869", "row dari 27 tabel", COLORS["ink"])
     metric_card(d, (555, 345, 955, 555), "1.026", "profil koperasi/desa/wilayah sample", COLORS["green"])
     metric_card(d, (1005, 345, 1405, 555), "Rp11,47 miliar", "1.000 transaksi paid", COLORS["blue"])
@@ -355,7 +355,7 @@ def slide_09():
         ("Next.js App", 385, 480, COLORS["green"]),
         ("Server API", 700, 480, COLORS["blue"]),
         ("Aggregate Layer", 1015, 480, COLORS["gold"]),
-        ("PostgreSQL SSL", 1330, 480, COLORS["red"]),
+        ("Evidence SSL", 1330, 480, COLORS["red"]),
         ("Laporan Aksi", 1600, 480, COLORS["brown"]),
     ]
     for i, (label, x, y, color) in enumerate(nodes):

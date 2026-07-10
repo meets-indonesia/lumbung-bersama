@@ -67,7 +67,7 @@ export async function queryHackathonRows<T extends QueryResultRow = QueryResultR
 
   const pool = getHackathonSharedPool();
   if (!pool) {
-    throw new Error("HACKATHON_SHARED_DATABASE_URL_REQUIRED");
+    throw new Error("EVIDENCE_SOURCE_REQUIRED");
   }
 
   const client = await pool.connect();
@@ -98,9 +98,9 @@ export async function queryHackathonOne<T extends QueryResultRow = QueryResultRo
 export function hackathonDbRequiredResponse() {
   return Response.json(
     {
-      error: "HACKATHON_SHARED_DATABASE_URL_REQUIRED",
+      error: "EVIDENCE_SOURCE_REQUIRED",
       message:
-        "Shared DB hackathon belum dikonfigurasi. Isi HACKATHON_SHARED_DATABASE_URL atau DB_HOST/DB_DATABASE/DB_USERNAME/DB_PASSWORD secara lokal.",
+        "Sumber bukti eksplorasi belum aktif. Aktifkan koneksi sumber agregat di runtime, lalu muat ulang halaman.",
       tablePrefix: HACKATHON_TABLE_PREFIX,
     },
     { status: 503 },

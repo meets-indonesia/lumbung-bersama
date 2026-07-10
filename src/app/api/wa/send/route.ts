@@ -22,7 +22,13 @@ export async function POST(request: Request) {
   if (roleResponse) return roleResponse;
   const cooperativeId = auth.user.cooperativeId;
   if (!cooperativeId) {
-    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+    return Response.json(
+      {
+        error: "COOPERATIVE_SCOPE_REQUIRED",
+        message: "Akun operator belum tersambung ke workspace koperasi untuk mengirim pesan.",
+      },
+      { status: 409 },
+    );
   }
 
   const rateLimit = checkRateLimit(request, "wa-send", { limit: 10, windowMs: 60_000 });

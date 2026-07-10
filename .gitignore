@@ -14,6 +14,7 @@
 /coverage
 /tmp/wa-media
 /.wa-personal-auth
+/.wa-personal-state
 
 # next.js
 /.next/

@@ -27,6 +27,16 @@ type LoginAttempt = {
   resetAt: number;
 };
 
+type ConfiguredLoginAccount = {
+  id: string;
+  cooperativeId: string;
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  role: "admin";
+  title: string;
+};
+
 type GlobalWithLoginThrottle = typeof globalThis & {
   lumbungLoginAttempts?: Map<string, LoginAttempt>;
 };
@@ -93,18 +103,54 @@ function clearLoginThrottle(key: string) {
   loginAttempts().delete(key);
 }
 
+function configuredLoginAccounts() {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  const adminName = process.env.ADMIN_NAME?.trim() || "Admin Lumbung";
+  const adminCooperativeId = process.env.ADMIN_COOPERATIVE_ID?.trim() || "kop-wanasari";
+  const juryEmail = process.env.JURY_EMAIL?.trim().toLowerCase();
+  const juryPasswordHash = process.env.JURY_PASSWORD_HASH?.trim();
+  const juryName = process.env.JURY_NAME?.trim() || "Juri Demo";
+  const juryCooperativeId = process.env.JURY_COOPERATIVE_ID?.trim() || adminCooperativeId;
+
+  const accounts: ConfiguredLoginAccount[] = [];
+
+  if (adminEmail && adminPasswordHash) {
+    accounts.push({
+      id: "admin-primary",
+      cooperativeId: adminCooperativeId,
+      email: adminEmail,
+      passwordHash: adminPasswordHash,
+      fullName: adminName,
+      role: "admin",
+      title: "Operator utama",
+    });
+  }
+
+  if (juryEmail && juryPasswordHash) {
+    accounts.push({
+      id: "jury-viewer",
+      cooperativeId: juryCooperativeId,
+      email: juryEmail,
+      passwordHash: juryPasswordHash,
+      fullName: juryName,
+      role: "admin",
+      title: "Admin juri",
+    });
+  }
+
+  return accounts;
+}
+
 export async function POST(request: Request) {
   const csrfResponse = requireSameOriginMutation(request);
   if (csrfResponse) return csrfResponse;
 
   if (!isDatabaseConfigured()) return dbRequiredResponse();
 
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH?.trim();
-  const adminName = process.env.ADMIN_NAME?.trim() || "Admin Lumbung";
-  const adminCooperativeId = process.env.ADMIN_COOPERATIVE_ID?.trim() || "kop-wanasari";
+  const accounts = configuredLoginAccounts();
 
-  if (!adminEmail || !adminPasswordHash) {
+  if (accounts.length === 0) {
     return Response.json(
       {
         error: "ADMIN_AUTH_NOT_CONFIGURED",
@@ -132,7 +178,9 @@ export async function POST(request: Request) {
   const throttle = checkLoginThrottle(request, email);
   if (throttle?.response) return throttle.response;
 
-  if (email !== adminEmail || !verifyPassword(password, adminPasswordHash)) {
+  const account = accounts.find((candidate) => candidate.email === email);
+
+  if (!account || !verifyPassword(password, account.passwordHash)) {
     if (throttle?.key) recordFailedLogin(throttle.key);
     return Response.json(
       { error: "INVALID_LOGIN", message: "Email atau password tidak cocok." },
@@ -142,13 +190,13 @@ export async function POST(request: Request) {
 
   const user = await queryOne<LoginUser>(
     `INSERT INTO users (id, cooperative_id, email, password_hash, full_name, role, title, avatar_initials, last_login_at)
-     VALUES ('admin-primary', $1, $2, $3, $4, 'admin', 'Operator utama', $5, now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
      ON CONFLICT (id) DO UPDATE
      SET cooperative_id = EXCLUDED.cooperative_id,
          email = EXCLUDED.email,
          password_hash = EXCLUDED.password_hash,
          full_name = EXCLUDED.full_name,
-         role = 'admin',
+         role = EXCLUDED.role,
          title = EXCLUDED.title,
          avatar_initials = EXCLUDED.avatar_initials,
          last_login_at = now(),
@@ -161,7 +209,16 @@ export async function POST(request: Request) {
                title,
                phone,
                avatar_initials AS "avatarInitials"`,
-    [adminCooperativeId, adminEmail, adminPasswordHash, adminName, initialsFromName(adminName)],
+    [
+      account.id,
+      account.cooperativeId,
+      account.email,
+      account.passwordHash,
+      account.fullName,
+      account.role,
+      account.title,
+      initialsFromName(account.fullName),
+    ],
   );
 
   if (!user) {

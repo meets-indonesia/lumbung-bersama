@@ -123,7 +123,7 @@ External data expansion is documented in `docs/37-external-data-source-map.md`. 
 
 ### 4.1 Live Shared DB Read-Only Evidence
 
-Read-only aggregate check on 2026-07-10 confirmed the shared PostgreSQL database is reachable with SSL and the MVP tables have data:
+Read-only aggregate check on 2026-07-10 confirmed the shared evidence source is reachable with SSL and the MVP tables have data:
 
 | Table | Aggregate row count |
 |---|---:|
@@ -254,11 +254,11 @@ Likely lens:
 
 Answer angle:
 
-> AI di MVP kami bukan autonomous decision-maker. Ia berperan sebagai recommendation assistant. Inputnya source-labeled Postgres/metadata, outputnya berisi alasan, komponen skor, evidence, confidence, dan next action. Operator/pengurus tetap approve sebelum aksi.
+> AI di MVP kami bukan autonomous decision-maker. Ia berperan sebagai recommendation assistant. Inputnya metadata operasional yang berlabel sumber, outputnya berisi alasan, komponen skor, evidence, confidence, dan next action. Operator/pengurus tetap approve sebelum aksi.
 
 Strong points:
 
-1. Rules/Postgres baseline first.
+1. Rules and data-baseline first.
 2. Provider AI only when configured.
 3. Human-in-the-loop.
 4. Guardrail: no PII exposure and no unsupported claims.
@@ -412,7 +412,7 @@ Show:
 
 > Lumbung Bersama adalah dashboard kerja koperasi untuk mengubah potensi desa menjadi aksi ekonomi yang terukur. Kami mulai dari peta potensi desa, lalu sistem merekomendasikan komoditas atau produk prioritas berdasarkan data wilayah, koperasi, produk, stok, transaksi, dan kemitraan. Setelah itu koperasi mendapat buyer matching lite, bukan marketplace checkout, tetapi shortlist dan alasan match yang perlu disetujui pengurus. Output akhirnya adalah laporan aksi untuk rapat koperasi.
 >
-> Kekuatan kami ada pada trust layer. Setiap rekomendasi memiliki sumber data, komponen skor, confidence, dan status human approval. Shared DB hackathon kami gunakan secara read-only dan aggregate-only, tanpa menampilkan PII. WhatsApp dan AI juga tidak kami overclaim: WA adalah intake/verifikasi, AI adalah assistant yang explainable, keputusan tetap oleh koperasi.
+> Kekuatan kami ada pada trust layer. Setiap rekomendasi memiliki sumber data, komponen skor, confidence, dan status human approval. Sumber eksplorasi hackathon kami gunakan secara read-only dan aggregate-only, tanpa menampilkan PII. WhatsApp dan AI juga tidak kami overclaim: WA adalah intake/verifikasi, AI adalah assistant yang explainable, keputusan tetap oleh koperasi.
 >
 > Dengan MVP ini, koperasi bisa melihat potensi mana yang belum optimal, produk apa yang perlu dinaikkan nilainya, buyer mana yang paling cocok, dan gap stok apa yang perlu ditutup.
 
@@ -516,7 +516,7 @@ Answer:
 
 Answer:
 
-> App sudah memiliki auth/session, dashboard, Peta Unggulan, WA intake/gating, Agent Center rules/Postgres, report surface, shared DB read-only helper, dan endpoint aggregate MVP summary.
+> App sudah memiliki auth/session, dashboard, Peta Unggulan, WA intake/gating, Agent Center rules/data-baseline, report surface, helper sumber eksplorasi read-only, dan endpoint aggregate MVP summary.
 
 ### Q17. Apa yang belum ready?
 
@@ -554,7 +554,7 @@ Answer:
 
 Answer:
 
-> Rules/Postgres baseline justru guardrail. AI layer dapat menulis explanation, rekomendasi, and next action from verified inputs. For public-sector/cooperative contexts, explainability and human approval are more important than black-box automation.
+> Rules/data-baseline justru guardrail. AI layer dapat menulis explanation, rekomendasi, and next action from verified inputs. For public-sector/cooperative contexts, explainability and human approval are more important than black-box automation.
 
 ### Scenario C: Judge says "Data desa sering tidak akurat."
 
@@ -699,6 +699,6 @@ Before presenting:
 5. PII not shown.
 6. Auth/login and integration health are ready.
 7. WA wording says draft/intake unless live delivery is proven.
-8. AI wording says rules/Postgres or provider-configured assistant, not autonomous.
+8. AI wording says rules/data-baseline or provider-configured assistant, not autonomous.
 9. Buyer matching says lite/archetype unless real buyer data is loaded.
 10. Laporan Aksi is shown as final output.

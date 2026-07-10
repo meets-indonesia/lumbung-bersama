@@ -327,7 +327,7 @@ function publicSetupMessage(message: unknown, fallback: string) {
   const raw = typeof message === "string" ? message.trim() : "";
   if (!raw) return fallback;
   if (
-    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|prefixed db|shared[-_\s]?db|db-read|database/i.test(
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|OPERATIONAL_DATA_REQUIRED|EVIDENCE_SOURCE_REQUIRED|COOPERATIVE_SCOPE_REQUIRED|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|prefixed db|shared[-_\s]?db|db-read|database/i.test(
       raw,
     )
   ) {

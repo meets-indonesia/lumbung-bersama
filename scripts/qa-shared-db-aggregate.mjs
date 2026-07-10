@@ -51,7 +51,7 @@ async function run() {
   if (!connectionString) {
     const payload = {
       status: "setup-required",
-      error: "HACKATHON_SHARED_DATABASE_URL_REQUIRED",
+      error: "EVIDENCE_SOURCE_REQUIRED",
       mode: "aggregate-only-no-pii",
       loadedEnv,
       requiredAnyOf: [

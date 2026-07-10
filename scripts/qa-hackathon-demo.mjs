@@ -13,8 +13,8 @@ const isWindows = process.platform === "win32";
 const nativeDialogNames = new Set(["alert", "prompt", "confirm"]);
 
 const bannedUserFacingTextPatterns = [
-  { label: "Postgres", pattern: /\bPostgres(?:QL)?\b/i },
-  { label: "DATABASE_URL_REQUIRED", pattern: /\bDATABASE_URL_REQUIRED\b/i },
+  { label: "database engine name", pattern: /\bPostgres(?:QL)?\b/i },
+  { label: "raw operational data error", pattern: /\b(?:DATABASE_URL_REQUIRED|OPERATIONAL_DATA_REQUIRED)\b/i },
   { label: "raw env name", pattern: /\b(?:DATABASE_URL|HACKATHON_SHARED(?:_DATABASE_URL|_DB_[A-Z0-9_]+)?|DB_(?:HOST|PORT|PASSWORD|USERNAME|USER|DATABASE)|PGSSLMODE|ADMIN_(?:EMAIL|PASSWORD|PASSWORD_HASH|NAME|COOPERATIVE_ID)|QA_[A-Z0-9_]+|VISUAL_[A-Z0-9_]+|WHATSAPP_[A-Z0-9_]+|WA_PERSONAL_[A-Z0-9_]+|OPENAI_API_KEY|BPS_API_KEY|NEXT_PUBLIC_[A-Z0-9_]+)\b/i },
   { label: "operator-ready", pattern: /\boperator-ready\b/i },
   { label: "setup-required", pattern: /\bsetup-required\b/i },
@@ -381,7 +381,7 @@ async function stopServerIfStarted() {
   if (serverProcess.exitCode === null) serverProcess.kill("SIGKILL");
 }
 
-function assertProtectedGate(label, response, payload, allowedSetupErrors = ["DATABASE_URL_REQUIRED"]) {
+function assertProtectedGate(label, response, payload, allowedSetupErrors = ["OPERATIONAL_DATA_REQUIRED"]) {
   if (response.status === 401 && payload.error !== "AUTH_REQUIRED") {
     fail(`${label} 401 did not report AUTH_REQUIRED`);
   }
@@ -454,7 +454,7 @@ async function assertPublicApiBacklog() {
   }
 
   const petaData = await expectJsonStatusOneOf("/api/peta-unggulan/data", [200, 503]);
-  if (petaData.response.status === 503 && petaData.payload.error !== "DATABASE_URL_REQUIRED") {
+  if (petaData.response.status === 503 && petaData.payload.error !== "OPERATIONAL_DATA_REQUIRED") {
     fail("/api/peta-unggulan/data setup gate mismatch");
   }
   if (petaData.response.status === 200) {
@@ -471,7 +471,7 @@ async function assertPublicApiBacklog() {
       body: JSON.stringify({}),
     },
   );
-  if (analyze.response.status === 503 && analyze.payload.error !== "DATABASE_URL_REQUIRED") {
+  if (analyze.response.status === 503 && analyze.payload.error !== "OPERATIONAL_DATA_REQUIRED") {
     fail("/api/peta-unggulan/analyze setup gate mismatch");
   }
   if (analyze.response.status === 404 && !["VILLAGE_NOT_FOUND", "COMMODITY_NOT_FOUND"].includes(analyze.payload.error)) {
@@ -501,7 +501,7 @@ async function assertHackathonApiGates() {
 
   for (const endpoint of endpoints) {
     const { response, payload } = await expectJsonStatusOneOf(endpoint, [401, 503]);
-    assertProtectedGate(endpoint, response, payload, ["HACKATHON_SHARED_DATABASE_URL_REQUIRED"]);
+    assertProtectedGate(endpoint, response, payload, ["EVIDENCE_SOURCE_REQUIRED"]);
   }
 }
 
@@ -540,7 +540,7 @@ async function assertAuthAndWaGates() {
   }
   if (
     sameOriginLoginValidation.response.status === 503 &&
-    !["DATABASE_URL_REQUIRED", "ADMIN_AUTH_NOT_CONFIGURED"].includes(sameOriginLoginValidation.payload.error)
+    !["OPERATIONAL_DATA_REQUIRED", "ADMIN_AUTH_NOT_CONFIGURED"].includes(sameOriginLoginValidation.payload.error)
   ) {
     fail("/api/auth/login same-origin setup gate mismatch");
   }

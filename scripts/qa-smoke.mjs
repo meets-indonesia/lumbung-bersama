@@ -266,8 +266,8 @@ async function expectRedirect(pathname, expectedLocationPart) {
 }
 
 function assertDatabaseOrAuthGate(pathname, response, payload) {
-  if (response.status === 503 && payload.error !== "DATABASE_URL_REQUIRED") {
-    fail(`${pathname} 503 did not report DATABASE_URL_REQUIRED`);
+  if (response.status === 503 && payload.error !== "OPERATIONAL_DATA_REQUIRED") {
+    fail(`${pathname} 503 did not report OPERATIONAL_DATA_REQUIRED`);
   }
   if (response.status === 401 && payload.error !== "AUTH_REQUIRED") {
     fail(`${pathname} 401 did not report AUTH_REQUIRED`);
@@ -275,7 +275,7 @@ function assertDatabaseOrAuthGate(pathname, response, payload) {
   if (response.status === 403 && !["CSRF_REJECTED", "ROLE_REQUIRED"].includes(payload.error)) {
     fail(`${pathname} 403 did not report an expected auth/CSRF gate`);
   }
-  pass(`${pathname} protected by ${response.status === 503 ? "database gate" : "auth gate"}`);
+  pass(`${pathname} protected by ${response.status === 503 ? "operational-data gate" : "auth gate"}`);
 }
 
 async function assertPublicBackendEndpoints() {
@@ -316,23 +316,23 @@ async function assertPublicBackendEndpoints() {
   pass("/api/commodity-news validates required commodity without external fetch");
 
   const petaData = await expectJsonStatusOneOf("/api/peta-unggulan/data", [200, 503]);
-  if (petaData.response.status === 503 && petaData.payload.error !== "DATABASE_URL_REQUIRED") {
-    fail("/api/peta-unggulan/data 503 did not report DATABASE_URL_REQUIRED");
+  if (petaData.response.status === 503 && petaData.payload.error !== "OPERATIONAL_DATA_REQUIRED") {
+    fail("/api/peta-unggulan/data 503 did not report OPERATIONAL_DATA_REQUIRED");
   }
   if (petaData.response.status === 200) {
     expectArray(petaData.payload.villages, "/api/peta-unggulan/data villages");
     if (!petaData.payload.coverage) fail("/api/peta-unggulan/data missing coverage metadata");
   }
-  pass(`/api/peta-unggulan/data covered by ${petaData.response.status === 503 ? "database gate" : "payload check"}`);
+  pass(`/api/peta-unggulan/data covered by ${petaData.response.status === 503 ? "operational-data gate" : "payload check"}`);
 
   const coverage = await expectJsonStatusOneOf("/api/commodity-profiles/coverage", [200, 503]);
-  if (coverage.response.status === 503 && coverage.payload.error !== "DATABASE_URL_REQUIRED") {
-    fail("/api/commodity-profiles/coverage 503 did not report DATABASE_URL_REQUIRED");
+  if (coverage.response.status === 503 && coverage.payload.error !== "OPERATIONAL_DATA_REQUIRED") {
+    fail("/api/commodity-profiles/coverage 503 did not report OPERATIONAL_DATA_REQUIRED");
   }
   if (coverage.response.status === 200 && !coverage.payload.totals) {
     fail("/api/commodity-profiles/coverage missing totals");
   }
-  pass(`/api/commodity-profiles/coverage covered by ${coverage.response.status === 503 ? "database gate" : "coverage payload"}`);
+  pass(`/api/commodity-profiles/coverage covered by ${coverage.response.status === 503 ? "operational-data gate" : "coverage payload"}`);
 
   const analyze = await expectJsonStatusOneOf(
     "/api/peta-unggulan/analyze",
@@ -343,8 +343,8 @@ async function assertPublicBackendEndpoints() {
       body: JSON.stringify({}),
     },
   );
-  if (analyze.response.status === 503 && analyze.payload.error !== "DATABASE_URL_REQUIRED") {
-    fail("/api/peta-unggulan/analyze 503 did not report DATABASE_URL_REQUIRED");
+  if (analyze.response.status === 503 && analyze.payload.error !== "OPERATIONAL_DATA_REQUIRED") {
+    fail("/api/peta-unggulan/analyze 503 did not report OPERATIONAL_DATA_REQUIRED");
   }
   if (analyze.response.status === 404 && !["VILLAGE_NOT_FOUND", "COMMODITY_NOT_FOUND"].includes(analyze.payload.error)) {
     fail("/api/peta-unggulan/analyze 404 did not report a known empty-data condition");
@@ -488,10 +488,10 @@ async function assertHackathonEndpoints() {
     if (response.status === 401 && payload.error !== "AUTH_REQUIRED") {
       fail(`${endpoint} 401 did not report AUTH_REQUIRED`);
     }
-    if (response.status === 503 && payload.error !== "HACKATHON_SHARED_DATABASE_URL_REQUIRED") {
-      fail(`${endpoint} 503 did not report HACKATHON_SHARED_DATABASE_URL_REQUIRED`);
+    if (response.status === 503 && payload.error !== "EVIDENCE_SOURCE_REQUIRED") {
+      fail(`${endpoint} 503 did not report EVIDENCE_SOURCE_REQUIRED`);
     }
-    pass(`${endpoint} protected by ${response.status === 503 ? "shared-db gate" : "auth gate"}`);
+    pass(`${endpoint} protected by ${response.status === 503 ? "evidence-source gate" : "auth gate"}`);
   }
 }
 
@@ -598,7 +598,7 @@ async function assertNoOverclaimText() {
     "auth.user.cooperativeId",
   ]) {
     if (!dashboardSource.includes(marker)) {
-      fail(`dashboard API does not consume prefixed app DB table ${marker}`);
+      fail(`dashboard API does not consume prefixed app-owned table ${marker}`);
     }
   }
 
@@ -629,7 +629,7 @@ async function assertNoOverclaimText() {
     fail("hackathon financing-readiness endpoint does not expose the no-auto-approval caveat");
   }
 
-  pass("source scan confirms archetype-only buyer evidence and prefixed app DB gates");
+  pass("source scan confirms archetype-only buyer evidence and prefixed app-owned table gates");
 
   const authSource = await readFile(path.join(root, "src", "lib", "auth.ts"), "utf8");
   if (!authSource.includes("CSRF_REJECTED") || !authSource.includes("requireSameOriginMutation")) {

@@ -182,7 +182,13 @@ export async function POST(request: Request) {
   const cooperativeId = auth.user.cooperativeId;
 
   if (!cooperativeId) {
-    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+    return Response.json(
+      {
+        error: "COOPERATIVE_SCOPE_REQUIRED",
+        message: "Akun operator belum tersambung ke workspace koperasi untuk menjalankan agent.",
+      },
+      { status: 409 },
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as {
@@ -191,17 +197,35 @@ export async function POST(request: Request) {
   };
 
   const agent = aiAgents.find((item) => item.name === body.agentName) ?? aiAgents[0];
-  const recordId = body.recordId || "LB-1024";
+  const recordId = body.recordId?.trim();
+  if (!recordId) {
+    return Response.json(
+      { error: "RECORD_ID_REQUIRED", message: "Pilih case antrean verifikasi sebelum menjalankan agent." },
+      { status: 400 },
+    );
+  }
   const cooperative = await queryOne<{ id: string; province: string }>(
     "SELECT id, province FROM cooperatives WHERE id = $1 LIMIT 1",
     [cooperativeId],
   );
 
   if (!cooperative) {
-    return Response.json({ error: "COOPERATIVE_NOT_FOUND" }, { status: 404 });
+    return Response.json(
+      { error: "COOPERATIVE_NOT_FOUND", message: "Workspace koperasi belum tersedia untuk akun ini." },
+      { status: 404 },
+    );
   }
 
   const caseContext = await findCaseContext(recordId, cooperative.id);
+  if (!caseContext) {
+    return Response.json(
+      {
+        error: "CASE_NOT_FOUND",
+        message: "Case tidak ditemukan di antrean verifikasi atau intake WA untuk workspace ini.",
+      },
+      { status: 404 },
+    );
+  }
   const commodityProfiles = await findCommodityProfilesForMessage(
     `${agent.name} ${recordId} ${caseContext?.summary ?? ""}`,
     cooperative.province,

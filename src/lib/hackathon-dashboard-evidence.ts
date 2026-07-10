@@ -88,25 +88,25 @@ function emptyEvidence(
   return {
     status,
     authState,
-    source: "hackathon-shared-db-read-only",
+    source: "sumber-eksplorasi-agregat",
     mode: "aggregate-only-no-pii-dashboard",
     tablePrefix: HACKATHON_TABLE_PREFIX,
     schemaScope: HACKATHON_SCHEMA_SCOPE,
     generatedAt: new Date().toISOString(),
-    sourceCaveat: buildSourceCaveatFields("hackathon shared DB dashboard aggregate", "limited", "shared-db-read-only-aggregate"),
+    sourceCaveat: buildSourceCaveatFields("sumber eksplorasi agregat dashboard", "limited", "aggregate-only"),
     setup: {
       required: status === "setup-required",
       message:
         status === "setup-required"
-          ? "Shared DB hackathon belum dikonfigurasi untuk dashboard ini."
-          : "Shared DB hackathon tidak menghalangi dashboard utama.",
+          ? "Sumber bukti eksplorasi belum aktif untuk dashboard ini."
+          : "Sumber bukti eksplorasi tidak menghalangi dashboard utama.",
     },
     error:
       status === "query-error"
         ? {
             code: extra?.errorCode ?? "QUERY_FAILED",
             message:
-              "Hackathon shared DB aggregate query failed. Check DB availability, schema/table access, and read-only privileges.",
+              "Query agregat sumber eksplorasi gagal. Cek akses sumber, struktur data, dan batas baca.",
           }
         : null,
     detectedColumns: {
@@ -422,23 +422,23 @@ export async function getHackathonDashboardEvidence(authenticated: boolean) {
       schemaScope: HACKATHON_SCHEMA_SCOPE,
       generatedAt: new Date().toISOString(),
       sourceCaveat: buildSourceCaveatFields(
-        "hackathon shared DB dashboard aggregate",
+        "sumber eksplorasi agregat dashboard",
         totalAggregateRows ? "medium" : "limited",
-        "shared-db-read-only-aggregate",
+        "aggregate-only",
       ),
       setup: {
         required: false,
         message: failedGroups.length
-          ? `Shared DB hackathon terhubung, tetapi ${failedGroups.length}/${aggregateGroups.length} aggregate group gagal. Payload tetap menampilkan group yang berhasil.`
+          ? `Sumber bukti eksplorasi terhubung, tetapi ${failedGroups.length}/${aggregateGroups.length} kelompok agregat gagal. Payload tetap menampilkan kelompok yang berhasil.`
           : totalAggregateRows
-            ? "Shared DB hackathon dikonfigurasi dan dibaca sebagai aggregate read-only."
-            : "Shared DB hackathon terhubung, tetapi aggregate query belum mengembalikan rows. Perlakukan sebagai gap verifikasi data.",
+            ? "Sumber bukti eksplorasi aktif dan dibaca sebagai agregat tanpa PII."
+            : "Sumber bukti eksplorasi terhubung, tetapi query agregat belum mengembalikan baris. Perlakukan sebagai gap verifikasi data.",
       },
       error: failedGroups.length
         ? {
             code: uniqueErrorCodes.join(",") || "QUERY_FAILED",
             message:
-              "Sebagian aggregate shared DB gagal. Dashboard tetap menampilkan evidence group yang berhasil dan tidak memilih PII/raw records.",
+              "Sebagian agregat sumber eksplorasi gagal. Dashboard tetap menampilkan kelompok bukti yang berhasil dan tidak memilih PII/raw records.",
           }
         : null,
       detectedColumns: {
