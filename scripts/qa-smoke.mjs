@@ -127,6 +127,111 @@ function expectArray(value, label) {
   if (!Array.isArray(value)) fail(`${label} is not an array`);
 }
 
+function expectPlainObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(`${label} is not an object`);
+  }
+}
+
+function assertNoSecretValues(value, label, trail = []) {
+  const secretValuePatterns = [
+    /postgres(?:ql)?:\/\/[^/\s:]+:[^@\s]+@/i,
+    /mysql:\/\/[^/\s:]+:[^@\s]+@/i,
+    /mongodb(?:\+srv)?:\/\/[^/\s:]+:[^@\s]+@/i,
+    /Bearer\s+[A-Za-z0-9._-]{16,}/i,
+    /sk-[A-Za-z0-9_-]{20,}/i,
+    /xox[baprs]-[A-Za-z0-9-]{10,}/i,
+  ];
+
+  if (typeof value === "string") {
+    for (const pattern of secretValuePatterns) {
+      if (pattern.test(value)) {
+        fail(`${label} exposes a secret-like value at ${trail.join(".") || "<root>"}`);
+      }
+    }
+    return;
+  }
+
+  if (!value || typeof value !== "object") return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoSecretValues(item, label, [...trail, String(index)]));
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    assertNoSecretValues(item, label, [...trail, key]);
+  }
+}
+
+function assertNoUnsafeIntegrationClaim(value, label, trail = []) {
+  const unsafePatterns = [
+    /terintegrasi resmi SIMKOPDES/i,
+    /SIMKOPDES produksi/i,
+    /live SIMKOPDES/i,
+    /production SIMKOPDES integration/i,
+    /official SIMKOPDES integration/i,
+    /dev API integration/i,
+    /official API contract/i,
+    /kontrak API resmi/i,
+  ];
+
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    const guardrailContext = [
+      "does not",
+      "do not",
+      "must not",
+      "not ",
+      "no official",
+      "not an official",
+      "without official",
+      "future",
+      "readiness",
+      "missing",
+      "blocked",
+      "observed",
+      "sample",
+      "simulated",
+      "tidak",
+      "jangan",
+      "bukan",
+    ].some((marker) => normalized.includes(marker));
+
+    for (const pattern of unsafePatterns) {
+      if (pattern.test(value) && !guardrailContext) {
+        fail(`${label} overclaims official integration at ${trail.join(".") || "<root>"}`);
+      }
+    }
+    return;
+  }
+
+  if (!value || typeof value !== "object") return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoUnsafeIntegrationClaim(item, label, [...trail, String(index)]));
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    assertNoUnsafeIntegrationClaim(item, label, [...trail, key]);
+  }
+}
+
+function assertSignalSpinePayload(payload) {
+  const label = "/api/hackathon/signal-spine";
+  expectArray(payload.signalFamilies, `${label} signalFamilies`);
+  expectArray(payload.provenanceLedger, `${label} provenanceLedger`);
+  expectPlainObject(payload.readinessGate, `${label} readinessGate`);
+  expectPlainObject(payload.offerPackDraft, `${label} offerPackDraft`);
+  expectArray(payload.managerActionQueue, `${label} managerActionQueue`);
+  expectArray(payload.remediationPlanner, `${label} remediationPlanner`);
+  expectArray(payload.connectorScorecard, `${label} connectorScorecard`);
+  assertNoSecretValues(payload, label);
+  assertNoUnsafeIntegrationClaim(payload, label);
+  pass(`${label} exposes signal spine JSON without secrets or official-integration overclaim`);
+}
+
 async function expectText(pathname, expected) {
   const response = await expectStatus(pathname, 200);
   const html = await response.text();
@@ -369,6 +474,9 @@ async function assertProtectedBackendEndpoints() {
 }
 
 async function assertHackathonEndpoints() {
+  const signalSpine = await expectJsonStatus("/api/hackathon/signal-spine", 200);
+  assertSignalSpinePayload(signalSpine);
+
   for (const endpoint of [
     "/api/hackathon/mvp-summary",
     "/api/hackathon/data-quality",

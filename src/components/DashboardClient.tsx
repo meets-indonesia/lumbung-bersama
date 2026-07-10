@@ -654,6 +654,52 @@ type HackathonFinancingReadiness = {
   }>;
 };
 
+type SignalSpineStatus = "loading" | "ready" | "unavailable" | "error";
+
+type SignalSpineItem = {
+  id?: string;
+  label?: string;
+  title?: string;
+  name?: string;
+  status?: string;
+  state?: string;
+  verdict?: string;
+  note?: string;
+  detail?: string;
+  description?: string;
+  source?: string;
+  sourceLabel?: string;
+  evidenceRef?: string;
+  nextAction?: string;
+  action?: string;
+  role?: string;
+  surface?: string;
+  permission?: string;
+  allowed?: boolean;
+  score?: string | number | null;
+  value?: string | number | null;
+  count?: string | number | null;
+  caveat?: string;
+  blockers?: string[];
+  items?: SignalSpineItem[];
+  [key: string]: unknown;
+};
+
+type SignalSpinePayload = {
+  signalFamilies?: SignalSpineItem[];
+  provenanceLedger?: SignalSpineItem[];
+  readinessGate?: SignalSpineItem | null;
+  offerPackDraft?: SignalSpineItem | null;
+  managerActionQueue?: SignalSpineItem[];
+  remediationPlanner?: SignalSpineItem[];
+  connectorScorecard?: SignalSpineItem[];
+  workingCapitalScenario?: SignalSpineItem | null;
+  cooperativeHealthGate?: SignalSpineItem | null;
+  rolePermissionMatrix?: SignalSpineItem[];
+  demoFixture?: SignalSpineItem | Record<string, unknown> | null;
+  boundarySentence?: string;
+};
+
 type DashboardUser = {
   id: string;
   email: string;
@@ -741,6 +787,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [hackathonFinancingReadiness, setHackathonFinancingReadiness] = useState<HackathonFinancingReadiness | null>(null);
   const [hackathonStatus, setHackathonStatus] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
   const [hackathonError, setHackathonError] = useState("");
+  const [signalSpine, setSignalSpine] = useState<SignalSpinePayload | null>(null);
+  const [signalSpineStatus, setSignalSpineStatus] = useState<SignalSpineStatus>("loading");
+  const [signalSpineError, setSignalSpineError] = useState("");
   const [user, setUser] = useState(initialUser);
   const [profileForm, setProfileForm] = useState({
     fullName: initialUser.fullName,
@@ -929,6 +978,37 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     }
   }
 
+  async function loadSignalSpine() {
+    try {
+      setSignalSpineStatus((current) => (current === "ready" ? "ready" : "loading"));
+      const response = await fetch("/api/hackathon/signal-spine", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as
+        | (SignalSpinePayload & { message?: string; error?: string })
+        | null;
+      if (response.status === 401) {
+        window.location.href = "/login?next=/dashboard";
+        return;
+      }
+      if (!response.ok) {
+        setSignalSpine(null);
+        setSignalSpineStatus(response.status === 404 || response.status === 503 ? "unavailable" : "error");
+        setSignalSpineError(payload?.message ?? payload?.error ?? "Signal spine endpoint belum tersedia.");
+        return;
+      }
+      setSignalSpine(payload ?? {});
+      setSignalSpineStatus("ready");
+      setSignalSpineError("");
+    } catch (error) {
+      setSignalSpine(null);
+      setSignalSpineStatus("error");
+      setSignalSpineError(error instanceof Error ? error.message : "Gagal memuat signal spine.");
+    }
+  }
+
+  async function loadHackathonEvidence() {
+    await Promise.all([loadHackathonSummary(), loadSignalSpine()]);
+  }
+
   async function loadNotifications() {
     const response = await fetch("/api/notifications", { cache: "no-store" });
     if (response.status === 401) {
@@ -995,6 +1075,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     const timer = window.setTimeout(() => {
       void loadDashboard();
       void loadHackathonSummary();
+      void loadSignalSpine();
       void loadNotifications();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1553,6 +1634,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 hackathonFinancingReadiness={hackathonFinancingReadiness}
                 hackathonStatus={hackathonStatus}
                 hackathonError={hackathonError}
+                signalSpine={signalSpine}
+                signalSpineStatus={signalSpineStatus}
+                signalSpineError={signalSpineError}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
                 openModule={openModule}
@@ -1593,7 +1677,10 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 hackathonFinancingReadiness={hackathonFinancingReadiness}
                 hackathonStatus={hackathonStatus}
                 hackathonError={hackathonError}
-                reloadHackathon={loadHackathonSummary}
+                signalSpine={signalSpine}
+                signalSpineStatus={signalSpineStatus}
+                signalSpineError={signalSpineError}
+                reloadHackathon={loadHackathonEvidence}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
                 openModule={openModule}
@@ -1647,6 +1734,222 @@ type ViewClassProps = {
   innerClass: string;
   mutedClass: string;
 };
+
+function signalSpineText(
+  item: SignalSpineItem | null | undefined,
+  keys: Array<keyof SignalSpineItem>,
+  fallback: string,
+) {
+  for (const key of keys) {
+    const value = item?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+  }
+  return fallback;
+}
+
+function signalSpineLabel(item: SignalSpineItem | null | undefined, fallback: string) {
+  return signalSpineText(item, ["label", "title", "name", "id"], fallback);
+}
+
+function signalSpineNote(item: SignalSpineItem | null | undefined, fallback: string) {
+  return signalSpineText(
+    item,
+    ["note", "detail", "description", "nextAction", "action", "sourceLabel", "source", "caveat"],
+    fallback,
+  );
+}
+
+function signalSpineStatusText(item: SignalSpineItem | null | undefined, fallback: string) {
+  return signalSpineText(item, ["status", "state", "verdict", "value", "score", "count"], fallback);
+}
+
+function signalSpineListSummary(items: SignalSpineItem[], fallback: string) {
+  if (!items.length) return fallback;
+  return items.slice(0, 2).map((item, index) => signalSpineLabel(item, `Item ${index + 1}`)).join(" / ");
+}
+
+function signalSpineBadgeTone(status: SignalSpineStatus): "success" | "warning" | "risk" | "service" {
+  if (status === "ready") return "success";
+  if (status === "error") return "risk";
+  if (status === "loading") return "service";
+  return "warning";
+}
+
+function SignalSpineCompactPanel({
+  panelClass,
+  innerClass,
+  mutedClass,
+  signalSpine,
+  signalSpineStatus,
+  signalSpineError,
+  className = "",
+  embedded = false,
+}: ViewClassProps & {
+  signalSpine: SignalSpinePayload | null;
+  signalSpineStatus: SignalSpineStatus;
+  signalSpineError: string;
+  className?: string;
+  embedded?: boolean;
+}) {
+  const ready = signalSpineStatus === "ready" && signalSpine;
+  const signalFamilies = signalSpine?.signalFamilies ?? [];
+  const provenanceLedger = signalSpine?.provenanceLedger ?? [];
+  const managerActionQueue = signalSpine?.managerActionQueue ?? [];
+  const remediationPlanner = signalSpine?.remediationPlanner ?? [];
+  const connectorScorecard = signalSpine?.connectorScorecard ?? [];
+  const rolePermissionMatrix = signalSpine?.rolePermissionMatrix ?? [];
+  const readinessGate = signalSpine?.readinessGate ?? null;
+  const offerPackDraft = signalSpine?.offerPackDraft ?? null;
+  const workingCapitalScenario = signalSpine?.workingCapitalScenario ?? null;
+  const cooperativeHealthGate = signalSpine?.cooperativeHealthGate ?? null;
+  const boundarySentence =
+    signalSpine?.boundarySentence ??
+    "Boundary: aggregate demo evidence only; no personal fields, no named buyer, and no live connector claim.";
+  const statusLabel =
+    signalSpineStatus === "ready"
+      ? "Ready"
+      : signalSpineStatus === "loading"
+        ? "Checking"
+        : signalSpineStatus === "unavailable"
+          ? "Setup"
+          : "Error";
+  const statusCopy =
+    signalSpineStatus === "loading"
+      ? "Memuat /api/hackathon/signal-spine tanpa memblokir panel evidence lain."
+      : signalSpineStatus === "unavailable"
+        ? signalSpineError || "Endpoint signal spine belum tersedia atau env masih gated."
+        : signalSpineStatus === "error"
+          ? signalSpineError || "Endpoint signal spine gagal dimuat."
+          : boundarySentence;
+  const summaryCards = [
+    {
+      label: "Signal families",
+      value: formatInteger(signalFamilies.length),
+      note: signalSpineListSummary(signalFamilies, "Menunggu payload family aggregate."),
+    },
+    {
+      label: "Provenance ledger",
+      value: formatInteger(provenanceLedger.length),
+      note: signalSpineListSummary(provenanceLedger, "Sumber evidence belum dikirim endpoint."),
+    },
+    {
+      label: "Readiness gate",
+      value: ready ? signalSpineStatusText(readinessGate, "Ready") : statusLabel,
+      note: signalSpineNote(readinessGate, "Gate hanya menandai readiness, bukan approval otomatis."),
+    },
+    {
+      label: "Offer pack draft",
+      value: signalSpineStatusText(offerPackDraft, ready ? "Draft gated" : statusLabel),
+      note: "Draft tetap butuh review operator; tidak menampilkan buyer bernama.",
+    },
+    {
+      label: "Connector scorecard",
+      value: formatInteger(connectorScorecard.length),
+      note: "Readiness-only; tidak mengklaim integrasi live.",
+    },
+    {
+      label: "Demo fixture",
+      value: signalSpine?.demoFixture ? "Available" : ready ? "Missing" : statusLabel,
+      note: "Fixture sample tidak ditampilkan sebagai aktor nyata.",
+    },
+  ];
+  const gateRows = [
+    {
+      label: "Working capital",
+      value: signalSpineStatusText(workingCapitalScenario, ready ? "Scenario pending" : statusLabel),
+      note: signalSpineNote(workingCapitalScenario, "Scenario aggregate; bukan keputusan pembiayaan."),
+    },
+    {
+      label: "Cooperative health",
+      value: signalSpineStatusText(cooperativeHealthGate, ready ? "Gate pending" : statusLabel),
+      note: signalSpineNote(cooperativeHealthGate, "Health gate adalah early warning, bukan audit final."),
+    },
+    {
+      label: "Role matrix",
+      value: `${formatInteger(rolePermissionMatrix.length)} roles`,
+      note: signalSpineListSummary(rolePermissionMatrix, "Role permission matrix belum tersedia."),
+    },
+  ];
+  const queueRows = [
+    ...managerActionQueue.slice(0, 2).map((item, index) => ({
+      label: signalSpineLabel(item, `Manager action ${index + 1}`),
+      value: signalSpineStatusText(item, "Review"),
+      note: signalSpineNote(item, "Masuk queue manager untuk review manusia."),
+    })),
+    ...remediationPlanner.slice(0, 2).map((item, index) => ({
+      label: signalSpineLabel(item, `Remediation ${index + 1}`),
+      value: signalSpineStatusText(item, "Plan"),
+      note: signalSpineNote(item, "Perbaikan data sebelum klaim evidence."),
+    })),
+  ];
+  const containerClass = embedded
+    ? `${className} border-t border-current/10 pt-5`
+    : `${className} rounded-[16px] border p-5 ${panelClass}`;
+
+  return (
+    <section className={containerClass}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Signal spine backlog 29-46</p>
+          <h2 className="mt-2 text-xl font-black">Readiness, provenance, and manager actions.</h2>
+          <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>{statusCopy}</p>
+        </div>
+        <StatusBadge tone={signalSpineBadgeTone(signalSpineStatus)}>{statusLabel}</StatusBadge>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {summaryCards.map((card) => (
+          <div key={card.label} className={`rounded-[12px] border p-3 ${innerClass}`}>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#D79A2B]">{card.label}</p>
+            <p className="mt-2 text-lg font-black">{card.value}</p>
+            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{card.note}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+          {gateRows.map((row) => (
+            <div key={row.label} className={`rounded-[12px] border px-3 py-2 ${innerClass}`}>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-black">{row.label}</p>
+                <span className="font-mono text-xs font-black text-[#D79A2B]">{row.value}</span>
+              </div>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{row.note}</p>
+            </div>
+          ))}
+        </div>
+        <div className={`rounded-[12px] border p-3 ${innerClass}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-black">Manager queue and remediation planner</p>
+            <span className="font-mono text-xs font-black text-[#D79A2B]">
+              {formatInteger(managerActionQueue.length)} actions / {formatInteger(remediationPlanner.length)} plans
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {queueRows.length > 0 ? (
+              queueRows.map((row) => (
+                <div key={`${row.label}-${row.value}`} className="border-l-4 border-[#D79A2B] bg-black/5 px-3 py-2">
+                  <p className="text-sm font-black">{row.label}</p>
+                  <p className="mt-1 font-mono text-xs font-black text-[#D79A2B]">{row.value}</p>
+                  <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{row.note}</p>
+                </div>
+              ))
+            ) : (
+              <p className={`md:col-span-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                {ready
+                  ? "Endpoint belum mengirim managerActionQueue atau remediationPlanner."
+                  : "Queue akan muncul setelah endpoint signal spine tersedia."}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function DashboardOnboardingTour({
   open,
@@ -2033,6 +2336,9 @@ function OverviewView({
   hackathonFinancingReadiness,
   hackathonStatus,
   hackathonError,
+  signalSpine,
+  signalSpineStatus,
+  signalSpineError,
   approveDraft,
   askFarmer,
   openModule,
@@ -2059,6 +2365,9 @@ function OverviewView({
   hackathonFinancingReadiness: HackathonFinancingReadiness | null;
   hackathonStatus: "loading" | "ready" | "unavailable" | "error";
   hackathonError: string;
+  signalSpine: SignalSpinePayload | null;
+  signalSpineStatus: SignalSpineStatus;
+  signalSpineError: string;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
   openModule: (moduleTitle: string) => void;
@@ -2414,6 +2723,16 @@ function OverviewView({
           </div>
         </article>
       </section>
+
+      <SignalSpineCompactPanel
+        className="mt-5"
+        panelClass={panelClass}
+        innerClass={innerClass}
+        mutedClass={mutedClass}
+        signalSpine={signalSpine}
+        signalSpineStatus={signalSpineStatus}
+        signalSpineError={signalSpineError}
+      />
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
@@ -2929,6 +3248,9 @@ function LumbungDataView({
   hackathonFinancingReadiness,
   hackathonStatus,
   hackathonError,
+  signalSpine,
+  signalSpineStatus,
+  signalSpineError,
   reloadHackathon,
   approveDraft,
   askFarmer,
@@ -2943,6 +3265,9 @@ function LumbungDataView({
   hackathonFinancingReadiness: HackathonFinancingReadiness | null;
   hackathonStatus: "loading" | "ready" | "unavailable" | "error";
   hackathonError: string;
+  signalSpine: SignalSpinePayload | null;
+  signalSpineStatus: SignalSpineStatus;
+  signalSpineError: string;
   reloadHackathon: () => Promise<void>;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
@@ -3269,6 +3594,17 @@ function LumbungDataView({
             </div>
           ))}
         </div>
+
+        <SignalSpineCompactPanel
+          className="mt-5"
+          panelClass={panelClass}
+          innerClass={rowClass}
+          mutedClass={mutedClass}
+          signalSpine={signalSpine}
+          signalSpineStatus={signalSpineStatus}
+          signalSpineError={signalSpineError}
+          embedded
+        />
 
         {hackathonStatus === "ready" && hackathonSummary ? (
           <>

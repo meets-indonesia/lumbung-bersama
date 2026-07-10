@@ -257,6 +257,50 @@ type OpenDataRegistryPayload = {
   }>;
 };
 
+type SignalSpineItem = {
+  id?: string;
+  label?: string;
+  title?: string;
+  name?: string;
+  status?: string;
+  state?: string;
+  verdict?: string;
+  note?: string;
+  detail?: string;
+  description?: string;
+  source?: string;
+  sourceLabel?: string;
+  evidenceRef?: string;
+  nextAction?: string;
+  action?: string;
+  role?: string;
+  surface?: string;
+  permission?: string;
+  allowed?: boolean;
+  score?: string | number | null;
+  value?: string | number | null;
+  count?: string | number | null;
+  caveat?: string;
+  blockers?: string[];
+  items?: SignalSpineItem[];
+  [key: string]: unknown;
+};
+
+type SignalSpinePayload = {
+  signalFamilies?: SignalSpineItem[];
+  provenanceLedger?: SignalSpineItem[];
+  readinessGate?: SignalSpineItem | null;
+  offerPackDraft?: SignalSpineItem | null;
+  managerActionQueue?: SignalSpineItem[];
+  remediationPlanner?: SignalSpineItem[];
+  connectorScorecard?: SignalSpineItem[];
+  workingCapitalScenario?: SignalSpineItem | null;
+  cooperativeHealthGate?: SignalSpineItem | null;
+  rolePermissionMatrix?: SignalSpineItem[];
+  demoFixture?: SignalSpineItem | Record<string, unknown> | null;
+  boundarySentence?: string;
+};
+
 type LoadStatus = "loading" | "ready" | "setup" | "error";
 
 function formatInteger(value: string | number | null | undefined) {
@@ -277,6 +321,61 @@ function toCsv(rows: Array<Array<string | number | boolean | null | undefined>>)
 
 function buyerEvidenceLabel(item: DashboardReportPayload["buyers"][number]) {
   return item.sourceLabel ?? "Buyer archetype; bukan named buyer atau komitmen permintaan live.";
+}
+
+function redactSensitiveText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
+    .replace(/\b(?:\+?62|0)8\d{7,12}\b/g, "[redacted-phone]")
+    .replace(/\b(?:sk|pk|pat|ghp|glpat|xox[baprs]?)-[A-Za-z0-9_-]{10,}\b/gi, "[redacted-secret]")
+    .replace(/\b[A-Za-z0-9_/-]{32,}\b/g, "[redacted-token]");
+}
+
+function signalScalar(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (Array.isArray(value)) return value.map(signalScalar).filter(Boolean).join("; ");
+  if (typeof value === "object") return "";
+  return redactSensitiveText(value);
+}
+
+function signalField(item: SignalSpineItem | Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!item) return "";
+  for (const key of keys) {
+    const formatted = signalScalar(item[key]);
+    if (formatted) return formatted;
+  }
+  return "";
+}
+
+function signalItemLabel(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback: string) {
+  return signalField(item, ["label", "title", "name", "role", "surface", "permission"]) || fallback;
+}
+
+function signalItemStatus(item: SignalSpineItem | Record<string, unknown> | null | undefined) {
+  const explicit = signalField(item, ["status", "state", "verdict"]);
+  if (explicit) return explicit;
+  return typeof item?.allowed === "boolean" ? (item.allowed ? "Allowed" : "Needs approval") : "Needs verification";
+}
+
+function signalItemSource(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "signal-spine aggregate") {
+  return signalField(item, ["sourceLabel", "source", "evidenceRef"]) || fallback;
+}
+
+function signalItemSummary(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "Aggregate row pending.") {
+  if (!item) return fallback;
+  const metricParts = [
+    signalField(item, ["score"]) ? `score ${signalField(item, ["score"])}` : "",
+    signalField(item, ["value"]) ? `value ${signalField(item, ["value"])}` : "",
+    signalField(item, ["count"]) ? `count ${signalField(item, ["count"])}` : "",
+  ].filter(Boolean);
+  const detail = signalField(item, ["detail", "description", "note"]);
+  const nextAction = signalField(item, ["nextAction", "action"]);
+  const caveat = signalField(item, ["caveat"]);
+  const blockers = signalScalar(item.blockers);
+  const nestedCount = Array.isArray(item.items) && item.items.length > 0 ? `${formatInteger(item.items.length)} nested aggregate items` : "";
+  return [signalItemStatus(item), metricParts.join("; "), detail, nextAction ? `next: ${nextAction}` : "", caveat, blockers, nestedCount]
+    .filter(Boolean)
+    .join(" | ") || fallback;
 }
 
 const reportDemoFlowSteps = [
@@ -326,9 +425,11 @@ export function ReportClient() {
   const [hackathonBuyerMatching, setHackathonBuyerMatching] = useState<HackathonBuyerPayload | null>(null);
   const [financingReadiness, setFinancingReadiness] = useState<HackathonFinancingPayload | null>(null);
   const [sourceRegistry, setSourceRegistry] = useState<OpenDataRegistryPayload | null>(null);
+  const [signalSpine, setSignalSpine] = useState<SignalSpinePayload | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [hackathonStatus, setHackathonStatus] = useState<LoadStatus>("loading");
   const [registryStatus, setRegistryStatus] = useState<LoadStatus>("loading");
+  const [signalSpineStatus, setSignalSpineStatus] = useState<LoadStatus>("loading");
   const [message, setMessage] = useState("Memuat laporan aksi dari API.");
   const [locked, setLocked] = useState(false);
   const [working, setWorking] = useState("");
@@ -337,6 +438,7 @@ export function ReportClient() {
     setStatus((current) => (current === "ready" ? "ready" : "loading"));
     setHackathonStatus((current) => (current === "ready" ? "ready" : "loading"));
     setRegistryStatus((current) => (current === "ready" ? "ready" : "loading"));
+    setSignalSpineStatus((current) => (current === "ready" ? "ready" : "loading"));
     setMessage("Memuat laporan aksi dari API.");
 
     try {
@@ -370,28 +472,39 @@ export function ReportClient() {
         opportunityResponse,
         buyerResponse,
         financingResponse,
+        signalSpineResponse,
       ] = await Promise.all([
         fetch("/api/hackathon/mvp-summary", { cache: "no-store" }),
         fetch("/api/hackathon/data-quality", { cache: "no-store" }),
         fetch("/api/hackathon/opportunity-scores", { cache: "no-store" }),
         fetch("/api/hackathon/buyer-matching", { cache: "no-store" }),
         fetch("/api/hackathon/financing-readiness", { cache: "no-store" }),
+        fetch("/api/hackathon/signal-spine", { cache: "no-store" }),
       ]);
-      const [sharedPayload, dataQualityPayload, opportunityPayload, buyerPayload, financingPayload] = await Promise.all([
+      const [sharedPayload, dataQualityPayload, opportunityPayload, buyerPayload, financingPayload, signalSpinePayload] = await Promise.all([
         sharedResponse.json().catch(() => null),
         dataQualityResponse.json().catch(() => null),
         opportunityResponse.json().catch(() => null),
         buyerResponse.json().catch(() => null),
         financingResponse.json().catch(() => null),
+        signalSpineResponse.json().catch(() => null),
       ]);
       const responses = [sharedResponse, dataQualityResponse, opportunityResponse, buyerResponse, financingResponse];
-      if (responses.some((response) => response.status === 401)) return;
+      if ([...responses, signalSpineResponse].some((response) => response.status === 401)) return;
 
       setHackathonSummary(sharedResponse.ok ? (sharedPayload as HackathonSummaryPayload) : null);
       setHackathonDataQuality(dataQualityResponse.ok ? (dataQualityPayload as HackathonDataQualityPayload) : null);
       setHackathonOpportunityScores(opportunityResponse.ok ? (opportunityPayload as HackathonOpportunityPayload) : null);
       setHackathonBuyerMatching(buyerResponse.ok ? (buyerPayload as HackathonBuyerPayload) : null);
       setFinancingReadiness(financingResponse.ok ? (financingPayload as HackathonFinancingPayload) : null);
+      setSignalSpine(signalSpineResponse.ok ? ((signalSpinePayload ?? {}) as SignalSpinePayload) : null);
+      setSignalSpineStatus(
+        signalSpineResponse.ok
+          ? "ready"
+          : signalSpineResponse.status === 404 || signalSpineResponse.status === 503
+            ? "setup"
+            : "error",
+      );
       setHackathonStatus(
         responses.every((response) => response.ok)
           ? "ready"
@@ -405,6 +518,8 @@ export function ReportClient() {
       setHackathonOpportunityScores(null);
       setHackathonBuyerMatching(null);
       setFinancingReadiness(null);
+      setSignalSpine(null);
+      setSignalSpineStatus("error");
       setHackathonStatus("error");
     }
 
@@ -464,6 +579,43 @@ export function ReportClient() {
   );
   const directOpportunityAreas = hackathonOpportunityScores?.topAreas ?? [];
   const directBuyerMatches = hackathonBuyerMatching?.matches ?? [];
+  const signalFamilies = signalSpine?.signalFamilies ?? [];
+  const provenanceLedger = signalSpine?.provenanceLedger ?? [];
+  const managerActionQueue = signalSpine?.managerActionQueue ?? [];
+  const remediationPlanner = signalSpine?.remediationPlanner ?? [];
+  const connectorScorecard = signalSpine?.connectorScorecard ?? [];
+  const rolePermissionMatrix = signalSpine?.rolePermissionMatrix ?? [];
+  const signalBoundarySentence = signalSpine?.boundarySentence
+    ? redactSensitiveText(signalSpine.boundarySentence)
+    : "Signal spine boundary sentence belum tersedia dari API.";
+  const signalSpineSummary =
+    signalSpineStatus === "ready"
+      ? `${formatInteger(signalFamilies.length)} signal families; ${formatInteger(provenanceLedger.length)} provenance rows; ${formatInteger(managerActionQueue.length)} manager actions`
+      : signalSpineStatus === "loading"
+        ? "Memuat signal spine"
+        : "Signal spine env-gated atau belum tersedia";
+  const signalOverviewRows = [
+    ["Signal families", `${formatInteger(signalFamilies.length)} aggregate groups`, signalFamilies[0] ? signalItemSummary(signalFamilies[0]) : "Belum ada family dari endpoint."],
+    ["Provenance ledger", `${formatInteger(provenanceLedger.length)} source rows`, provenanceLedger[0] ? signalItemSummary(provenanceLedger[0]) : "Belum ada provenance dari endpoint."],
+    ["Manager actions", `${formatInteger(managerActionQueue.length)} queued actions`, managerActionQueue[0] ? signalItemSummary(managerActionQueue[0]) : "Belum ada action queue dari endpoint."],
+    ["Connectors", `${formatInteger(connectorScorecard.length)} scorecard rows`, connectorScorecard[0] ? signalItemSummary(connectorScorecard[0]) : "Connector scorecard belum tersedia."],
+  ] as const;
+  const signalGateCards: Array<{
+    label: string;
+    item: SignalSpineItem | Record<string, unknown> | null | undefined;
+    empty: string;
+  }> = [
+    { label: "Readiness gate", item: signalSpine?.readinessGate, empty: "Readiness gate belum tersedia." },
+    { label: "Offer pack draft", item: signalSpine?.offerPackDraft, empty: "Offer pack draft belum tersedia." },
+    { label: "Working capital scenario", item: signalSpine?.workingCapitalScenario, empty: "Working capital scenario belum tersedia." },
+    { label: "Cooperative health gate", item: signalSpine?.cooperativeHealthGate, empty: "Cooperative health gate belum tersedia." },
+    { label: "Demo fixture", item: signalSpine?.demoFixture, empty: "Demo fixture belum tersedia." },
+  ];
+  const signalActionGroups: Array<{ label: string; rows: SignalSpineItem[]; empty: string }> = [
+    { label: "Manager action queue", rows: managerActionQueue, empty: "Belum ada manager action dari endpoint." },
+    { label: "Remediation planner", rows: remediationPlanner, empty: "Belum ada remediation planner dari endpoint." },
+    { label: "Connector scorecard", rows: connectorScorecard, empty: "Belum ada connector scorecard dari endpoint." },
+  ];
   const sourceLabels = sourceRegistry?.sourceLabels ?? [];
   const p0Roadmap = sourceRegistry?.p0Roadmap ?? [];
   const registryCoverage = sourceRegistry?.coverage.administrativeAreasImported ?? {};
@@ -549,6 +701,7 @@ export function ReportClient() {
     ["Opportunity score endpoint", directOpportunityAreas.length ? `${formatInteger(directOpportunityAreas.length)} ranked areas` : "Env gated"],
     ["Buyer matching lite endpoint", directBuyerMatches.length ? `${formatInteger(directBuyerMatches.length)} archetype matches` : "Env gated"],
     ["Data-quality endpoint", qualityChecks.length ? `${formatInteger(qualityChecks.length)} table checks` : "Env gated"],
+    ["Signal spine backlog 29-46", signalSpineSummary],
     ["External source registry", sourceRegistrySummary],
     ["Guided demo flow", reportDemoFlowSteps.map(([label]) => label).join(" -> ")],
     ["Role/access alignment", `${formatInteger(reportRoleRows.length)} SIMKOPDES roles mapped`],
@@ -618,6 +771,29 @@ export function ReportClient() {
       } = {},
     ) => [section, field, value, sourceLabel, freshness, confidence, nextAction, privacyScope, caveat];
 
+    const signalExportRows = (
+      section: string,
+      items: Array<SignalSpineItem | Record<string, unknown>>,
+      fallbackField: string,
+      fallbackValue: string,
+    ) =>
+      (items.length ? items : [null]).map((item, index) =>
+        reportRow(
+          section,
+          item ? signalItemLabel(item, `${fallbackField}-${index + 1}`) : fallbackField,
+          item ? signalItemSummary(item) : fallbackValue,
+          item ? signalItemSource(item) : "signal-spine aggregate",
+          {
+            confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
+            nextAction: item
+              ? signalField(item, ["nextAction", "action"]) || "Review manager/pengurus sebelum aksi bisnis."
+              : "Tunggu endpoint signal-spine tersedia sebelum memakai section ini.",
+            privacyScope: "aggregate-no-pii-no-secrets",
+            caveat: "Signal spine CSV hanya mengekspor label/status aggregate; tidak ada PII, secret, atau klaim official external connector.",
+          },
+        ),
+      );
+
     const rows = [
       [
         "section",
@@ -641,6 +817,114 @@ export function ReportClient() {
           caveat: "Ringkasan menggabungkan API operasional dan evidence aggregate; bukan klaim produksi SIMKOPDES.",
         },
       )),
+      ...signalExportRows(
+        "signal-spine-signal",
+        signalFamilies,
+        "signal families",
+        "Tidak ada signal family aggregate dari endpoint.",
+      ),
+      ...signalExportRows(
+        "signal-spine-provenance",
+        provenanceLedger,
+        "provenance ledger",
+        "Tidak ada provenance ledger aggregate dari endpoint.",
+      ),
+      reportRow(
+        "signal-spine-gate",
+        "readiness gate",
+        signalSpine?.readinessGate ? signalItemSummary(signalSpine.readinessGate) : "Readiness gate belum tersedia.",
+        signalItemSource(signalSpine?.readinessGate, "signal-spine aggregate"),
+        {
+          confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
+          nextAction: signalField(signalSpine?.readinessGate, ["nextAction", "action"]) || "Manager memverifikasi readiness sebelum outreach atau pembiayaan.",
+          privacyScope: "aggregate-no-pii-no-secrets",
+          caveat: "Gate bersifat decision-support; tidak ada approval otomatis atau klaim integrasi resmi.",
+        },
+      ),
+      reportRow(
+        "signal-spine-offer",
+        "offer pack draft",
+        signalSpine?.offerPackDraft ? signalItemSummary(signalSpine.offerPackDraft) : "Offer pack draft belum tersedia.",
+        signalItemSource(signalSpine?.offerPackDraft, "signal-spine aggregate"),
+        {
+          confidence: signalSpineStatus === "ready" ? "draft" : "env-gated",
+          nextAction: signalField(signalSpine?.offerPackDraft, ["nextAction", "action"]) || "Validasi grade, stok, harga, margin, dan logistik sebelum offer dipakai.",
+          privacyScope: "aggregate-no-pii-no-named-buyer",
+          caveat: "Offer pack adalah draft internal; bukan komitmen buyer atau kontak otomatis.",
+        },
+      ),
+      ...signalExportRows(
+        "signal-spine-action",
+        managerActionQueue,
+        "manager action queue",
+        "Tidak ada manager action aggregate dari endpoint.",
+      ),
+      ...signalExportRows(
+        "signal-spine-remediation",
+        remediationPlanner,
+        "remediation planner",
+        "Tidak ada remediation aggregate dari endpoint.",
+      ),
+      ...signalExportRows(
+        "signal-spine-connector",
+        connectorScorecard,
+        "connector scorecard",
+        "Tidak ada connector scorecard aggregate dari endpoint.",
+      ),
+      reportRow(
+        "signal-spine-working-capital",
+        "working capital scenario",
+        signalSpine?.workingCapitalScenario ? signalItemSummary(signalSpine.workingCapitalScenario) : "Working capital scenario belum tersedia.",
+        signalItemSource(signalSpine?.workingCapitalScenario, "signal-spine aggregate"),
+        {
+          confidence: signalSpineStatus === "ready" ? "scenario" : "env-gated",
+          nextAction: signalField(signalSpine?.workingCapitalScenario, ["nextAction", "action"]) || "Gunakan sebagai skenario kerja, bukan approval pembiayaan.",
+          privacyScope: "aggregate-no-pii-no-approval-claim",
+          caveat: "Skenario modal kerja bukan keputusan kredit, audit, atau penilaian resmi.",
+        },
+      ),
+      reportRow(
+        "signal-spine-health-gate",
+        "cooperative health gate",
+        signalSpine?.cooperativeHealthGate ? signalItemSummary(signalSpine.cooperativeHealthGate) : "Cooperative health gate belum tersedia.",
+        signalItemSource(signalSpine?.cooperativeHealthGate, "signal-spine aggregate"),
+        {
+          confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
+          nextAction: signalField(signalSpine?.cooperativeHealthGate, ["nextAction", "action"]) || "Pengurus mengecek indikator aggregate sebelum keputusan rapat.",
+          privacyScope: "aggregate-no-member-pii",
+          caveat: "Health gate adalah indikator awal, bukan audit formal koperasi.",
+        },
+      ),
+      ...signalExportRows(
+        "signal-spine-role-permission",
+        rolePermissionMatrix,
+        "role permission matrix",
+        "Tidak ada role permission matrix dari endpoint.",
+      ),
+      reportRow(
+        "signal-spine-demo-fixture",
+        "demo fixture",
+        signalSpine?.demoFixture ? signalItemSummary(signalSpine.demoFixture) : "Demo fixture belum tersedia.",
+        signalItemSource(signalSpine?.demoFixture, "signal-spine aggregate"),
+        {
+          confidence: signalSpineStatus === "ready" ? "demo" : "env-gated",
+          nextAction: "Label demo data secara eksplisit saat presentasi.",
+          privacyScope: "demo-aggregate-no-pii",
+          caveat: "Demo fixture tidak membuktikan integrasi produksi atau endorsement resmi.",
+        },
+      ),
+      reportRow(
+        "signal-spine-boundary",
+        "boundary sentence",
+        signalBoundarySentence,
+        "signal-spine aggregate",
+        {
+          confidence: signalSpineStatus === "ready" ? "policy" : "env-gated",
+          nextAction: "Gunakan kalimat batas ini di narasi demo dan laporan rapat.",
+          privacyScope: "policy-no-pii",
+          caveat: "Boundary menjaga klaim tetap aggregate-only dan human-reviewed.",
+        },
+      ),
       ...reportDemoFlowSteps.map(([label, detail], index) => reportRow(
         "guided-demo-flow",
         `step-${index + 1}-${label}`,
@@ -1061,6 +1345,132 @@ export function ReportClient() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </article>
+
+        <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-[#7A4E2D]">Signal spine backlog 29-46</p>
+              <h2 className="mt-2 text-2xl font-black">Aggregate signal, provenance, gate, dan action spine</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+                Section ini membaca `/api/hackathon/signal-spine` untuk ringkasan aggregate-only; tidak menampilkan PII, secret, atau klaim connector resmi.
+              </p>
+            </div>
+            <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
+              {signalSpineStatus === "ready" ? "aggregate endpoint" : signalSpineStatus === "loading" ? "loading" : "env-gated"}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {signalOverviewRows.map(([label, value, detail]) => (
+              <div key={label} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+                <p className="text-xs font-black uppercase text-[#C92A2A]">{label}</p>
+                <p className="mt-2 text-xl font-black text-[#1F2933]">{value}</p>
+                <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Signal families</p>
+              <div className="mt-3 space-y-2">
+                {signalFamilies.length > 0 ? (
+                  signalFamilies.slice(0, 4).map((item, index) => (
+                    <div key={`${signalItemLabel(item, "signal")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                      <p className="font-black">{signalItemLabel(item, `Signal ${index + 1}`)}</p>
+                      <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(item)}</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm font-semibold text-[#53606A]">Signal families belum tersedia dari endpoint.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Provenance ledger</p>
+              <div className="mt-3 space-y-2">
+                {provenanceLedger.length > 0 ? (
+                  provenanceLedger.slice(0, 4).map((item, index) => (
+                    <div key={`${signalItemLabel(item, "provenance")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                      <p className="font-black">{signalItemLabel(item, `Provenance ${index + 1}`)}</p>
+                      <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemSource(item)}</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm font-semibold text-[#53606A]">Provenance ledger belum tersedia dari endpoint.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {signalGateCards.map((card) => (
+              <div key={card.label} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+                <p className="text-xs font-black uppercase text-[#C92A2A]">{card.label}</p>
+                {card.item ? (
+                  <>
+                    <p className="mt-2 text-sm font-black">{signalItemLabel(card.item, card.label)}</p>
+                    <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(card.item)}</p>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(card.item)}</p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">{card.empty}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {signalActionGroups.map((group) => (
+              <div key={group.label} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+                <p className="text-xs font-black uppercase text-[#C92A2A]">{group.label}</p>
+                <div className="mt-3 space-y-2">
+                  {group.rows.length > 0 ? (
+                    group.rows.slice(0, 4).map((item, index) => (
+                      <div key={`${signalItemLabel(item, group.label)}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                        <p className="font-black">{signalItemLabel(item, `${group.label} ${index + 1}`)}</p>
+                        <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(item)}</p>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm font-semibold text-[#53606A]">{group.empty}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Role permission matrix</p>
+              <div className="mt-3 space-y-2">
+                {rolePermissionMatrix.length > 0 ? (
+                  rolePermissionMatrix.slice(0, 5).map((item, index) => (
+                    <div key={`${signalItemLabel(item, "role")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
+                      <p className="font-black">{signalItemLabel(item, `Role ${index + 1}`)}</p>
+                      <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(item)}</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm font-semibold text-[#53606A]">Role permission matrix belum tersedia dari endpoint.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Boundary sentence</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-[#53606A]">{signalBoundarySentence}</p>
+              <p className="mt-4 text-xs font-bold leading-5 text-[#7A4E2D]">
+                Connector scorecard adalah readiness/discovery sampai akses resmi, implementasi, dan smoke test terverifikasi.
+              </p>
+            </div>
           </div>
         </article>
 

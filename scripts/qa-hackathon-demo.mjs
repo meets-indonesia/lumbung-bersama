@@ -48,6 +48,12 @@ function expectArray(value, label) {
   if (!Array.isArray(value)) fail(`${label} is not an array`);
 }
 
+function expectPlainObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(`${label} is not an object`);
+  }
+}
+
 function expectRedirectStatus(response, label) {
   if (![301, 302, 303, 307, 308].includes(response.status)) {
     fail(`${label} returned ${response.status}, expected redirect`);
@@ -83,6 +89,73 @@ function assertNoSecretValues(value, label, trail = []) {
   for (const [key, item] of Object.entries(value)) {
     assertNoSecretValues(item, label, [...trail, key]);
   }
+}
+
+function assertNoUnsafeIntegrationClaim(value, label, trail = []) {
+  const unsafePatterns = [
+    /terintegrasi resmi SIMKOPDES/i,
+    /SIMKOPDES produksi/i,
+    /live SIMKOPDES/i,
+    /production SIMKOPDES integration/i,
+    /official SIMKOPDES integration/i,
+    /dev API integration/i,
+    /official API contract/i,
+    /kontrak API resmi/i,
+  ];
+
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    const guardrailContext = [
+      "does not",
+      "do not",
+      "must not",
+      "not ",
+      "no official",
+      "not an official",
+      "without official",
+      "future",
+      "readiness",
+      "missing",
+      "blocked",
+      "observed",
+      "sample",
+      "simulated",
+      "tidak",
+      "jangan",
+      "bukan",
+    ].some((marker) => normalized.includes(marker));
+
+    for (const pattern of unsafePatterns) {
+      if (pattern.test(value) && !guardrailContext) {
+        fail(`${label} overclaims official integration at ${trail.join(".") || "<root>"}`);
+      }
+    }
+    return;
+  }
+
+  if (!value || typeof value !== "object") return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoUnsafeIntegrationClaim(item, label, [...trail, String(index)]));
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    assertNoUnsafeIntegrationClaim(item, label, [...trail, key]);
+  }
+}
+
+function assertSignalSpinePayload(payload) {
+  const label = "/api/hackathon/signal-spine";
+  expectArray(payload.signalFamilies, `${label} signalFamilies`);
+  expectArray(payload.provenanceLedger, `${label} provenanceLedger`);
+  expectPlainObject(payload.readinessGate, `${label} readinessGate`);
+  expectPlainObject(payload.offerPackDraft, `${label} offerPackDraft`);
+  expectArray(payload.managerActionQueue, `${label} managerActionQueue`);
+  expectArray(payload.remediationPlanner, `${label} remediationPlanner`);
+  expectArray(payload.connectorScorecard, `${label} connectorScorecard`);
+  assertNoUnsafeIntegrationClaim(payload, label);
+  pass(`${label} exposes signal spine JSON without official-integration overclaim`);
 }
 
 async function expectStatusOneOf(pathname, expectedStatuses, init = {}) {
@@ -290,6 +363,9 @@ async function assertPublicApiBacklog() {
   if (commodityNews.payload.error !== "COMMODITY_REQUIRED") {
     fail("/api/commodity-news did not validate missing commodity");
   }
+
+  const signalSpine = await expectJsonStatusOneOf("/api/hackathon/signal-spine", [200]);
+  assertSignalSpinePayload(signalSpine.payload);
 }
 
 async function assertHackathonApiGates() {

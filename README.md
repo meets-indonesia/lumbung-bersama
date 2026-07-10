@@ -6,7 +6,11 @@ Live demo target: https://lumbung-bersama.meetsin.id
 
 Core MVP flow:
 
-`Login -> Peta Potensi Desa -> Opportunity Score -> Buyer Matching Lite -> Stock/Readiness -> Financing Readiness -> Laporan Aksi`
+`Login -> Peta Potensi Desa -> Signal Snapshot Adapter -> Evidence Ledger -> Opportunity Score -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue -> Laporan Aksi`
+
+Demo-critical signal spine:
+
+`Signal Snapshot Adapter -> Evidence Ledger -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue`
 
 Important boundaries:
 
@@ -159,7 +163,7 @@ These tables are application-owned. They are separate from the organizer shared 
 |---|---|
 | `/` | Public landing page explaining MVP thesis and flow. |
 | `/login` | Operator/jury login page. |
-| `/dashboard` | Protected command center: evidence, role matrix, score cards, buyer/readiness, WA queue, SIMKOPDES alignment. |
+| `/dashboard` | Protected command center: evidence, signal snapshot adapter, evidence ledger, score cards, readiness gate, offer pack draft, manager action queue, WA queue, and SIMKOPDES/Kopdes alignment caveats. |
 | `/wa` | Protected WA center for local intent simulation, draft save, and operator queue. |
 | `/peta-unggulan` | Main map surface for wilayah drilldown, polygon boundary, commodity search, and source caveats. |
 | `/agents` | Protected agent center. |
@@ -184,6 +188,17 @@ Key API endpoints:
 | `/api/hackathon/opportunity-scores` | Explainable opportunity score. |
 | `/api/hackathon/buyer-matching` | Buyer matching lite using archetypes. |
 | `/api/hackathon/financing-readiness` | Aggregate financing readiness, business analyst, and borrower-risk guardrails. |
+| `/api/hackathon/signal-spine` | Demo-critical adapter payload for Signal Snapshot Adapter, Evidence Ledger, Pre-Offtaker Readiness Gate, Offer Pack Draft, Manager Action Queue, remediation planner, and connector readiness scorecard. |
+
+## Demo Flow
+
+1. Start at `/dashboard` after login.
+2. Show `/api/hackathon/signal-spine` as the safe adapter layer: Signal Snapshot Adapter -> Evidence Ledger -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue.
+3. Open `/peta-unggulan` to inspect wilayah, commodity, source, and caveat signals.
+4. Return to `/dashboard` for opportunity scoring, readiness blockers, remediation tasks, and manager-owned next actions.
+5. Close in `/laporan` with an action report/export that preserves source, confidence, caveat, and human approval status.
+
+Signal spine boundary: Lumbung reads or simulates aggregate signals from existing Kopdes/SIMKOPDES feature families. It does not call the dev API, mutate records, expose secrets/PII, or claim official production integration without an approved connector contract.
 
 ## QA And Verification
 
@@ -194,6 +209,8 @@ npm run lint
 npm run build
 npm run qa:smoke
 npm run qa:hackathon-demo
+node --check scripts/qa-smoke.mjs
+node --check scripts/qa-hackathon-demo.mjs
 node --check scripts/qa-auth-smoke.mjs
 node --check scripts/qa-wa-smoke.mjs
 ```
