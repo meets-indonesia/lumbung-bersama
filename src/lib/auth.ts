@@ -8,6 +8,7 @@ const PASSWORD_ITERATIONS = 210_000;
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 10);
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const OPERATIONAL_MUTATION_ROLES = ["admin", "operator", "manager", "pengurus", "bendahara", "petugas"];
+const DEFAULT_ADMIN_COOPERATIVE_ID = "kop-wanasari";
 
 export type AuthUser = {
   id: string;
@@ -31,6 +32,14 @@ type UserRow = {
   title: string;
   phone: string | null;
   avatarInitials: string;
+};
+
+type CooperativeIdRow = {
+  id: string;
+};
+
+type UserCooperativePatchRow = {
+  cooperativeId: string | null;
 };
 
 function toUser(row: UserRow): AuthUser {
@@ -57,6 +66,62 @@ function parseCookieHeader(header: string | null) {
   }
 
   return cookiesMap;
+}
+
+function configuredAdminCooperativeId() {
+  return process.env.ADMIN_COOPERATIVE_ID?.trim() || DEFAULT_ADMIN_COOPERATIVE_ID;
+}
+
+function canSelfHealCooperativeScope(row: UserRow) {
+  const configuredAdminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  return row.id === "admin-primary" || (Boolean(configuredAdminEmail) && row.email.toLowerCase() === configuredAdminEmail);
+}
+
+async function findSelfHealCooperativeId() {
+  const configuredId = configuredAdminCooperativeId();
+  const candidateIds =
+    configuredId === DEFAULT_ADMIN_COOPERATIVE_ID
+      ? [configuredId]
+      : [configuredId, DEFAULT_ADMIN_COOPERATIVE_ID];
+
+  const row = await queryOne<CooperativeIdRow>(
+    `SELECT id
+     FROM cooperatives
+     WHERE id = ANY($1::text[])
+     ORDER BY
+       CASE
+         WHEN id = $2 THEN 0
+         WHEN id = $3 THEN 1
+         ELSE 2
+       END
+     LIMIT 1`,
+    [candidateIds, configuredId, DEFAULT_ADMIN_COOPERATIVE_ID],
+  );
+
+  return row?.id ?? null;
+}
+
+async function selfHealUserCooperativeId(row: UserRow) {
+  if (!canSelfHealCooperativeScope(row)) return null;
+
+  try {
+    const cooperativeId = await findSelfHealCooperativeId();
+    if (!cooperativeId) return null;
+
+    const patchRow = await queryOne<UserCooperativePatchRow>(
+      `UPDATE users
+       SET cooperative_id = $2,
+           updated_at = now()
+       WHERE id = $1
+         AND cooperative_id IS NULL
+       RETURNING cooperative_id AS "cooperativeId"`,
+      [row.id, cooperativeId],
+    );
+
+    return patchRow?.cooperativeId ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function getRequestIp(request: Request) {
@@ -217,7 +282,14 @@ async function getUserBySessionToken(token: string | undefined) {
     [tokenHash],
   );
 
-  return row ? toUser(row) : null;
+  if (!row) return null;
+
+  if (!row.cooperativeId) {
+    const cooperativeId = await selfHealUserCooperativeId(row);
+    return toUser({ ...row, cooperativeId: cooperativeId ?? row.cooperativeId });
+  }
+
+  return toUser(row);
 }
 
 export async function getCurrentUserFromRequest(request: Request) {

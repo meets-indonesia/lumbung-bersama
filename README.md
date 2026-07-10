@@ -138,6 +138,15 @@ Technology stack:
 6. WhatsApp Business Platform Cloud API adapter for env-gated webhook/send.
 7. OpenAI-compatible AI provider adapter for XAI/OpenAI-style endpoints, with rules fallback when the AI env is missing.
 
+Why this stack:
+
+1. Next.js gives one deployable app for public pages, protected dashboard, API routes, and server-only adapters. Secrets stay on the server boundary, not in the browser.
+2. PostgreSQL fits cooperative workflows because auth, queue, stock ledger, report locks, buyer requirements, and audit evidence are relational and need traceable migrations.
+3. A separate read-only shared DB adapter keeps hackathon exploration data isolated from app-owned operational tables. The dashboard can summarize aggregate evidence without treating the shared schema as the production source of truth.
+4. Tailwind CSS v4 and React keep the UI fast to iterate for hackathon demo while still allowing dense management tables, onboarding, responsive dashboard states, and map-first pages.
+5. Docker Compose makes the MeetsIn VPS deployment reproducible. The same image can later move to Cloud Run, GKE, or Compute Engine with minimal runtime change.
+6. The AI adapter is OpenAI-compatible so the team can use XAI or another approved gateway behind environment variables. If the provider is unavailable, guarded rule-based outputs keep the demo usable without fake autonomous claims.
+
 Main layers:
 
 | Layer | Files | Responsibility |
@@ -156,6 +165,29 @@ App-owned team-prefixed tables:
 3. `anak_sarengklek_media_evidence`
 
 These tables are application-owned. They are separate from the organizer shared DB evidence source.
+
+## Production And GCP Best Practice Notes
+
+For the current demo, the MeetsIn VPS deployment is acceptable when it is protected by HTTPS, server-side environment variables, Docker health checks, and repeatable smoke tests after reload.
+
+For a GCP-grade production path, use this target architecture:
+
+1. Containerize the Next.js app and publish immutable images through Cloud Build and Artifact Registry.
+2. Run the web container on Cloud Run for a simpler managed path, or GKE if the team needs custom networking, workers, and autoscaling control. Compute Engine is acceptable for hackathon speed but should be treated as an interim target.
+3. Put the application PostgreSQL on Cloud SQL for PostgreSQL with automated backups, private IP where possible, and least-privilege DB roles.
+4. Store `DATABASE_URL`, shared DB credentials, WhatsApp tokens, and AI keys in Secret Manager. Do not bake secrets into images, git, README, screenshots, or PDF assets.
+5. Use a read-only DB role for hackathon/shared evidence. Keep writes only in app-owned tables with the team prefix.
+6. Put Cloud Load Balancing, managed TLS, and Cloud Armor in front of public traffic when moving beyond the VPS.
+7. Use Cloud Logging, Error Reporting, uptime checks, and dashboard alerts for `/api/health`, `/api/dashboard`, `/api/hackathon/*`, and WhatsApp webhook failures.
+8. Run migrations as an explicit CI/CD step before traffic shift. Keep rollback clear: previous image tag plus DB migration notes.
+9. Keep PII out of demo logs. For future real data, add row-level cooperative scoping, audit logs, retention rules, and export redaction.
+10. For maps and public data connectors, separate baseline/reference data from verified operational data in labels and API payloads.
+
+Dashboard troubleshooting:
+
+1. `DATABASE_URL_REQUIRED` means the app DB is not configured or not visible to the runtime. Set the app DB env, run `npm run db:setup`, and restart.
+2. `COOPERATIVE_SCOPE_REQUIRED` means the logged-in user has no `cooperative_id`. Logout/login with the configured admin account or run the seed/migration so `kop-wanasari` exists.
+3. Shared DB `setup-required` does not block the dashboard. It only means aggregate hackathon evidence is not configured for that runtime.
 
 ## Main Routes
 

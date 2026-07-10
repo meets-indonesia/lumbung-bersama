@@ -6,6 +6,7 @@ import {
   buildPriceCheckNegotiationData,
   buildSourceCaveatFields,
 } from "@/lib/commodity-intelligence";
+import { getHackathonDashboardEvidence } from "@/lib/hackathon-dashboard-evidence";
 import { dbRequiredResponse, isDatabaseConfigured, queryRows } from "@/lib/postgres";
 
 export const runtime = "nodejs";
@@ -194,6 +195,7 @@ export async function GET(request: Request) {
     buyerRequirementsResult,
     stockLedgerResult,
     mediaEvidenceResult,
+    hackathonDashboardEvidence,
   ] = await Promise.all([
     queryRows<CooperativeRow>(
       "SELECT id, name, village, district, regency, province FROM cooperatives WHERE id = $1 LIMIT 1",
@@ -297,6 +299,7 @@ export async function GET(request: Request) {
        LIMIT 20`,
       [cooperativeId],
     ),
+    getHackathonDashboardEvidence(Boolean(auth.user)),
   ]);
 
   const cooperative = cooperatives[0] ?? null;
@@ -393,5 +396,6 @@ export async function GET(request: Request) {
         : "Sebagian tabel app-owned prefixed belum siap. Jalankan migrasi aplikasi sebelum demo DB-backed.",
       tables: prefixedTables,
     },
+    hackathonSharedDb: hackathonDashboardEvidence,
   });
 }

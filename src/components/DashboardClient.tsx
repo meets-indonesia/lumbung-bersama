@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Bell,
   BarChart3,
@@ -82,6 +82,7 @@ const navGroups = [
 ];
 
 const TOUR_STORAGE_KEY = "lumbung-bersama-dashboard-tour-v2";
+const WELCOME_STORAGE_KEY = "lumbung-bersama-dashboard-welcome-v1";
 
 type TourStep = {
   id: string;
@@ -477,6 +478,7 @@ type DashboardData = {
   mediaEvidence?: MediaEvidence[];
   teamTablePrefix?: string;
   prefixedDbStatus?: PrefixedDbStatus;
+  hackathonSharedDb?: HackathonDashboardEvidence;
 };
 
 type HackathonTableCount = {
@@ -654,6 +656,77 @@ type HackathonFinancingReadiness = {
   }>;
 };
 
+type HackathonDashboardEvidenceStatus = "auth-required" | "setup-required" | "ready" | "query-error";
+
+type HackathonDashboardSourceRow = {
+  source: string;
+  caveat: string;
+};
+
+type HackathonDashboardProductRow = HackathonDashboardSourceRow & {
+  productCategory: string;
+  rows: number;
+  cooperatives: number;
+  inventoryRows: number;
+  stockTotal: string;
+  genericLabels: number;
+};
+
+type HackathonDashboardAreaRow = HackathonDashboardSourceRow & {
+  province: string;
+  regencies: number;
+  districts: number;
+  villages: number;
+  commodityRows: number;
+  commodities: number;
+  cooperatives: number;
+  potentialValue: string;
+};
+
+type HackathonDashboardFinancingRow = HackathonDashboardSourceRow & {
+  status: string;
+  channel: string;
+  requests: number;
+  amount: string;
+};
+
+type HackathonDashboardTransactionRow = HackathonDashboardSourceRow & {
+  status: string;
+  channel: string;
+  transactions: number;
+  amount: string;
+  cooperatives: number;
+};
+
+type HackathonDashboardEvidence = {
+  status: HackathonDashboardEvidenceStatus;
+  authState: "auth-required" | "authenticated";
+  source: string;
+  mode: string;
+  tablePrefix: string;
+  generatedAt: string;
+  schemaScope?: {
+    label: string;
+    notPrimaryReference: boolean;
+    description: string;
+  };
+  setup: {
+    required: boolean;
+    message: string;
+  };
+  error: {
+    code: string;
+    message: string;
+  } | null;
+  tables: {
+    productRows: HackathonDashboardProductRow[];
+    areaRows: HackathonDashboardAreaRow[];
+    financingRows: HackathonDashboardFinancingRow[];
+    transactionRows: HackathonDashboardTransactionRow[];
+  };
+  guardrails: string[];
+};
+
 type SignalSpineStatus = "loading" | "ready" | "unavailable" | "error";
 
 type SignalSpineItem = {
@@ -800,7 +873,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [profileMessage, setProfileMessage] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "error">("loading");
+  const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "scope" | "error">("loading");
   const [dataError, setDataError] = useState("");
   const [panelMessage, setPanelMessage] = useState(
     "Memuat data Postgres.",
@@ -810,6 +883,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourIndex, setTourIndex] = useState(0);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   function showToast(title: string, message?: string, tone: ToastTone = "success") {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -848,6 +922,8 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     setProfileOpen(false);
     setNotificationsOpen(false);
     setMobileSidebarOpen(false);
+    setWelcomeOpen(false);
+    window.localStorage.setItem(WELCOME_STORAGE_KEY, "done");
     setTourIndex(0);
     if (dashboardTourSteps[0]?.view) {
       setActiveView(dashboardTourSteps[0].view);
@@ -858,6 +934,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   function closeTour() {
     window.localStorage.setItem(TOUR_STORAGE_KEY, "done");
     setTourOpen(false);
+  }
+
+  function dismissWelcome() {
+    window.localStorage.setItem(WELCOME_STORAGE_KEY, "done");
+    setWelcomeOpen(false);
   }
 
   function nextTourStep() {
@@ -909,9 +990,15 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       }
       if (!response.ok) {
         setDashboardData(null);
-        setDataStatus(response.status === 503 ? "setup" : "error");
+        setDataStatus(
+          response.status === 503
+            ? "setup"
+            : response.status === 409 && payload.error === "COOPERATIVE_SCOPE_REQUIRED"
+              ? "scope"
+              : "error",
+        );
         setDataError(payload.message ?? payload.error ?? "Data dashboard belum tersedia.");
-        setPanelMessage(payload.message ?? "Postgres belum siap.");
+        setPanelMessage(payload.message ?? (response.status === 503 ? "Postgres belum siap." : "Dashboard belum siap."));
         return;
       }
       setDashboardData(payload as DashboardData);
@@ -1082,6 +1169,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   }, []);
 
   useEffect(() => {
+    const welcomeSeen = window.localStorage.getItem(WELCOME_STORAGE_KEY);
+    if (!welcomeSeen) {
+      const welcomeTimer = window.setTimeout(() => setWelcomeOpen(true), 0);
+      return () => window.clearTimeout(welcomeTimer);
+    }
     const seen = window.localStorage.getItem(TOUR_STORAGE_KEY);
     if (seen) return;
     const timer = window.setTimeout(() => setTourOpen(true), 850);
@@ -1104,6 +1196,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const stockLedger = dashboardData?.stockLedger ?? EMPTY_STOCK_LEDGER;
   const mediaEvidence = dashboardData?.mediaEvidence ?? EMPTY_MEDIA_EVIDENCE;
   const prefixedDbStatus = dashboardData?.prefixedDbStatus ?? null;
+  const hackathonSharedDb = dashboardData?.hackathonSharedDb ?? null;
   const finance = dashboardData?.finance ?? EMPTY_FINANCE;
   const reports = dashboardData?.reportSections ?? EMPTY_REPORTS;
   const reportPeriod = dashboardData?.reportPeriod ?? null;
@@ -1112,7 +1205,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     const normalized = query.trim().toLowerCase();
     if (!normalized) return queue;
     return queue.filter((item) =>
-      [item.id, item.sender, item.module, item.summary, item.status]
+      [item.id, item.source, item.module, item.summary, item.status]
         .join(" ")
         .toLowerCase()
         .includes(normalized),
@@ -1187,7 +1280,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     ? "border-white/10 bg-[#101820]"
     : "border-[#E7DED1] bg-[#FFF8EA]";
   const mutedClass = isDark ? "text-[#CFC3B2]" : "text-[#5B6871]";
-  const setupRequired = dataStatus === "setup" || dataStatus === "error";
+  const setupRequired = dataStatus === "setup" || dataStatus === "scope" || dataStatus === "error";
   const activeNavItem = navGroups.flatMap((group) => group.items).find((item) => item.view === activeView);
   const activeViewLabel =
     activeView === "overview"
@@ -1602,6 +1695,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 panelClass={panelClass}
                 innerClass={innerClass}
                 mutedClass={mutedClass}
+                kind={dataStatus === "scope" ? "scope" : dataStatus === "setup" ? "database" : "error"}
                 message={dataError}
                 onRetry={loadDashboard}
               />
@@ -1625,6 +1719,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 stockLedger={stockLedger}
                 mediaEvidence={mediaEvidence}
                 prefixedDbStatus={prefixedDbStatus}
+                hackathonSharedDb={hackathonSharedDb}
                 finance={finance}
                 reports={reports}
                 hackathonSummary={hackathonSummary}
@@ -1645,6 +1740,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 reload={loadDashboard}
                 isDark={isDark}
                 commodityHighlights={dashboardData?.commodityHighlights ?? []}
+                welcomeOpen={welcomeOpen}
+                onDismissWelcome={dismissWelcome}
+                onStartTour={openTour}
               />
             ) : activeView === "wa" ? (
               <WhatsAppView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} setPanelMessage={announce} requestConfirm={requestConfirm} />
@@ -1680,6 +1778,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 signalSpine={signalSpine}
                 signalSpineStatus={signalSpineStatus}
                 signalSpineError={signalSpineError}
+                hackathonSharedDb={hackathonSharedDb}
                 reloadHackathon={loadHackathonEvidence}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
@@ -1734,6 +1833,224 @@ type ViewClassProps = {
   innerClass: string;
   mutedClass: string;
 };
+
+type ManagedTableColumn<T> = {
+  key: string;
+  heading: string;
+  render: (row: T) => ReactNode;
+  className?: string;
+  headerClassName?: string;
+};
+
+type ManagedTableFilter<T> = {
+  value: string;
+  label: string;
+  predicate: (row: T) => boolean;
+};
+
+function normalizeListValue(value: string | number | boolean | null | undefined, fallback = "Unspecified") {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+}
+
+function createValueFilters<T>(
+  rows: T[],
+  getValue: (row: T) => string | number | boolean | null | undefined,
+): ManagedTableFilter<T>[] {
+  const values = Array.from(new Set(rows.map((row) => normalizeListValue(getValue(row))))).sort((left, right) =>
+    left.localeCompare(right, "id"),
+  );
+  return values.map((value) => ({
+    value,
+    label: value,
+    predicate: (row) => normalizeListValue(getValue(row)) === value,
+  }));
+}
+
+function ManagedTablePanel<T>({
+  panelClass,
+  innerClass,
+  mutedClass,
+  title,
+  description,
+  sourceLabel,
+  rows,
+  columns,
+  rowKey,
+  getSearchText,
+  filters = [],
+  filterLabel = "Filter",
+  emptyTitle = "Belum ada data.",
+  emptyBody = "Endpoint belum mengirim baris untuk tabel ini.",
+  pageSize = 6,
+  tableMinWidth = 760,
+  className = "",
+  rowClassName,
+}: ViewClassProps & {
+  title: string;
+  description?: string;
+  sourceLabel?: string;
+  rows: T[];
+  columns: ManagedTableColumn<T>[];
+  rowKey: (row: T) => string;
+  getSearchText: (row: T) => string;
+  filters?: ManagedTableFilter<T>[];
+  filterLabel?: string;
+  emptyTitle?: string;
+  emptyBody?: string;
+  pageSize?: number;
+  tableMinWidth?: number;
+  className?: string;
+  rowClassName?: (row: T) => string;
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const selectedFilter = activeFilter === "all" ? null : filters.find((filter) => filter.value === activeFilter) ?? null;
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (selectedFilter && !selectedFilter.predicate(row)) return false;
+      if (!normalizedSearch) return true;
+      return getSearchText(row).toLowerCase().includes(normalizedSearch);
+    });
+  }, [getSearchText, normalizedSearch, rows, selectedFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const firstVisible = filteredRows.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const lastVisible = Math.min(filteredRows.length, safePage * pageSize);
+
+  function updateSearch(value: string) {
+    setSearchTerm(value);
+    setPage(1);
+  }
+
+  function updateFilter(value: string) {
+    setActiveFilter(value);
+    setPage(1);
+  }
+
+  return (
+    <section className={`rounded-[16px] border p-5 ${panelClass} ${className}`}>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-black">{title}</h2>
+            <span className="rounded-[8px] border border-current/10 px-2 py-1 font-mono text-[11px] font-black text-[#D79A2B]">
+              {formatInteger(filteredRows.length)}/{formatInteger(rows.length)}
+            </span>
+          </div>
+          {description ? (
+            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>{description}</p>
+          ) : null}
+          {sourceLabel ? (
+            <p className={`mt-2 font-mono text-[11px] font-bold uppercase tracking-[0.12em] ${mutedClass}`}>{sourceLabel}</p>
+          ) : null}
+        </div>
+        <div className="grid w-full min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_190px] xl:w-[520px]">
+          <label className={`flex min-w-0 items-center gap-2 rounded-[12px] border px-3 py-2.5 ${innerClass}`}>
+            <Search size={16} strokeWidth={2.1} className={mutedClass} aria-hidden="true" />
+            <input
+              value={searchTerm}
+              onChange={(event) => updateSearch(event.target.value)}
+              placeholder="Cari tabel"
+              aria-label={`Cari ${title}`}
+              className="min-w-0 flex-1 bg-transparent text-sm font-normal outline-none placeholder:text-current/45"
+            />
+          </label>
+          <label className={`grid gap-1 rounded-[12px] border px-3 py-2 ${innerClass}`}>
+            <span className={`font-mono text-[10px] font-black uppercase tracking-[0.12em] ${mutedClass}`}>
+              {filterLabel}
+            </span>
+            <select
+              value={activeFilter}
+              onChange={(event) => updateFilter(event.target.value)}
+              aria-label={`${filterLabel} ${title}`}
+              className="bg-transparent text-sm font-black outline-none focus-visible:lb-focus"
+            >
+              <option value="all">Semua</option>
+              {filters.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {filter.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-5 overflow-x-auto">
+        {rows.length === 0 ? (
+          <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
+            <p>{emptyTitle}</p>
+            <p className={`mt-2 font-semibold leading-6 ${mutedClass}`}>{emptyBody}</p>
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
+            <p>Tidak ada hasil yang cocok.</p>
+            <p className={`mt-2 font-semibold leading-6 ${mutedClass}`}>Ubah pencarian atau filter tabel.</p>
+          </div>
+        ) : (
+          <table className="w-full border-collapse text-left" style={{ minWidth: tableMinWidth }}>
+            <thead>
+              <tr className="border-b border-current/10">
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] ${mutedClass} ${column.headerClassName ?? ""}`}
+                  >
+                    {column.heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-current/10">
+              {pageRows.map((row) => (
+                <tr key={rowKey(row)} className={`transition-colors hover:bg-black/5 ${rowClassName?.(row) ?? ""}`}>
+                  {columns.map((column) => (
+                    <td key={column.key} className={`px-3 py-3 align-top text-sm ${column.className ?? ""}`}>
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 border-t border-current/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className={`text-xs font-bold ${mutedClass}`}>
+          Menampilkan {formatInteger(firstVisible)}-{formatInteger(lastVisible)} dari {formatInteger(filteredRows.length)} baris
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage(Math.max(1, safePage - 1))}
+            disabled={safePage === 1}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] border disabled:cursor-not-allowed disabled:opacity-40 focus-visible:lb-focus ${innerClass}`}
+            aria-label="Halaman sebelumnya"
+          >
+            <ChevronsLeft size={15} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+          <span className="rounded-[10px] border border-current/10 px-3 py-2 font-mono text-xs font-black">
+            {formatInteger(safePage)} / {formatInteger(pageCount)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage(Math.min(pageCount, safePage + 1))}
+            disabled={safePage === pageCount}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] border disabled:cursor-not-allowed disabled:opacity-40 focus-visible:lb-focus ${innerClass}`}
+            aria-label="Halaman berikutnya"
+          >
+            <ChevronsRight size={15} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function signalSpineText(
   item: SignalSpineItem | null | undefined,
@@ -2246,23 +2563,51 @@ function SetupRequiredView({
   panelClass,
   innerClass,
   mutedClass,
+  kind,
   message,
   onRetry,
-}: ViewClassProps & { message: string; onRetry: () => void }) {
+}: ViewClassProps & { kind: "database" | "scope" | "error"; message: string; onRetry: () => void }) {
+  const isScope = kind === "scope";
+  const isDatabase = kind === "database";
+
   return (
     <section className={`rounded-[16px] border p-5 ${panelClass}`}>
-      <p className="text-sm font-black text-[#D79A2B]">Postgres diperlukan</p>
-      <h2 className="mt-2 text-2xl font-black">Dashboard menunggu database produksi lokal.</h2>
+      <p className="text-sm font-black text-[#D79A2B]">
+        {isDatabase ? "Postgres diperlukan" : isScope ? "Workspace koperasi diperlukan" : "Dashboard belum siap"}
+      </p>
+      <h2 className="mt-2 text-2xl font-black">
+        {isDatabase
+          ? "Dashboard menunggu database produksi lokal."
+          : isScope
+            ? "User login belum tersambung ke cooperative_id."
+            : "Dashboard belum berhasil memuat data operasional."}
+      </h2>
       <p className={`mt-3 max-w-3xl text-sm font-semibold leading-6 ${mutedClass}`}>
-        {message || "Isi DATABASE_URL, jalankan migrasi, lalu muat ulang dashboard."}
+        {message ||
+          (isDatabase
+            ? "Isi DATABASE_URL, jalankan migrasi, lalu muat ulang dashboard."
+            : isScope
+              ? "Logout lalu login ulang agar sesi lama diperbarui, atau cek data users.cooperative_id untuk akun demo."
+              : "Cek koneksi API dashboard lalu muat ulang.")}
       </p>
       <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-        <p className="font-black">Langkah cepat</p>
+        <p className="font-black">{isScope ? "Langkah cepat scope" : "Langkah cepat"}</p>
         <ol className={`mt-3 list-decimal space-y-2 pl-5 text-sm font-semibold leading-6 ${mutedClass}`}>
-          <li>Jalankan Postgres lokal atau gunakan Neon/Supabase.</li>
-          <li>Isi `DATABASE_URL` di `app/.env.local`.</li>
-          <li>Jalankan `npm run db:setup` dari folder `app`.</li>
-          <li>Restart `npm run dev` lalu buka dashboard lagi.</li>
+          {isScope ? (
+            <>
+              <li>Tekan logout di kanan atas atau buka `/login` untuk membuat sesi baru.</li>
+              <li>Pastikan akun demo adalah admin yang dikonfigurasi di environment server.</li>
+              <li>Jalankan `npm run db:setup` bila cooperative seed belum ada.</li>
+              <li>Dashboard akan self-heal akun admin demo lama ke koperasi default saat seed tersedia.</li>
+            </>
+          ) : (
+            <>
+              <li>Jalankan Postgres lokal atau gunakan Neon/Supabase.</li>
+              <li>Isi `DATABASE_URL` di `.env.local` root repo.</li>
+              <li>Jalankan `npm run db:setup` dari root repo.</li>
+              <li>Restart `npm run dev` lalu buka dashboard lagi.</li>
+            </>
+          )}
         </ol>
       </div>
       <button
@@ -2270,7 +2615,7 @@ function SetupRequiredView({
         onClick={onRetry}
         className="mt-5 inline-flex rounded-[12px] bg-[#C92A2A] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
       >
-        Cek ulang koneksi
+        {isScope ? "Cek ulang scope" : "Cek ulang koneksi"}
       </button>
     </section>
   );
@@ -2315,6 +2660,94 @@ function GuidedDemoDock({
   );
 }
 
+function DashboardWelcomePanel({
+  panelClass,
+  innerClass,
+  mutedClass,
+  systemStatus,
+  onDismiss,
+  onStartTour,
+  onOpenView,
+}: ViewClassProps & {
+  systemStatus: string;
+  onDismiss: () => void;
+  onStartTour: () => void;
+  onOpenView: (view: string) => void;
+}) {
+  const highlights = [
+    ["MVP flow", "Dashboard, peta, score, buyer, finance, dan laporan tetap berurutan untuk demo."],
+    ["Data safety", "Sample/aggregate only; tidak menampilkan PII atau buyer bernama sebagai fakta."],
+    ["Human review", "AI membuat rekomendasi, operator dan pengurus mengunci keputusan."],
+    ["Evidence tables", "Queue, stok, buyer, finance, ledger, dan media evidence bisa dicari, difilter, dan dipaginasi."],
+  ];
+
+  return (
+    <section className={`mb-5 rounded-[16px] border p-5 ${panelClass}`}>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">
+            Welcome onboarding
+          </p>
+          <h2 className="mt-2 text-2xl font-black">Mulai dari alur MVP, bukan angka palsu.</h2>
+          <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+            Panel ini menjaga demo pertama tetap pada jalur operasional: verifikasi data, readiness stok, buyer archetype, pembiayaan komite, dan laporan aksi.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge tone={systemStatus === "Postgres Operational" ? "success" : "warning"}>{systemStatus}</StatusBadge>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] border focus-visible:lb-focus ${innerClass}`}
+            aria-label="Tutup welcome onboarding"
+          >
+            <X size={15} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {highlights.map(([label, detail]) => (
+          <div key={label} className={`rounded-[12px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black text-[#D79A2B]">{label}</p>
+            <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <button
+          type="button"
+          onClick={onStartTour}
+          className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#C92A2A] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+        >
+          <Play size={16} strokeWidth={2.2} aria-hidden="true" />
+          Mulai tur MVP
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenView("lumbung-data")}
+          className={`inline-flex items-center justify-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-extrabold focus-visible:lb-focus ${innerClass}`}
+        >
+          <Database size={16} strokeWidth={2.2} aria-hidden="true" />
+          Buka meja data
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onDismiss();
+            window.location.href = "/peta-unggulan";
+          }}
+          className={`inline-flex items-center justify-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-extrabold focus-visible:lb-focus ${innerClass}`}
+        >
+          <MapPinned size={16} strokeWidth={2.2} aria-hidden="true" />
+          Buka peta standalone
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function OverviewView({
   panelClass,
   innerClass,
@@ -2327,6 +2760,7 @@ function OverviewView({
   stockLedger,
   mediaEvidence,
   prefixedDbStatus,
+  hackathonSharedDb,
   finance,
   reports,
   hackathonSummary,
@@ -2347,6 +2781,9 @@ function OverviewView({
   reload,
   isDark,
   commodityHighlights,
+  welcomeOpen,
+  onDismissWelcome,
+  onStartTour,
 }: ViewClassProps & {
   metrics: MetricItem[];
   filteredQueue: QueueItem[];
@@ -2356,6 +2793,7 @@ function OverviewView({
   stockLedger: StockLedgerEntry[];
   mediaEvidence: MediaEvidence[];
   prefixedDbStatus: PrefixedDbStatus | null;
+  hackathonSharedDb: HackathonDashboardEvidence | null;
   finance: FinanceRequest[];
   reports: ReportSection[];
   hackathonSummary: HackathonMvpSummary | null;
@@ -2376,6 +2814,9 @@ function OverviewView({
   reload: () => Promise<void>;
   isDark: boolean;
   commodityHighlights: CommodityHighlight[];
+  welcomeOpen: boolean;
+  onDismissWelcome: () => void;
+  onStartTour: () => void;
 }) {
   const kpiIcons = [MessageCircle, FileCheck2, Warehouse, ClipboardCheck];
   const kpiTones = ["#1D5D8F", "#D79A2B", "#C92A2A", "#88D982"];
@@ -2426,6 +2867,20 @@ function OverviewView({
       : "Belum ada ranked area";
   const financingTotals = hackathonFinancingReadiness?.totals;
   const readyPrefixedTables = prefixedDbStatus?.tables.filter((table) => table.status === "ready").length ?? 0;
+  const dashboardSharedDbRowCount = hackathonSharedDb
+    ? hackathonSharedDb.tables.productRows.length +
+      hackathonSharedDb.tables.areaRows.length +
+      hackathonSharedDb.tables.financingRows.length +
+      hackathonSharedDb.tables.transactionRows.length
+    : 0;
+  const dashboardSharedDbStatus =
+    hackathonSharedDb?.status === "ready"
+      ? `${formatInteger(dashboardSharedDbRowCount)} aggregate rows`
+      : hackathonSharedDb?.status === "setup-required"
+        ? "env missing"
+        : hackathonSharedDb?.status === "query-error"
+          ? "query check"
+          : "auth gated";
   const evidenceCards = [
     {
       label: "/api/dashboard",
@@ -2433,6 +2888,16 @@ function OverviewView({
       detail: `${formatInteger(stockLedger.length)} ledger, ${formatInteger(mediaEvidence.length)} media evidence, ${formatInteger(buyerRequirements.length)} buyer requirements`,
       source: prefixedDbStatus ? `${readyPrefixedTables}/${prefixedDbStatus.tables.length} prefixed tables ready` : "prefixed table status belum tersedia",
       toneClass: "text-[#88D982]",
+    },
+    {
+      label: "/api/dashboard shared-db",
+      value: dashboardSharedDbStatus,
+      detail:
+        hackathonSharedDb?.status === "ready"
+          ? `${formatInteger(hackathonSharedDb.tables.productRows.length)} produk, ${formatInteger(hackathonSharedDb.tables.areaRows.length)} area, ${formatInteger(hackathonSharedDb.tables.financingRows.length)} pembiayaan, ${formatInteger(hackathonSharedDb.tables.transactionRows.length)} transaksi`
+          : hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB aggregate belum tersedia.",
+      source: `prefix ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`,
+      toneClass: hackathonSharedDb?.status === "ready" ? "text-[#88D982]" : "text-[#D79A2B]",
     },
     {
       label: "/api/hackathon/*",
@@ -2599,6 +3064,94 @@ function OverviewView({
       note: "Script can be copied, but cannot be sent without operator/pengurus approval.",
     },
   ];
+  const overviewQueueFilters = useMemo(
+    () => [
+      {
+        value: "pending-review",
+        label: "Perlu review",
+        predicate: (item: QueueItem) => item.status !== "Sudah Disetujui",
+      },
+      {
+        value: "approved",
+        label: "Disetujui",
+        predicate: (item: QueueItem) => item.status === "Sudah Disetujui",
+      },
+      ...createValueFilters(filteredQueue, (item) => item.module).map((filter) => ({
+        ...filter,
+        value: `module:${filter.value}`,
+        label: `Modul: ${filter.label}`,
+      })),
+    ],
+    [filteredQueue],
+  );
+  const overviewQueueColumns: ManagedTableColumn<QueueItem>[] = [
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => {
+        const approved = item.status === "Sudah Disetujui";
+        return (
+          <span className={`inline-flex items-center gap-2 text-xs font-black ${approved ? "text-[#88D982]" : "text-[#D79A2B]"}`}>
+            <span className={`h-2 w-2 rounded-full ${approved ? "bg-[#88D982]" : "bg-[#D79A2B]"}`} />
+            {approved ? "VERIFIED" : "PENDING"}
+          </span>
+        );
+      },
+    },
+    {
+      key: "record",
+      heading: "Record",
+      render: (item) => (
+        <div>
+          <p className="font-mono text-xs font-black">{item.id}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.source}</p>
+        </div>
+      ),
+    },
+    {
+      key: "summary",
+      heading: "Summary",
+      render: (item) => <p className="max-w-[360px] text-sm font-semibold leading-6">{item.summary}</p>,
+    },
+    {
+      key: "module",
+      heading: "Module",
+      render: (item) => (
+        <span className="rounded-[3px] border border-[#D79A2B]/35 bg-[#1F2933] px-2 py-1 font-mono text-[10px] font-black uppercase text-[#D79A2B]">
+          {item.module}
+        </span>
+      ),
+    },
+    {
+      key: "action",
+      heading: "Action",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => {
+        const approved = item.status === "Sudah Disetujui";
+        return (
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => openModule(item.module)}
+              className={`rounded-[8px] border px-3 py-1.5 text-xs font-black focus-visible:lb-focus ${innerClass}`}
+            >
+              Inspect
+            </button>
+            <button
+              type="button"
+              onClick={() => (approved ? askFarmer(item.id) : approveDraft(item.id))}
+              className={`rounded-[8px] px-3 py-1.5 text-xs font-black focus-visible:lb-focus ${
+                approved ? "border border-[#88D982]/30 text-[#88D982]" : "bg-[#C92A2A] text-[#FFE5E2]"
+              }`}
+            >
+              {approved ? "Details" : "Review"}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <>
@@ -2615,6 +3168,22 @@ function OverviewView({
           </p>
         </div>
       </section>
+
+      {welcomeOpen ? (
+        <DashboardWelcomePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          systemStatus={systemStatus}
+          onDismiss={onDismissWelcome}
+          onStartTour={onStartTour}
+          onOpenView={(view) => {
+            onDismissWelcome();
+            setActiveView(view);
+            setPanelMessage("Meja data dibuka dari welcome onboarding.", "info");
+          }}
+        />
+      ) : null}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {visibleMetrics.map((metric, index) => {
@@ -2798,89 +3367,26 @@ function OverviewView({
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div data-tour="work-queue" className="flex min-h-[310px] flex-col rounded-[4px] border border-[#1F2933] bg-[#172027]">
-          <div className="flex flex-col gap-3 border-b border-[#1F2933] p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-black text-[#FFF8EA]">Antrian Kerja Operator</h2>
-            </div>
-            <p className="text-xs font-semibold text-[#CFC3B2]/55">Last update: dari API dashboard</p>
-          </div>
-
-          <div className="overflow-x-auto">
-            {filteredQueue.length ? (
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-[#1F2933] bg-[#111A20]/60">
-                    {["Status", "Source", "Module", "Action"].map((heading) => (
-                      <th key={heading} className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-[#CFC3B2]/55">
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1F2933]">
-                  {filteredQueue.slice(0, 5).map((item, index) => {
-                    const approved = item.status === "Sudah Disetujui";
-                    const urgent = index === 0 && !approved;
-                    const statusColor = approved ? "#88D982" : urgent ? "#FFB4AC" : "#D79A2B";
-                    return (
-                      <tr key={item.id} className="transition-colors hover:bg-[#2B1C1A]">
-                        <td className="px-4 py-3">
-                          <span className="flex items-center gap-2 text-xs font-black" style={{ color: statusColor }}>
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
-                            {approved ? "VERIFIED" : urgent ? "URGENT" : "PENDING"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            <span className="font-mono text-xs font-black text-[#FFF8EA]">{item.id}</span>
-                            <span className="mt-1 text-[11px] font-semibold text-[#CFC3B2]/45">{item.source}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-[3px] border border-[#D79A2B]/35 bg-[#1F2933] px-2 py-1 font-mono text-[10px] font-black uppercase text-[#D79A2B]">
-                            {item.module}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openModule(item.module)}
-                              className="rounded-[3px] border border-[#1F2933] px-3 py-1.5 text-xs font-black text-[#CFC3B2] hover:bg-[#42302E] focus-visible:lb-focus"
-                            >
-                              Inspect
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => (approved ? askFarmer(item.id) : approveDraft(item.id))}
-                              className={`rounded-[3px] px-3 py-1.5 text-xs font-black focus-visible:lb-focus ${
-                                approved ? "border border-[#88D982]/30 text-[#88D982]" : "bg-[#C92A2A] text-[#FFE5E2]"
-                              }`}
-                            >
-                              {approved ? "Details" : "Review"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-10 text-center">
-                <p className="text-lg font-black text-[#FFF8EA]">Tidak ada catatan yang cocok.</p>
-                <p className="mt-2 text-sm font-semibold text-[#CFC3B2]">
-                  Ubah kata kunci pencarian atau kosongkan input.
-                </p>
-              </div>
-            )}
-          </div>
-          <div className="mt-auto border-t border-[#1F2933] bg-[#111A20]/60 p-3">
-            <p className="text-center text-[11px] font-semibold italic text-[#CFC3B2]/35">
-              Semua aksi dicatat ke log audit sistem. Keputusan tetap human-reviewed.
-            </p>
-          </div>
+        <div data-tour="work-queue">
+          <ManagedTablePanel
+            panelClass="border-[#1F2933] bg-[#172027] text-[#F8F4EA]"
+            innerClass="border-[#1F2933] bg-[#111A20] text-[#F8F4EA]"
+            mutedClass="text-[#CFC3B2]"
+            title="Antrian Kerja Operator"
+            description="Cari, filter, dan paginasi queue dari /api/dashboard. Tampilan ini memakai ID/source, bukan data pribadi warga."
+            sourceLabel="Last update: dari API dashboard - keputusan tetap human-reviewed"
+            rows={filteredQueue}
+            columns={overviewQueueColumns}
+            rowKey={(item) => item.id}
+            getSearchText={(item) => [item.id, item.source, item.module, item.summary, item.status].join(" ")}
+            filters={overviewQueueFilters}
+            filterLabel="Status/modul"
+            emptyTitle="Belum ada queue operator."
+            emptyBody="Queue akan muncul setelah pesan warga atau input operator tersimpan."
+            pageSize={5}
+            tableMinWidth={840}
+            className="min-h-[310px]"
+          />
         </div>
 
         <aside className="space-y-4">
@@ -3251,6 +3757,7 @@ function LumbungDataView({
   signalSpine,
   signalSpineStatus,
   signalSpineError,
+  hackathonSharedDb,
   reloadHackathon,
   approveDraft,
   askFarmer,
@@ -3268,6 +3775,7 @@ function LumbungDataView({
   signalSpine: SignalSpinePayload | null;
   signalSpineStatus: SignalSpineStatus;
   signalSpineError: string;
+  hackathonSharedDb: HackathonDashboardEvidence | null;
   reloadHackathon: () => Promise<void>;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
@@ -3476,6 +3984,221 @@ function LumbungDataView({
       label: "Financing readiness",
       value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} verified` : "n/a",
       note: "readiness only; bukan approval pembiayaan",
+    },
+  ];
+  const lumbungQueueFilters = useMemo(
+    () => [
+      {
+        value: "pending-review",
+        label: "Perlu review",
+        predicate: (item: QueueItem) => item.status !== "Sudah Disetujui",
+      },
+      {
+        value: "approved",
+        label: "Disetujui",
+        predicate: (item: QueueItem) => item.status === "Sudah Disetujui",
+      },
+      ...createValueFilters(filteredQueue, (item) => item.module).map((filter) => ({
+        ...filter,
+        value: `module:${filter.value}`,
+        label: `Modul: ${filter.label}`,
+      })),
+    ],
+    [filteredQueue],
+  );
+  const lumbungQueueColumns: ManagedTableColumn<QueueItem>[] = [
+    {
+      key: "record",
+      heading: "Record",
+      render: (item) => (
+        <div>
+          <p className="font-mono text-xs font-black">{item.id}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.source}</p>
+        </div>
+      ),
+    },
+    {
+      key: "summary",
+      heading: "Ringkasan",
+      render: (item) => <p className="max-w-[420px] text-sm font-semibold leading-6">{item.summary}</p>,
+    },
+    {
+      key: "module",
+      heading: "Modul",
+      render: (item) => <span className="text-xs font-black text-[#D79A2B]">{item.module}</span>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => (
+        <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
+          {item.status}
+        </span>
+      ),
+    },
+    {
+      key: "action",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => (
+        <button
+          type="button"
+          onClick={() => setSelectedId(item.id)}
+          className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${
+            selected?.id === item.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+          }`}
+        >
+          Detail
+        </button>
+      ),
+    },
+  ];
+  const dashboardSharedDbStatusLabel =
+    hackathonSharedDb?.status === "ready"
+      ? "ready"
+      : hackathonSharedDb?.status === "setup-required"
+        ? "missing env"
+        : hackathonSharedDb?.status === "query-error"
+          ? "query error"
+          : "auth required";
+  const dashboardSharedProductRows = hackathonSharedDb?.tables.productRows ?? [];
+  const dashboardSharedAreaRows = hackathonSharedDb?.tables.areaRows ?? [];
+  const dashboardSharedFinancingRows = hackathonSharedDb?.tables.financingRows ?? [];
+  const dashboardSharedTransactionRows = hackathonSharedDb?.tables.transactionRows ?? [];
+  const sharedProductColumns: ManagedTableColumn<HackathonDashboardProductRow>[] = [
+    {
+      key: "category",
+      heading: "Kategori produk",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.productCategory}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.caveat}</p>
+        </div>
+      ),
+    },
+    {
+      key: "rows",
+      heading: "Rows",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.rows)}</span>,
+    },
+    {
+      key: "cooperatives",
+      heading: "Koperasi",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.cooperatives)}</span>,
+    },
+    {
+      key: "stock",
+      heading: "Stok aggregate",
+      render: (item) => (
+        <div>
+          <p className="font-mono text-sm font-black">{formatInteger(item.stockTotal)}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatInteger(item.inventoryRows)} inventory rows</p>
+        </div>
+      ),
+    },
+    {
+      key: "generic",
+      heading: "Generic label",
+      render: (item) => (
+        <span className={item.genericLabels > 0 ? "font-mono text-sm font-black text-[#C92A2A]" : "font-mono text-sm font-black text-[#2F7D32]"}>
+          {formatInteger(item.genericLabels)}
+        </span>
+      ),
+    },
+  ];
+  const sharedAreaColumns: ManagedTableColumn<HackathonDashboardAreaRow>[] = [
+    {
+      key: "province",
+      heading: "Provinsi",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.province}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.source}</p>
+        </div>
+      ),
+    },
+    {
+      key: "coverage",
+      heading: "Wilayah",
+      render: (item) => (
+        <p className="font-mono text-xs font-black">
+          {formatInteger(item.regencies)} kab / {formatInteger(item.districts)} kec / {formatInteger(item.villages)} desa
+        </p>
+      ),
+    },
+    {
+      key: "commodities",
+      heading: "Komoditas",
+      render: (item) => (
+        <p className="font-mono text-xs font-black">
+          {formatInteger(item.commodityRows)} rows / {formatInteger(item.commodities)} refs
+        </p>
+      ),
+    },
+    {
+      key: "cooperatives",
+      heading: "Koperasi",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.cooperatives)}</span>,
+    },
+    {
+      key: "potential",
+      heading: "Nilai potensi",
+      render: (item) => <span className="font-mono text-xs font-black">{formatRupiah(item.potentialValue)}</span>,
+    },
+  ];
+  const sharedFinancingColumns: ManagedTableColumn<HackathonDashboardFinancingRow>[] = [
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => <span className="font-black">{item.status}</span>,
+    },
+    {
+      key: "channel",
+      heading: "Kanal/tujuan",
+      render: (item) => <span className={`text-sm font-semibold ${mutedClass}`}>{item.channel}</span>,
+    },
+    {
+      key: "requests",
+      heading: "Requests",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.requests)}</span>,
+    },
+    {
+      key: "amount",
+      heading: "Amount",
+      render: (item) => <span className="font-mono text-sm font-black">{formatRupiah(item.amount)}</span>,
+    },
+    {
+      key: "caveat",
+      heading: "Caveat",
+      render: (item) => <p className={`max-w-[320px] text-xs font-semibold leading-5 ${mutedClass}`}>{item.caveat}</p>,
+    },
+  ];
+  const sharedTransactionColumns: ManagedTableColumn<HackathonDashboardTransactionRow>[] = [
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => <span className="font-black">{item.status}</span>,
+    },
+    {
+      key: "channel",
+      heading: "Kanal",
+      render: (item) => <span className={`text-sm font-semibold ${mutedClass}`}>{item.channel}</span>,
+    },
+    {
+      key: "transactions",
+      heading: "Transaksi",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.transactions)}</span>,
+    },
+    {
+      key: "amount",
+      heading: "Amount",
+      render: (item) => <span className="font-mono text-sm font-black">{formatRupiah(item.amount)}</span>,
+    },
+    {
+      key: "cooperatives",
+      heading: "Koperasi",
+      render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.cooperatives)}</span>,
     },
   ];
 
@@ -3872,45 +4595,154 @@ function LumbungDataView({
         )}
       </article>
 
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-black">Meja verifikasi data warga</h2>
-            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-              Queue dari WhatsApp, voice note, dan input operator dibaca sebagai catatan terstruktur sebelum masuk stok, pembiayaan, atau pasar.
-            </p>
-          </div>
-          <StatusBadge tone="service">{completed}/{filteredQueue.length} selesai</StatusBadge>
-        </div>
-
-        <div className="mt-5 space-y-3">
-          {filteredQueue.length === 0 ? (
-            <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
-              Tidak ada queue sesuai pencarian. Coba kata kunci warga, modul, atau status lain.
+      <div className="xl:col-span-2 grid gap-5">
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">
+                Dashboard shared DB aggregate
+              </p>
+              <h2 className="mt-2 text-xl font-black">Produk, wilayah, pembiayaan, dan transaksi dari shared DB.</h2>
+              <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+                Data di bawah datang dari payload `/api/dashboard.hackathonSharedDb`, dibaca server-side sebagai agregat read-only. Tidak ada NIK, telepon, alamat, raw dokumen, foto, atau buyer bernama yang dipilih.
+              </p>
             </div>
-          ) : (
-            filteredQueue.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                className={`w-full rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${
-                  selected?.id === item.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
-                }`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-black">{item.id} · {item.sender}</span>
-                  <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
-                    {item.status}
-                  </span>
-                </div>
-                <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{item.summary}</p>
-                <p className="mt-3 text-xs font-black text-[#D79A2B]">{item.source} · {item.module}</p>
-              </button>
-            ))
-          )}
+            <StatusBadge tone={hackathonSharedDb?.status === "ready" ? "success" : "warning"}>
+              {dashboardSharedDbStatusLabel}
+            </StatusBadge>
+          </div>
+          {hackathonSharedDb?.schemaScope?.description ? (
+            <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${innerClass}`}>
+              {hackathonSharedDb.schemaScope.description}
+            </p>
+          ) : null}
+          {hackathonSharedDb?.error ? (
+            <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${dangerRowClass}`}>
+              {hackathonSharedDb.error.code}: aggregate query perlu dicek di server. Dashboard utama tetap memakai data app-owned Postgres.
+            </p>
+          ) : null}
+        </article>
+
+        <div className="grid gap-5 2xl:grid-cols-2">
+          <ManagedTablePanel
+            panelClass={panelClass}
+            innerClass={innerClass}
+            mutedClass={mutedClass}
+            title="Kategori produk shared DB"
+            description="Produk raw dikelompokkan menjadi kategori luas agar tidak menjadi klaim buyer/offtaker bernama."
+            sourceLabel={`Source: /api/dashboard.hackathonSharedDb.tables.productRows - ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`}
+            rows={dashboardSharedProductRows}
+            columns={sharedProductColumns}
+            rowKey={(item) => item.productCategory}
+            getSearchText={(item) => [item.productCategory, item.rows, item.cooperatives, item.inventoryRows, item.source, item.caveat].join(" ")}
+            filters={createValueFilters(dashboardSharedProductRows, (item) => item.productCategory)}
+            filterLabel="Kategori"
+            emptyTitle="Agregat produk belum tersedia."
+            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows produk."}
+            pageSize={5}
+            tableMinWidth={860}
+          />
+
+          <ManagedTablePanel
+            panelClass={panelClass}
+            innerClass={innerClass}
+            mutedClass={mutedClass}
+            title="Area dan komoditas shared DB"
+            description="Sinyal wilayah/provinsi dipakai untuk prioritas eksplorasi peta dan opportunity score."
+            sourceLabel="Source: referensi_wilayah + referensi_komoditas_desa aggregate"
+            rows={dashboardSharedAreaRows}
+            columns={sharedAreaColumns}
+            rowKey={(item) => item.province}
+            getSearchText={(item) => [item.province, item.regencies, item.districts, item.villages, item.commodityRows, item.commodities, item.cooperatives, item.potentialValue].join(" ")}
+            filters={createValueFilters(dashboardSharedAreaRows, (item) => item.province)}
+            filterLabel="Provinsi"
+            emptyTitle="Agregat wilayah belum tersedia."
+            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows wilayah."}
+            pageSize={5}
+            tableMinWidth={880}
+          />
+
+          <ManagedTablePanel
+            panelClass={panelClass}
+            innerClass={innerClass}
+            mutedClass={mutedClass}
+            title="Pembiayaan aggregate"
+            description="Dipakai sebagai readiness dan business analyst guardrail, bukan approval atau credit scoring otomatis."
+            sourceLabel="Source: pengajuan_pembiayaan aggregate"
+            rows={dashboardSharedFinancingRows}
+            columns={sharedFinancingColumns}
+            rowKey={(item) => `${item.status}-${item.channel}`}
+            getSearchText={(item) => [item.status, item.channel, item.requests, item.amount, item.source, item.caveat].join(" ")}
+            filters={[
+              ...createValueFilters(dashboardSharedFinancingRows, (item) => item.status).map((filter) => ({
+                ...filter,
+                value: `status:${filter.value}`,
+                label: `Status: ${filter.label}`,
+              })),
+              ...createValueFilters(dashboardSharedFinancingRows, (item) => item.channel).map((filter) => ({
+                ...filter,
+                value: `channel:${filter.value}`,
+                label: `Kanal: ${filter.label}`,
+              })),
+            ]}
+            filterLabel="Status/kanal"
+            emptyTitle="Agregat pembiayaan belum tersedia."
+            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows pembiayaan."}
+            pageSize={5}
+            tableMinWidth={860}
+          />
+
+          <ManagedTablePanel
+            panelClass={panelClass}
+            innerClass={innerClass}
+            mutedClass={mutedClass}
+            title="Transaksi aggregate"
+            description="Dipakai sebagai demand/cashflow proxy sample, bukan live demand atau data pelanggan."
+            sourceLabel="Source: transaksi_penjualan aggregate"
+            rows={dashboardSharedTransactionRows}
+            columns={sharedTransactionColumns}
+            rowKey={(item) => `${item.status}-${item.channel}`}
+            getSearchText={(item) => [item.status, item.channel, item.transactions, item.amount, item.cooperatives, item.source, item.caveat].join(" ")}
+            filters={[
+              ...createValueFilters(dashboardSharedTransactionRows, (item) => item.status).map((filter) => ({
+                ...filter,
+                value: `status:${filter.value}`,
+                label: `Status: ${filter.label}`,
+              })),
+              ...createValueFilters(dashboardSharedTransactionRows, (item) => item.channel).map((filter) => ({
+                ...filter,
+                value: `channel:${filter.value}`,
+                label: `Kanal: ${filter.label}`,
+              })),
+            ]}
+            filterLabel="Status/kanal"
+            emptyTitle="Agregat transaksi belum tersedia."
+            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows transaksi."}
+            pageSize={5}
+            tableMinWidth={860}
+          />
         </div>
-      </article>
+      </div>
+
+      <ManagedTablePanel
+        panelClass={panelClass}
+        innerClass={innerClass}
+        mutedClass={mutedClass}
+        title="Meja verifikasi data warga"
+        description="Queue dari WhatsApp, voice note, dan input operator dibaca sebagai catatan terstruktur sebelum masuk stok, pembiayaan, atau pasar."
+        sourceLabel={`${completed}/${filteredQueue.length} selesai - ID/source only, no visible PII`}
+        rows={filteredQueue}
+        columns={lumbungQueueColumns}
+        rowKey={(item) => item.id}
+        getSearchText={(item) => [item.id, item.source, item.module, item.summary, item.status].join(" ")}
+        filters={lumbungQueueFilters}
+        filterLabel="Status/modul"
+        emptyTitle="Belum ada queue verifikasi."
+        emptyBody="Queue akan muncul setelah input warga/operator masuk ke dashboard."
+        pageSize={5}
+        tableMinWidth={880}
+        rowClassName={(item) => (selected?.id === item.id ? "bg-[#D79A2B]/10" : "")}
+      />
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         {selected ? (
@@ -4022,51 +4854,102 @@ function GeraiPintarView({
     setPanelMessage("Draft pesanan supplier diunduh dari data stok Postgres.", "success");
   }
 
+  const geraiStockFilters: ManagedTableFilter<StockItem>[] = [
+    {
+      value: "needs-restock",
+      label: "Perlu restock",
+      predicate: (item) => item.state !== "Stok Aman" || Boolean(item.restockRequested),
+    },
+    ...createValueFilters(geraiItems, (item) => item.state).map((filter) => ({
+      ...filter,
+      value: `state:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+  ];
+  const geraiStockColumns: ManagedTableColumn<StockItem>[] = [
+    {
+      key: "item",
+      heading: "Item",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.name}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "unit",
+      heading: "Unit",
+      render: (item) => <span className="font-mono text-xs font-black text-[#D79A2B]">{item.unit}</span>,
+    },
+    {
+      key: "state",
+      heading: "Status",
+      render: (item) => {
+        const level = item.restockRequested ? 86 : getLevel(item.state);
+        return (
+          <div>
+            <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
+              level < 45 ? "bg-[#FFE3E3] text-[#9B1C1C]" : "bg-[#E7F5E8] text-[#236327]"
+            }`}>
+              {item.restockRequested ? "Restock diajukan" : item.state}
+            </span>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/10">
+              <div className="h-full rounded-full bg-[#2F7D32]" style={{ width: `${level}%` }} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "location",
+      heading: "Lokasi",
+      render: (item) => <span className={`text-sm font-semibold ${mutedClass}`}>{item.location}</span>,
+    },
+    {
+      key: "action",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => (
+        <button
+          type="button"
+          onClick={() =>
+            requestConfirm({
+              title: `Buat restock ${item.name}?`,
+              message: "Draft restock akan ditandai di Postgres untuk ditindaklanjuti petugas gerai.",
+              confirmLabel: "Buat restock",
+              onConfirm: () => requestRestock(item),
+            })
+          }
+          className="rounded-[10px] bg-[#C92A2A] px-3 py-2 text-xs font-extrabold text-white focus-visible:lb-focus"
+        >
+          Buat restock
+        </button>
+      ),
+    },
+  ];
+
   return (
     <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">Rak gerai dan batas restock</h2>
-        <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Operator gerai melihat stok harian, status batas minimum, dan membuat draft pembelian kolektif.
-        </p>
-        <div className="mt-5 space-y-4">
-          {geraiItems.map((item) => {
-            const level = item.restockRequested ? 86 : getLevel(item.state);
-            return (
-              <div key={item.name} className={`rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-black">{item.name}</p>
-                    <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>{item.unit} · {item.location}</p>
-                  </div>
-                  <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
-                    level < 45 ? "bg-[#FFE3E3] text-[#9B1C1C]" : "bg-[#E7F5E8] text-[#236327]"
-                  }`}>
-                    {item.restockRequested ? "Restock diajukan" : item.state}
-                  </span>
-                </div>
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-black/10">
-                  <div className="h-full rounded-full bg-[#2F7D32]" style={{ width: `${level}%` }} />
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    requestConfirm({
-                      title: `Buat restock ${item.name}?`,
-                      message: "Draft restock akan ditandai di Postgres untuk ditindaklanjuti petugas gerai.",
-                      confirmLabel: "Buat restock",
-                      onConfirm: () => requestRestock(item),
-                    })
-                  }
-                  className="mt-4 inline-flex rounded-[10px] bg-[#C92A2A] px-3 py-2 text-sm font-extrabold text-white focus-visible:lb-focus"
-                >
-                  Buat restock
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </article>
+      <ManagedTablePanel
+        panelClass={panelClass}
+        innerClass={innerClass}
+        mutedClass={mutedClass}
+        title="Rak gerai dan batas restock"
+        description="Operator gerai melihat stok harian, status batas minimum, dan membuat draft pembelian kolektif."
+        sourceLabel="Source: /api/dashboard stocks"
+        rows={geraiItems}
+        columns={geraiStockColumns}
+        rowKey={(item) => item.id}
+        getSearchText={(item) => [item.id, item.name, item.unit, item.state, item.location].join(" ")}
+        filters={geraiStockFilters}
+        filterLabel="Status"
+        emptyTitle="Belum ada stok gerai."
+        emptyBody="Stok gerai akan muncul setelah item lokasi Gerai tersimpan."
+        pageSize={6}
+        tableMinWidth={860}
+      />
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h3 className="text-xl font-black">Saran belanja kolektif</h3>
@@ -4115,10 +4998,10 @@ function StokLogistikView({
 
   function exportManifest() {
     const rows = [
-      ["record_id", "sender", "summary", "status", "scheduled"],
+      ["record_id", "source", "summary", "status", "scheduled"],
       ...logisticsQueue.map((item) => [
         item.id,
-        item.sender,
+        item.source,
         item.summary,
         item.status,
         scheduled.includes(item.id),
@@ -4146,80 +5029,277 @@ function StokLogistikView({
     setPanelMessage("Manifest logistik diunduh dari queue dan stok Postgres.", "success");
   }
 
+  const logisticsQueueFilters: ManagedTableFilter<QueueItem>[] = [
+    {
+      value: "scheduled",
+      label: "Pickup terjadwal",
+      predicate: (item) => scheduled.includes(item.id),
+    },
+    {
+      value: "unscheduled",
+      label: "Belum dijadwalkan",
+      predicate: (item) => !scheduled.includes(item.id),
+    },
+    ...createValueFilters(logisticsQueue, (item) => item.status).map((filter) => ({
+      ...filter,
+      value: `status:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+  ];
+  const logisticsQueueColumns: ManagedTableColumn<QueueItem>[] = [
+    {
+      key: "record",
+      heading: "Record",
+      render: (item) => (
+        <div>
+          <p className="font-mono text-xs font-black">{item.id}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.source}</p>
+        </div>
+      ),
+    },
+    {
+      key: "summary",
+      heading: "Pickup",
+      render: (item) => <p className="max-w-[420px] text-sm font-semibold leading-6">{item.summary}</p>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => (
+        <span className="rounded-[8px] bg-[#E7F5E8] px-2 py-1 text-[11px] font-black text-[#236327]">
+          {scheduled.includes(item.id) ? "Pickup terjadwal" : item.status}
+        </span>
+      ),
+    },
+    {
+      key: "action",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (item) => (
+        <button
+          type="button"
+          onClick={() => {
+            setScheduled((current) => (current.includes(item.id) ? current : [...current, item.id]));
+            setPanelMessage(`${item.id}: jadwal pickup Jumat pagi dibuat untuk dicek kendaraan dan gudang.`, "success");
+          }}
+          className="rounded-[10px] bg-[#1D5D8F] px-3 py-2 text-xs font-extrabold text-white focus-visible:lb-focus"
+        >
+          Jadwalkan
+        </button>
+      ),
+    },
+  ];
+  const warehouseFilters = [
+    ...createValueFilters(warehouseItems, (item) => item.state).map((filter) => ({
+      ...filter,
+      value: `state:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+    ...createValueFilters(warehouseItems, (item) => item.location).map((filter) => ({
+      ...filter,
+      value: `location:${filter.value}`,
+      label: `Lokasi: ${filter.label}`,
+    })),
+  ];
+  const warehouseColumns: ManagedTableColumn<StockItem>[] = [
+    {
+      key: "item",
+      heading: "Item",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.name}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "unit",
+      heading: "Unit",
+      render: (item) => <span className="font-mono text-xs font-black text-[#D79A2B]">{item.unit}</span>,
+    },
+    {
+      key: "state",
+      heading: "Status",
+      render: (item) => <span className="text-sm font-black">{item.state}</span>,
+    },
+    {
+      key: "location",
+      heading: "Lokasi",
+      render: (item) => <span className={`text-sm font-semibold ${mutedClass}`}>{item.location}</span>,
+    },
+  ];
+  const ledgerFilters = [
+    ...createValueFilters(stockLedger, (item) => item.movementType).map((filter) => ({
+      ...filter,
+      value: `move:${filter.value}`,
+      label: `Movement: ${filter.label}`,
+    })),
+    ...createValueFilters(stockLedger, (item) => item.readinessStatus).map((filter) => ({
+      ...filter,
+      value: `readiness:${filter.value}`,
+      label: `Readiness: ${filter.label}`,
+    })),
+  ];
+  const ledgerColumns: ManagedTableColumn<StockLedgerEntry>[] = [
+    {
+      key: "stock",
+      heading: "Stock",
+      render: (entry) => (
+        <div>
+          <p className="font-black">{entry.stockName}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{entry.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "movement",
+      heading: "Movement",
+      render: (entry) => <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">{entry.movementType}</span>,
+    },
+    {
+      key: "quantity",
+      heading: "Qty",
+      render: (entry) => <span className="font-mono text-xs font-black">{formatInteger(entry.quantity)} {entry.unitLabel}</span>,
+    },
+    {
+      key: "readiness",
+      heading: "Readiness",
+      render: (entry) => <span className="text-sm font-black text-[#D79A2B]">{entry.readinessStatus}</span>,
+    },
+    {
+      key: "evidence",
+      heading: "Evidence",
+      render: (entry) => <span className={`text-xs font-semibold ${mutedClass}`}>{entry.evidenceRef}</span>,
+    },
+  ];
+  const mediaFilters = [
+    ...createValueFilters(mediaEvidence, (item) => item.verificationStatus).map((filter) => ({
+      ...filter,
+      value: `status:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+    ...createValueFilters(mediaEvidence, (item) => item.mediaType).map((filter) => ({
+      ...filter,
+      value: `type:${filter.value}`,
+      label: `Type: ${filter.label}`,
+    })),
+  ];
+  const mediaColumns: ManagedTableColumn<MediaEvidence>[] = [
+    {
+      key: "label",
+      heading: "Evidence",
+      render: (item) => (
+        <div>
+          <p className="font-black">{item.redactedLabel}</p>
+          <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{item.caption}</p>
+        </div>
+      ),
+    },
+    {
+      key: "record",
+      heading: "Record",
+      render: (item) => (
+        <div>
+          <p className="font-mono text-xs font-black">{item.relatedRecordId}</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{item.relatedRecordType}</p>
+        </div>
+      ),
+    },
+    {
+      key: "type",
+      heading: "Type",
+      render: (item) => <span className="text-sm font-black">{item.mediaType}</span>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (item) => <span className="text-sm font-black text-[#D79A2B]">{item.verificationStatus}</span>,
+    },
+  ];
+
   return (
     <section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">Pickup dan gudang</h2>
-        <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Modul ini memisahkan permintaan pickup dari stok gudang agar operator tahu barang mana yang bergerak hari ini.
-        </p>
-        <div className="mt-5 space-y-3">
-          {logisticsQueue.map((item) => (
-            <div key={item.id} className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-black">{item.id} · {item.sender}</p>
-                <span className="rounded-[8px] bg-[#E7F5E8] px-2 py-1 text-[11px] font-black text-[#236327]">
-                  {scheduled.includes(item.id) ? "Pickup terjadwal" : item.status}
-                </span>
-              </div>
-              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{item.summary}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setScheduled((current) => (current.includes(item.id) ? current : [...current, item.id]));
-                  setPanelMessage(`${item.id}: jadwal pickup Jumat pagi dibuat untuk dicek kendaraan dan gudang.`, "success");
-                }}
-                className="mt-4 inline-flex rounded-[10px] bg-[#1D5D8F] px-3 py-2 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Jadwalkan pickup
-              </button>
-            </div>
-          ))}
-        </div>
-      </article>
+      <ManagedTablePanel
+        panelClass={panelClass}
+        innerClass={innerClass}
+        mutedClass={mutedClass}
+        title="Pickup dan gudang"
+        description="Modul ini memisahkan permintaan pickup dari stok gudang agar operator tahu barang mana yang bergerak hari ini."
+        sourceLabel="Queue memakai record ID/source, bukan data pribadi warga."
+        rows={logisticsQueue}
+        columns={logisticsQueueColumns}
+        rowKey={(item) => item.id}
+        getSearchText={(item) => [item.id, item.source, item.summary, item.status, item.module].join(" ")}
+        filters={logisticsQueueFilters}
+        filterLabel="Pickup/status"
+        emptyTitle="Belum ada queue logistik."
+        emptyBody="Permintaan pickup akan muncul setelah queue Stok dan Logistik tersedia."
+        pageSize={5}
+        tableMinWidth={860}
+      />
 
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h3 className="text-xl font-black">Peta kapasitas gudang mini</h3>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {warehouseItems.map((item, index) => (
-            <div key={item.name} className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <p className="text-xs font-black text-[#D79A2B]">Zona {index + 1}</p>
-              <p className="mt-2 font-black">{item.name}</p>
-              <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>{item.unit} · {item.location}</p>
-              <p className="mt-3 text-sm font-black">{item.state}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-5 grid gap-3">
-          <h4 className="text-sm font-black uppercase text-[#7A4E2D]">Stock ledger</h4>
-          {stockLedger.slice(0, 5).map((entry) => (
-            <div key={entry.id} className={`rounded-[12px] border p-3 ${innerClass}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-black">{entry.stockName}</p>
-                <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
-                  {entry.movementType}
-                </span>
-              </div>
-              <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
-                {formatInteger(entry.quantity)} {entry.unitLabel} - {entry.readinessStatus}
-              </p>
-              <p className={`mt-1 text-xs font-bold ${mutedClass}`}>Evidence: {entry.evidenceRef}</p>
-            </div>
-          ))}
-          {stockLedger.length === 0 ? (
-            <p className={`text-sm font-semibold ${mutedClass}`}>Belum ada ledger stok dari tabel prefixed.</p>
-          ) : null}
-        </div>
-        <div className="mt-5 grid gap-3">
-          <h4 className="text-sm font-black uppercase text-[#7A4E2D]">Media evidence metadata</h4>
-          {mediaEvidence.slice(0, 3).map((item) => (
-            <div key={item.id} className={`rounded-[12px] border p-3 ${innerClass}`}>
-              <p className="font-black">{item.redactedLabel}</p>
-              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{item.caption}</p>
-              <p className="mt-2 text-xs font-black text-[#D79A2B]">{item.verificationStatus}</p>
-            </div>
-          ))}
-        </div>
+      <div className="grid gap-5">
+        <ManagedTablePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          title="Stok gudang"
+          description="Kapasitas gudang mini ditampilkan sebagai tabel stok operasional, bukan peta dekoratif."
+          sourceLabel="Source: /api/dashboard stocks"
+          rows={warehouseItems}
+          columns={warehouseColumns}
+          rowKey={(item) => item.id}
+          getSearchText={(item) => [item.id, item.name, item.unit, item.state, item.location].join(" ")}
+          filters={warehouseFilters}
+          filterLabel="Status/lokasi"
+          emptyTitle="Belum ada stok gudang."
+          emptyBody="Stok gudang akan muncul setelah item non-Gerai tersimpan."
+          pageSize={5}
+          tableMinWidth={760}
+        />
+
+        <ManagedTablePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          title="Stock ledger"
+          description="Barang masuk/keluar ditelusuri dengan quantity, readiness, dan evidence_ref."
+          sourceLabel="Source: /api/dashboard stockLedger"
+          rows={stockLedger}
+          columns={ledgerColumns}
+          rowKey={(entry) => entry.id}
+          getSearchText={(entry) =>
+            [entry.id, entry.stockName, entry.movementType, entry.quantity, entry.unitLabel, entry.reason, entry.evidenceRef, entry.readinessStatus].join(" ")
+          }
+          filters={ledgerFilters}
+          filterLabel="Movement/readiness"
+          emptyTitle="Belum ada ledger stok."
+          emptyBody="Ledger akan muncul setelah tabel prefixed mengirim movement stok."
+          pageSize={5}
+          tableMinWidth={840}
+        />
+
+        <ManagedTablePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          title="Media evidence metadata"
+          description="Tabel hanya menampilkan label redacted dan metadata, bukan raw media publik."
+          sourceLabel="Source: /api/dashboard mediaEvidence"
+          rows={mediaEvidence}
+          columns={mediaColumns}
+          rowKey={(item) => item.id}
+          getSearchText={(item) =>
+            [item.id, item.relatedRecordType, item.relatedRecordId, item.mediaType, item.redactedLabel, item.caption, item.verificationStatus, item.sourceLabel].join(" ")
+          }
+          filters={mediaFilters}
+          filterLabel="Status/type"
+          emptyTitle="Belum ada media evidence."
+          emptyBody="Metadata bukti akan muncul setelah evidence_ref ditautkan."
+          pageSize={5}
+          tableMinWidth={820}
+        />
         <button
           type="button"
           onClick={exportManifest}
@@ -4227,7 +5307,7 @@ function StokLogistikView({
         >
           Export manifest
         </button>
-      </article>
+      </div>
     </section>
   );
 }
@@ -4292,35 +5372,176 @@ function PasarMitraView({
     }
   }
 
+  const buyerFilters: ManagedTableFilter<BuyerMatch>[] = [
+    {
+      value: "needs-review",
+      label: "Perlu review",
+      predicate: (buyer) => !buyer.status.toLowerCase().includes("setuju"),
+    },
+    {
+      value: "approved",
+      label: "Disetujui",
+      predicate: (buyer) => buyer.status.toLowerCase().includes("setuju"),
+    },
+    ...createValueFilters(buyers, (buyer) => buyer.status).map((filter) => ({
+      ...filter,
+      value: `status:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+  ];
+  const buyerColumns: ManagedTableColumn<BuyerMatch>[] = [
+    {
+      key: "buyer",
+      heading: "Archetype",
+      render: (buyer) => (
+        <div>
+          <p className="font-black">{buyer.buyer}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{buyer.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "need",
+      heading: "Need",
+      render: (buyer) => <span className="text-sm font-semibold">{buyer.need}</span>,
+    },
+    {
+      key: "score",
+      heading: "Score",
+      render: (buyer) => <span className="font-mono text-sm font-black text-[#2F7D32]">{buyer.matchScore}%</span>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (buyer) => <span className="text-sm font-black text-[#D79A2B]">{buyer.status}</span>,
+    },
+    {
+      key: "evidence",
+      heading: "Evidence",
+      render: (buyer) => <p className={`max-w-[320px] text-xs font-semibold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(buyer)}</p>,
+    },
+    {
+      key: "action",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (buyer) => (
+        <button
+          type="button"
+          onClick={() => setSelectedBuyerId(buyer.id)}
+          className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${
+            selected?.id === buyer.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+          }`}
+        >
+          Detail
+        </button>
+      ),
+    },
+  ];
+  const requirementFilters = [
+    ...createValueFilters(buyerRequirements, (requirement) => requirement.verificationStatus).map((filter) => ({
+      ...filter,
+      value: `status:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+    ...createValueFilters(buyerRequirements, (requirement) => requirement.unitLabel).map((filter) => ({
+      ...filter,
+      value: `unit:${filter.value}`,
+      label: `Unit: ${filter.label}`,
+    })),
+  ];
+  const requirementColumns: ManagedTableColumn<BuyerRequirement>[] = [
+    {
+      key: "product",
+      heading: "Produk",
+      render: (requirement) => (
+        <div>
+          <p className="font-black">{requirement.productName}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{requirement.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "archetype",
+      heading: "Archetype",
+      render: (requirement) => <span className="text-sm font-semibold">{requirement.buyerArchetype}</span>,
+    },
+    {
+      key: "quantity",
+      heading: "Kuantitas",
+      render: (requirement) => (
+        <span className="font-mono text-xs font-black">
+          {formatInteger(requirement.requiredQuantity)} {requirement.unitLabel}
+        </span>
+      ),
+    },
+    {
+      key: "quality",
+      heading: "Spec",
+      render: (requirement) => <p className={`max-w-[300px] text-xs font-semibold leading-5 ${mutedClass}`}>{requirement.qualitySpec}</p>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (requirement) => <span className="text-sm font-black text-[#D79A2B]">{requirement.verificationStatus}</span>,
+    },
+  ];
+
   return (
     <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">Matching buyer yang bisa diaudit</h2>
-        <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Sistem memberi alasan match dan status risiko memakai archetype. Nama counterparty dan kontak buyer tetap harus diverifikasi pengurus agar tidak ada janji penjualan palsu.
-        </p>
-        <div className="mt-5 space-y-3">
-          {buyers.map((buyer) => (
-            <button
-              key={buyer.id}
-              type="button"
-              onClick={() => setSelectedBuyerId(buyer.id)}
-              className={`w-full rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${
-                selected?.id === buyer.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-black">{buyer.buyer}</p>
-                <span className="rounded-[8px] bg-[#E7F5E8] px-2 py-1 text-[11px] font-black text-[#236327]">
-                  Match {buyer.matchScore}%
-                </span>
-              </div>
-              <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>{buyer.need}</p>
-              <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(buyer)}</p>
-            </button>
-          ))}
-        </div>
-      </article>
+      <div className="grid gap-5">
+        <ManagedTablePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          title="Matching buyer yang bisa diaudit"
+          description="Sistem memberi alasan match dan status risiko memakai archetype. Nama counterparty dan kontak buyer tetap harus diverifikasi pengurus agar tidak ada janji penjualan palsu."
+          sourceLabel="Buyer archetype only - no named buyer claim"
+          rows={buyers}
+          columns={buyerColumns}
+          rowKey={(buyer) => buyer.id}
+          getSearchText={(buyer) => [buyer.id, buyer.buyer, buyer.need, buyer.status, buyer.reason, buyerEvidenceLabel(buyer)].join(" ")}
+          filters={buyerFilters}
+          filterLabel="Status"
+          emptyTitle="Belum ada match buyer."
+          emptyBody="Match akan muncul setelah requirement dan stok punya readiness yang cukup."
+          pageSize={5}
+          tableMinWidth={980}
+          rowClassName={(buyer) => (selected?.id === buyer.id ? "bg-[#D79A2B]/10" : "")}
+        />
+
+        <ManagedTablePanel
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          title="Buyer requirements"
+          description="Requirement operasional ditampilkan sebagai kebutuhan archetype, bukan buyer bernama atau komitmen permintaan live."
+          sourceLabel="Source: /api/dashboard buyerRequirements"
+          rows={buyerRequirements}
+          columns={requirementColumns}
+          rowKey={(requirement) => requirement.id}
+          getSearchText={(requirement) =>
+            [
+              requirement.id,
+              requirement.buyerArchetype,
+              requirement.productName,
+              requirement.requiredQuantity,
+              requirement.unitLabel,
+              requirement.qualitySpec,
+              requirement.packagingSpec,
+              requirement.targetWindow,
+              requirement.verificationStatus,
+              requirement.sourceLabel,
+            ].join(" ")
+          }
+          filters={requirementFilters}
+          filterLabel="Status/unit"
+          emptyTitle="Belum ada requirement buyer."
+          emptyBody="Requirement akan muncul setelah kebutuhan buyer archetype tersimpan."
+          pageSize={5}
+          tableMinWidth={920}
+        />
+      </div>
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         {selected ? (
@@ -4435,42 +5656,97 @@ function SimpanPinjamView({
     setPanelMessage("Agenda rapat komite diunduh sebagai TXT dari pengajuan Postgres.", "success");
   }
 
+  const financeFilters = [
+    ...createValueFilters(finance, (request) => request.status).map((filter) => ({
+      ...filter,
+      value: `status:${filter.value}`,
+      label: `Status: ${filter.label}`,
+    })),
+    ...createValueFilters(finance, (request) => request.risk).map((filter) => ({
+      ...filter,
+      value: `risk:${filter.value}`,
+      label: `Risk: ${filter.label}`,
+    })),
+  ];
+  const financeColumns: ManagedTableColumn<FinanceRequest>[] = [
+    {
+      key: "request",
+      heading: "Pengajuan",
+      render: (request) => (
+        <div>
+          <p className="font-black">Pengajuan produktif {request.id}</p>
+          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{request.purpose}</p>
+        </div>
+      ),
+    },
+    {
+      key: "amount",
+      heading: "Amount",
+      render: (request) => <span className="font-mono text-xs font-black text-[#D79A2B]">{formatRupiah(request.amount)}</span>,
+    },
+    {
+      key: "risk",
+      heading: "Risk",
+      render: (request) => <span className="text-sm font-black text-[#C92A2A]">{request.risk}</span>,
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (request) => (
+        <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
+          {request.status}
+        </span>
+      ),
+    },
+    {
+      key: "reviewed",
+      heading: "Reviewed",
+      render: (request) => <span className={`text-xs font-semibold ${mutedClass}`}>{request.reviewedAt ?? "Belum review"}</span>,
+    },
+    {
+      key: "action",
+      heading: "Aksi",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (request) => (
+        <button
+          type="button"
+          onClick={() =>
+            requestConfirm({
+              title: `Siapkan paket ${request.id}?`,
+              message: "Pengajuan akan ditandai siap review komite. Ini bukan approval pinjaman otomatis.",
+              confirmLabel: "Siapkan paket",
+              onConfirm: () => reviewFinance(request),
+            })
+          }
+          className="rounded-[10px] bg-[#C92A2A] px-3 py-2 text-xs font-extrabold text-white focus-visible:lb-focus"
+        >
+          Siapkan paket
+        </button>
+      ),
+    },
+  ];
+
   return (
     <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">Pembiayaan aman berbasis komite</h2>
-        <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Agent hanya menyiapkan catatan risiko. Keputusan, tenor, dan persetujuan tetap di komite koperasi.
-        </p>
-        <div className="mt-5 space-y-3">
-          {finance.map((request) => (
-            <div key={request.id} className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-black">Pengajuan produktif {request.id}</p>
-                <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
-                  {request.status}
-                </span>
-              </div>
-              <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>{request.purpose} · {formatRupiah(request.amount)}</p>
-              <p className="mt-3 text-sm font-black text-[#C92A2A]">{request.risk}</p>
-              <button
-                type="button"
-                onClick={() =>
-                  requestConfirm({
-                    title: `Siapkan paket ${request.id}?`,
-                    message: "Pengajuan akan ditandai siap review komite. Ini bukan approval pinjaman otomatis.",
-                    confirmLabel: "Siapkan paket",
-                    onConfirm: () => reviewFinance(request),
-                  })
-                }
-                className="mt-4 inline-flex rounded-[10px] bg-[#C92A2A] px-3 py-2 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Siapkan paket komite
-              </button>
-            </div>
-          ))}
-        </div>
-      </article>
+      <ManagedTablePanel
+        panelClass={panelClass}
+        innerClass={innerClass}
+        mutedClass={mutedClass}
+        title="Pembiayaan aman berbasis komite"
+        description="Agent hanya menyiapkan catatan risiko. Keputusan, tenor, dan persetujuan tetap di komite koperasi."
+        sourceLabel="Readiness only - no automatic loan approval"
+        rows={finance}
+        columns={financeColumns}
+        rowKey={(request) => request.id}
+        getSearchText={(request) => [request.id, request.purpose, request.amount, request.risk, request.status, request.reviewedAt ?? ""].join(" ")}
+        filters={financeFilters}
+        filterLabel="Status/risk"
+        emptyTitle="Belum ada pengajuan pembiayaan."
+        emptyBody="Pengajuan produktif akan muncul setelah finance request tersimpan."
+        pageSize={6}
+        tableMinWidth={980}
+      />
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h3 className="text-xl font-black">Checklist anti-pembiayaan asal setuju</h3>
