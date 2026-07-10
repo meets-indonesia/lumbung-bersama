@@ -27,6 +27,17 @@ type WaSetupPayload = {
   send?: { status?: "ready" | "setup-required"; missing?: string[] };
   webhook?: { status?: "ready" | "setup-required"; missing?: string[] };
   pairing?: { message?: string };
+  personalPairing?: {
+    status?: "available" | "setup-required";
+    command?: string;
+    message?: string;
+    capabilities?: {
+      qrPairing?: boolean;
+      mediaDownload?: boolean;
+      pdfTextExtraction?: boolean;
+      imageOcr?: boolean;
+    };
+  };
 };
 
 type WaAgentPayload = {
@@ -80,7 +91,7 @@ const PAYLOAD_OPTIONS: Array<{
 ];
 
 function setupSummary(setup?: WaSetupPayload) {
-  if (!setup) return "Setup aplikasi belum lengkap. Cek DATABASE_URL, login operator, dan env WhatsApp.";
+  if (!setup) return "Setup aplikasi belum lengkap. Cek data operasional, login operator, dan konfigurasi WhatsApp.";
   const missing = setup?.missing ?? [
     ...(setup?.send?.missing ?? []),
     ...(setup?.webhook?.missing ?? []),
@@ -97,6 +108,7 @@ export function WhatsAppHubClient() {
   const [state, setState] = useState<HubState>("idle");
   const [botReply, setBotReply] = useState(DEFAULT_WA_INTENT.bot);
   const [savedStatus, setSavedStatus] = useState("");
+  const [setupInfo, setSetupInfo] = useState<WaSetupPayload | null>(null);
 
   const selectedIntent = useMemo(
     () => WA_AGENT_INTENTS.find((intent) => intent.id === selectedId) ?? DEFAULT_WA_INTENT,
@@ -136,6 +148,7 @@ export function WhatsAppHubClient() {
       });
       const payload = await response.json().catch(() => ({}));
       const setup = payload.setup as WaSetupPayload | undefined;
+      setSetupInfo(setup ?? null);
 
       if (!response.ok) {
         const setupRequired =
@@ -161,10 +174,10 @@ export function WhatsAppHubClient() {
       setSavedStatus(
         [
           `${saved.id ?? "Pesan"} tersimpan sebagai draft.`,
-          agent?.lbQueueId ? `Queue ${agent.lbQueueId}.` : "",
+          agent?.lbQueueId ? `Antrean ${agent.lbQueueId}.` : "",
           agent?.module ? `Modul: ${agent.module}.` : "",
           agent?.mediaStatus ?? "",
-          cloudReady ? "Live delivery belum dilakukan dan tetap perlu approval operator." : setupSummary(setup),
+          cloudReady ? "Pengiriman live belum dilakukan dan tetap perlu persetujuan operator." : setupSummary(setup),
         ]
           .filter(Boolean)
           .join(" "),
@@ -172,7 +185,7 @@ export function WhatsAppHubClient() {
     } catch (error) {
       setState("error");
       setBotReply(error instanceof Error ? error.message : "WA API tidak merespons.");
-      setSavedStatus("Belum tersimpan. Cek login, DATABASE_URL, dan seed koperasi.");
+      setSavedStatus("Belum tersimpan. Cek login, data operasional, dan seed koperasi.");
     }
   }
 
@@ -186,13 +199,13 @@ export function WhatsAppHubClient() {
           WA sebagai kanal verifikasi operasional.
         </h1>
         <p className="mt-4 text-base font-semibold leading-8 text-[#53606A]">
-          Pilih intent, simulasikan pesan warga/operator, lalu simpan sebagai draft follow-up.
-          Live delivery hanya diklaim jika WhatsApp Graph API benar-benar sukses.
+          Pilih intent, simulasikan pesan warga/operator, lalu simpan sebagai draft tindak lanjut.
+          Pengiriman live hanya diklaim jika kanal WhatsApp resmi benar-benar sukses.
         </p>
 
         <div className="mt-5 rounded-[16px] border border-dashed border-[#D79A2B] bg-[#FFF8EA] p-4 text-sm font-bold leading-6 text-[#7A4E2D]">
           <CheckCircle2 size={18} strokeWidth={2.2} className="mr-2 inline text-[#2F7D32]" aria-hidden="true" />
-          Support channel: AI membuat draft, queue, checklist, dan next action; approval buyer, stok, harga, dan pinjaman tetap di operator koperasi.
+          Kanal pendukung: AI membuat draft, antrean, checklist, dan aksi berikutnya; keputusan buyer, stok, harga, dan pinjaman tetap di operator koperasi.
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -238,9 +251,9 @@ export function WhatsAppHubClient() {
             {state === "loading"
               ? "Memproses"
               : state === "ready"
-                ? "Ready"
+                ? "Siap"
                 : state === "setup"
-                  ? "Setup Required"
+                  ? "Perlu Setup"
                   : state === "error"
                     ? "Perlu Cek"
                     : "Pilot"}
@@ -312,7 +325,7 @@ export function WhatsAppHubClient() {
             ) : (
               <Send size={17} strokeWidth={2.2} aria-hidden="true" />
             )}
-            Simpan Draft + Queue
+            Simpan draft + antrean
           </button>
           <Link
             href={selectedIntent.moduleRoute}
@@ -337,7 +350,10 @@ export function WhatsAppHubClient() {
 
         <div className="mt-4 rounded-[14px] border border-dashed border-[#D79A2B] bg-[#FFF8EA] p-4 text-sm font-bold leading-6 text-[#7A4E2D]">
           <CheckCircle2 size={18} strokeWidth={2.2} className="mr-2 inline text-[#2F7D32]" aria-hidden="true" />
-          Production gate: local intake butuh `DATABASE_URL` dan login operator; Cloud API butuh token, phone number id, verify token, dan app secret. QR pairing tidak tersedia untuk adapter Cloud API.
+          Jalur produksi memakai WhatsApp resmi dan tetap perlu aktivasi server. Untuk testing WA biasa, jalankan bridge personal di terminal, scan QR, lalu kirim teks/foto/PDF ke nomor yang tersinkron. PDF akan dibaca sebagai teks bila file valid; OCR gambar aktif hanya jika operator menyalakan mode OCR.
+          {setupInfo?.personalPairing?.message ? (
+            <span className="mt-2 block font-semibold text-[#7A4E2D]/85">{setupInfo.personalPairing.message}</span>
+          ) : null}
         </div>
 
         <div className="mt-4 rounded-[14px] border border-[#E7DED1] bg-white p-4">

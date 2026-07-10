@@ -395,10 +395,10 @@ async function getOpportunityScores() {
 }
 
 export async function GET(request: Request) {
-  if (!isHackathonSharedDbConfigured()) return hackathonDbRequiredResponse();
-
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
+
+  if (!isHackathonSharedDbConfigured()) return hackathonDbRequiredResponse();
 
   try {
     return Response.json(await getOpportunityScores());

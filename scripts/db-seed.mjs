@@ -11,7 +11,7 @@ const seedPath = path.join(root, "db", "seed.sql");
 await loadLocalEnv(root);
 
 if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL belum diisi. Jalankan migrasi dan seed setelah Postgres siap.");
+  console.error("DATABASE_URL belum diisi. Jalankan migrasi dan seed setelah database aplikasi siap.");
   process.exit(1);
 }
 
@@ -24,7 +24,7 @@ await client.connect();
 try {
   const seed = await readFile(seedPath, "utf8");
   await client.query(seed);
-  console.log("Data awal Postgres siap.");
+  console.log("Data awal database aplikasi siap.");
 } finally {
   await client.end();
 }

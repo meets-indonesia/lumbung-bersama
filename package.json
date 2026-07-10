@@ -12,6 +12,7 @@
     "qa:wa-smoke": "node scripts/qa-wa-smoke.mjs",
     "qa:hackathon-demo": "node scripts/qa-hackathon-demo.mjs",
     "qa:shared-db": "node scripts/qa-shared-db-aggregate.mjs",
+    "wa:personal": "node scripts/wa-personal-bridge.mjs",
     "env:merge": "node scripts/merge-env.mjs --file .env --stdin",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",
@@ -24,12 +25,16 @@
     "auth:hash-password": "node scripts/hash-password.mjs"
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.22.0",
+    "qrcode-terminal": "^0.12.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

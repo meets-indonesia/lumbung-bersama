@@ -15,6 +15,27 @@ type HealthResponse = {
     status: string;
     fallback: string;
   }>;
+  whatsapp?: {
+    setup?: {
+      cloudApi?: {
+        send: string;
+        webhook: string;
+        message: string;
+      };
+      personalBridge?: {
+        status: string;
+        command: string;
+        message: string;
+        activationRequired: boolean;
+        capabilities?: {
+          qrPairing: boolean;
+          mediaDownload: boolean;
+          pdfTextExtraction: boolean;
+          imageOcr: boolean;
+        };
+      };
+    };
+  };
 };
 
 type OpenDataSourcesResponse = {
@@ -46,6 +67,57 @@ type OpenDataSourcesResponse = {
   }>;
 };
 
+function publicStatusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw) return "Belum dicek";
+  if (/unconfigured|not[-_\s]?configured|not[-_\s]?ready/i.test(raw)) return "Perlu aktivasi";
+  if (/operator[-_\s]?ready|configured|implemented|ready|application/i.test(raw)) return "Siap dipakai";
+  if (/loading/i.test(raw)) return "Memuat";
+  if (/env|setup|required|static|fallback|pilot/i.test(raw)) return "Perlu aktivasi";
+  if (/source-discovery|discovery/i.test(raw)) return "Discovery";
+  if (/planned|connector/i.test(raw)) return "Direncanakan";
+  if (/manual|reference/i.test(raw)) return "Referensi";
+  return publicProductText(raw, "Belum dicek").replace(/[-_]/g, " ");
+}
+
+function publicProductText(value: unknown, fallback = "Belum tersedia") {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return fallback;
+  if (
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|postgres|env\b|environment/i.test(
+      raw,
+    )
+  ) {
+    return fallback;
+  }
+  return raw
+    .replace(/setup[-_\s]?required/gi, "perlu aktivasi")
+    .replace(/operator[-_\s]?ready/gi, "siap dipakai")
+    .replace(/pilot[-_\s]?fallback/gi, "mode pilot")
+    .replace(/shared[-_\s]?db/gi, "sumber eksplorasi")
+    .replace(/Postgres|postgres|database/gi, "data operasional")
+    .replace(/\bdb\b/gi, "data")
+    .replace(/credentials?/gi, "akses resmi")
+    .replace(/\bfallback\b/gi, "jalur cadangan")
+    .replace(/\bconnector\b/gi, "konektor")
+    .replace(/smoke test/gi, "uji koneksi");
+}
+
+function publicSourceLabel(value: string) {
+  return publicProductText(value)
+    .replace(/shared[-_\s]?db/gi, "Sumber eksplorasi")
+    .replace(/source-discovery/gi, "discovery")
+    .replace(/connector-planned/gi, "direncanakan")
+    .replace(/\bdb\b/gi, "data");
+}
+
+function registryPolicyLabel(value: string) {
+  if (/externalClaims/i.test(value)) return "Batas klaim eksternal";
+  if (/sharedDbScope/i.test(value)) return "Cakupan bukti agregat";
+  if (/privacy/i.test(value)) return "Privasi";
+  return publicSourceLabel(value);
+}
+
 export function IntegrationClient() {
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -75,7 +147,7 @@ export function IntegrationClient() {
       const data = (await response.json()) as HealthResponse;
       setHealth(data);
     } catch {
-      setError("Health check gagal. Pastikan dev server berjalan.");
+      setError("Pemeriksaan koneksi gagal. Pastikan aplikasi berjalan.");
     } finally {
       setLoading(false);
     }
@@ -105,15 +177,15 @@ export function IntegrationClient() {
     <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="rounded-[24px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
         <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#C92A2A]">
-          Integrasi Production Readiness
+          Kesiapan integrasi produksi
         </p>
         <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">
-          Siap pilot, jujur soal env gate.
+          Siap pilot, jelas soal aktivasi.
         </h1>
         <p className="mt-4 text-base font-semibold leading-8 text-[#53606A]">
-          Fitur produksi seperti WhatsApp asli, AI live, database, storage, dan
-          SIMKOPDES mapping membutuhkan credential. App ini menampilkan status
-          dan fallback secara eksplisit.
+          Fitur produksi seperti WhatsApp resmi, AI live, data operasional,
+          storage, dan mapping SIMKOPDES membutuhkan aktivasi. App ini
+          menampilkan status dan jalur cadangan secara eksplisit.
         </p>
         <button
           type="button"
@@ -126,7 +198,7 @@ export function IntegrationClient() {
           ) : (
             <Activity size={17} strokeWidth={2.2} aria-hidden="true" />
           )}
-          Test API Health
+          Cek koneksi
         </button>
         {error ? (
           <p className="mt-4 rounded-[14px] bg-[#FDEAEA] p-4 text-sm font-extrabold text-[#A82020]">
@@ -135,7 +207,7 @@ export function IntegrationClient() {
         ) : null}
         {health ? (
           <p className="mt-4 rounded-[14px] bg-[#E7F5E8] p-4 text-sm font-extrabold text-[#236327]">
-            Health checked: {health.checkedAt}. Mode: {health.mode}.
+            Koneksi dicek: {new Date(health.checkedAt).toLocaleString("id-ID")}. Status: {publicStatusLabel(health.mode)}.
           </p>
         ) : null}
       </section>
@@ -144,7 +216,7 @@ export function IntegrationClient() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#7A4E2D]">
-              Env Checklist
+              Checklist aktivasi
             </p>
             <h2 className="mt-2 text-2xl font-black">Status integrasi</h2>
           </div>
@@ -163,30 +235,60 @@ export function IntegrationClient() {
                       : "bg-[#FFF3D8] text-[#7A4E2D]"
                   }`}
                 >
-                  {item.configured ? "Configured" : item.status}
+                  {item.configured ? "Siap dipakai" : publicStatusLabel(item.status)}
                 </span>
               </div>
               <p className="mt-3 text-sm font-semibold leading-6 text-[#53606A]">
-                Required: {item.required.join(", ")}
+                Prasyarat aktivasi: {item.required.length} item
               </p>
               <p className="mt-2 text-sm font-bold leading-6 text-[#7A4E2D]">
-                Fallback: {item.fallback}
+                Jalur cadangan: {publicProductText(item.fallback, "Mode pilot tersedia saat aktivasi belum lengkap.")}
               </p>
             </article>
           ))}
         </div>
+        {health?.whatsapp?.setup ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[16px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#7A4E2D]">
+                WhatsApp resmi
+              </p>
+              <p className="mt-2 text-lg font-black text-[#1F2933]">
+                {publicStatusLabel(health.whatsapp.setup.cloudApi?.send)}
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+                {publicProductText(health.whatsapp.setup.cloudApi?.message, "Kanal resmi perlu dicek dari server.")}
+              </p>
+            </div>
+            <div className="rounded-[16px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
+              <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#7A4E2D]">
+                QR kanal uji
+              </p>
+              <p className="mt-2 text-lg font-black text-[#1F2933]">
+                {publicStatusLabel(health.whatsapp.setup.personalBridge?.status)}
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
+                {publicProductText(health.whatsapp.setup.personalBridge?.message, "Kanal uji perlu diaktifkan untuk menampilkan QR.")}
+              </p>
+              <p className="mt-2 text-xs font-bold text-[#7A4E2D]">
+                PDF: {health.whatsapp.setup.personalBridge?.capabilities?.pdfTextExtraction ? "siap" : "perlu cek"}; OCR gambar:{" "}
+                {health.whatsapp.setup.personalBridge?.capabilities?.imageOcr ? "aktif" : "opsional"}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-[24px] border border-[#E7DED1] bg-[#FFFCF5] p-5 lg:col-span-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#7A4E2D]">
-              Open data source readiness
+              Kesiapan sumber bukti
             </p>
             <h2 className="mt-2 text-2xl font-black">Registry sumber eksternal</h2>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[#53606A]">
-              Panel ini membedakan source candidate, env-gated connector, dan integrasi yang sudah di-smoke test.
-              Tidak ada klaim import otomatis sebelum connector berjalan.
+              Panel ini membedakan calon sumber bukti, konektor yang perlu aktivasi, dan integrasi yang sudah diuji.
+              Tidak ada klaim impor otomatis sebelum konektor berjalan.
             </p>
           </div>
           <button
@@ -199,15 +301,15 @@ export function IntegrationClient() {
             ) : (
               <Activity size={16} strokeWidth={2.2} aria-hidden="true" />
             )}
-            Refresh source
+            Muat ulang sumber
           </button>
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           {[
-            ["Registry", sourceRegistry?.registryStatus ?? sourceStatus, "Status dari /api/open-data/sources"],
-            ["Source labels", sourceRegistry?.sourceLabels.length ?? 0, "Label evidence yang boleh dipakai di UI"],
-            ["P0 roadmap", sourceRegistry?.p0Roadmap.length ?? 0, "Connector candidate tanpa overclaim"],
+            ["Registry", publicStatusLabel(sourceRegistry?.registryStatus ?? sourceStatus), "Status daftar sumber eksternal"],
+            ["Label bukti", sourceRegistry?.sourceLabels.length ?? 0, "Label bukti yang boleh tampil di UI"],
+            ["Rencana aktivasi", sourceRegistry?.p0Roadmap.length ?? 0, "Calon konektor tanpa klaim berlebih"],
           ].map(([label, value, note]) => (
             <div key={label} className="rounded-[16px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
               <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#7A4E2D]">{label}</p>
@@ -219,7 +321,7 @@ export function IntegrationClient() {
 
         {sourceStatus === "error" ? (
           <p className="mt-4 rounded-[14px] bg-[#FDEAEA] p-4 text-sm font-extrabold text-[#A82020]">
-            Source registry gagal dimuat. Endpoint tetap dicek oleh smoke test agar tidak 404.
+            Registry sumber gagal dimuat. Pemeriksaan koneksi tetap bisa diulang.
           </p>
         ) : null}
 
@@ -230,7 +332,7 @@ export function IntegrationClient() {
                 <div>
                   <h3 className="font-black text-[#1F2933]">{source.name}</h3>
                   <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-[#7A4E2D]">
-                    {source.category} - {source.integrationClaim}
+                    {publicProductText(source.category, "Sumber bukti")} - {publicStatusLabel(source.integrationClaim)}
                   </p>
                 </div>
                 {source.url ? (
@@ -245,13 +347,13 @@ export function IntegrationClient() {
                   </a>
                 ) : null}
               </div>
-              <p className="mt-3 text-sm font-semibold leading-6 text-[#53606A]">{source.notes}</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-[#53606A]">{publicProductText(source.notes, "Catatan sumber belum tersedia.")}</p>
               <div className="mt-3 grid gap-2 text-xs font-bold text-[#53606A] sm:grid-cols-2">
                 <span className="rounded-[10px] border border-[#E7DED1] bg-[#FFFCF5] px-3 py-2">
-                  Coverage: {source.coverage}
+                  Cakupan: {publicProductText(source.coverage, "Belum tersedia")}
                 </span>
                 <span className="rounded-[10px] border border-[#E7DED1] bg-[#FFFCF5] px-3 py-2">
-                  Refresh: {source.refreshStrategy}
+                  Pembaruan: {publicProductText(source.refreshStrategy, "Belum dijadwalkan")}
                 </span>
               </div>
             </article>
@@ -262,8 +364,8 @@ export function IntegrationClient() {
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {Object.entries(sourceRegistry.registryPolicy).map(([key, value]) => (
               <div key={key} className="rounded-[14px] border border-[#E0B25E]/60 bg-[#FFF3D8] p-4">
-                <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#7A4E2D]">{key}</p>
-                <p className="mt-2 text-sm font-bold leading-6 text-[#53606A]">{value}</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#7A4E2D]">{registryPolicyLabel(key)}</p>
+                <p className="mt-2 text-sm font-bold leading-6 text-[#53606A]">{publicSourceLabel(value)}</p>
               </div>
             ))}
           </div>

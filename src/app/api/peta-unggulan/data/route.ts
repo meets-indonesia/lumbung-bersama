@@ -53,7 +53,7 @@ export async function GET() {
   ]);
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     coverage: {
       administrativeAreasImported: areaCounts.reduce<Record<string, number>>((acc, item) => {
         acc[`level${item.level}`] = Number(item.total);

@@ -147,7 +147,7 @@ async function run() {
   requireEnv(
     "DATABASE_URL",
     process.env.DATABASE_URL,
-    "Start Postgres and set DATABASE_URL before running qa:auth-smoke.",
+    "Start the application database and set DATABASE_URL before running qa:auth-smoke.",
   );
   if (sharedHackathonDbPattern.test(process.env.DATABASE_URL ?? "")) {
     fail("qa:auth-smoke harus berjalan di DB aplikasi/disposable, bukan shared hackathon DB read-only.");

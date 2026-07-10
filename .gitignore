@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/tmp/wa-media
+/.wa-personal-auth
 
 # next.js
 /.next/

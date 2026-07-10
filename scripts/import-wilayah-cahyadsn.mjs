@@ -149,7 +149,7 @@ async function main() {
        VALUES
         ($1, 'Kode Wilayah Administrasi Indonesia', 'administrative-code', $2, 'MIT',
          'Provinsi, kabupaten/kota, kecamatan, desa/kelurahan nasional berdasarkan Kepmendagri 2025.',
-         'Import satu kali ke Postgres, lalu refresh manual saat repository sumber berubah.',
+         'Import satu kali ke database aplikasi, lalu refresh manual saat repository sumber berubah.',
          'ready-to-import',
          'Sumber terbuka paling praktis untuk coverage kode desa nasional. Bukan sumber komoditas, koperasi, atau aset ekonomi.',
          now())

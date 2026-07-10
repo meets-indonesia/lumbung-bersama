@@ -166,7 +166,7 @@ export function VoiceDemoClient() {
             Kirim WhatsApp asli
           </p>
           <p className="mt-2 text-sm leading-6 text-[#7A4E2D]">
-            Fitur ini env-gated. Butuh `WHATSAPP_BUSINESS_TOKEN` dan
+            Fitur ini aktif setelah konfigurasi produksi. Butuh token WhatsApp dan
             `WHATSAPP_PHONE_NUMBER_ID`. Mode sekarang hanya pratinjau lokal.
           </p>
           <button

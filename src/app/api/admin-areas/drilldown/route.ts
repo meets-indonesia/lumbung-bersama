@@ -254,7 +254,7 @@ export async function GET(request: Request) {
   const breadcrumbs = await getBreadcrumb(selected);
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     selected: selected
       ? {
           ...selected,
@@ -291,6 +291,6 @@ export async function GET(request: Request) {
     })),
     query: { code, q, commodity, sector, limit },
     note:
-      "Drilldown memakai kode administrasi nasional dari Postgres. Komoditas yang ditampilkan mengecualikan inherited-province-baseline; setiap profil wajib membawa sumber. Geometri presisi penuh tetap membutuhkan import PostGIS/vector tile.",
+      "Drilldown memakai kode administrasi nasional dari database aplikasi. Komoditas yang ditampilkan mengecualikan inherited-province-baseline; setiap profil wajib membawa sumber. Geometri presisi penuh tetap membutuhkan import geospasial/vector tile.",
   });
 }

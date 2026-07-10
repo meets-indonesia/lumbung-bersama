@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.QA_HACKATHON_PORT ?? 3112);
@@ -8,6 +10,17 @@ const baseUrl = (process.env.QA_HACKATHON_BASE_URL ?? `http://127.0.0.1:${port}`
 const liveBaseUrl = process.env.QA_LIVE_BASE_URL?.replace(/\/$/, "");
 const shouldStartServer = !process.env.QA_HACKATHON_BASE_URL;
 const isWindows = process.platform === "win32";
+const nativeDialogNames = new Set(["alert", "prompt", "confirm"]);
+
+const bannedUserFacingTextPatterns = [
+  { label: "Postgres", pattern: /\bPostgres(?:QL)?\b/i },
+  { label: "DATABASE_URL_REQUIRED", pattern: /\bDATABASE_URL_REQUIRED\b/i },
+  { label: "raw env name", pattern: /\b(?:DATABASE_URL|HACKATHON_SHARED(?:_DATABASE_URL|_DB_[A-Z0-9_]+)?|DB_(?:HOST|PORT|PASSWORD|USERNAME|USER|DATABASE)|PGSSLMODE|ADMIN_(?:EMAIL|PASSWORD|PASSWORD_HASH|NAME|COOPERATIVE_ID)|QA_[A-Z0-9_]+|VISUAL_[A-Z0-9_]+|WHATSAPP_[A-Z0-9_]+|WA_PERSONAL_[A-Z0-9_]+|OPENAI_API_KEY|BPS_API_KEY|NEXT_PUBLIC_[A-Z0-9_]+)\b/i },
+  { label: "operator-ready", pattern: /\boperator-ready\b/i },
+  { label: "setup-required", pattern: /\bsetup-required\b/i },
+  { label: "role:", pattern: /\brole\s*:/i },
+  { label: "hackathon: N/N", pattern: /\bhackathon\s*:\s*\d+\s*\/\s*\d+\b/i },
+];
 
 let serverProcess = null;
 
@@ -33,6 +46,105 @@ async function request(pathname, init = {}, targetBase = baseUrl) {
     redirect: "manual",
     ...init,
   });
+}
+
+async function listFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listFiles(fullPath)));
+    } else {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+function isMainUiFile(filePath) {
+  const rel = path.relative(root, filePath).replace(/\\/g, "/");
+  if (!/\.(?:tsx|jsx)$/.test(rel)) return false;
+  if (rel.startsWith("src/components/")) return true;
+  if (rel.startsWith("src/app/api/")) return false;
+  return /^src\/app\/(?:.*\/)?(?:page|layout|loading|error|not-found|template)\.(?:tsx|jsx)$/.test(rel);
+}
+
+function nativeDialogCallName(node, sourceFile) {
+  if (ts.isIdentifier(node.expression) && nativeDialogNames.has(node.expression.text)) {
+    return node.expression.text;
+  }
+
+  if (
+    ts.isPropertyAccessExpression(node.expression) &&
+    nativeDialogNames.has(node.expression.name.text) &&
+    ["window", "globalThis"].includes(node.expression.expression.getText(sourceFile))
+  ) {
+    return node.expression.name.text;
+  }
+
+  return null;
+}
+
+async function assertNoNativeBrowserDialogsInMainUi() {
+  const roots = [path.join(root, "src", "components"), path.join(root, "src", "app")];
+  const files = (await Promise.all(roots.map((dir) => listFiles(dir)))).flat().filter(isMainUiFile);
+  const violations = [];
+
+  for (const filePath of files) {
+    const sourceText = await readFile(filePath, "utf8");
+    const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+    function visit(node) {
+      if (ts.isCallExpression(node)) {
+        const callName = nativeDialogCallName(node, sourceFile);
+        if (callName) {
+          const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+          violations.push(`${path.relative(root, filePath)}:${line + 1}:${character + 1} uses ${callName}()`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+
+  if (violations.length) {
+    fail(`Main UI components use native browser dialogs:\n${violations.join("\n")}`);
+  }
+
+  pass("main UI components avoid native browser dialogs");
+}
+
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([a-f0-9]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+function visibleTextFromHtml(html) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function assertNoBannedUserFacingText(text, label) {
+  const matched = bannedUserFacingTextPatterns.find(({ pattern }) => pattern.test(text));
+  if (matched) {
+    fail(`${label} contains banned user-facing copy: ${matched.label}`);
+  }
 }
 
 async function json(response, label) {
@@ -185,6 +297,8 @@ async function expectJsonStatusOneOf(pathname, expectedStatuses, init = {}) {
 async function expectText(pathname, expected) {
   const response = await expectStatusOneOf(pathname, [200]);
   const html = await response.text();
+  const visibleText = visibleTextFromHtml(html);
+  assertNoBannedUserFacingText(visibleText, pathname);
   if (!html.includes(expected)) {
     fail(`${pathname} did not include expected text: ${expected}`);
   }
@@ -554,11 +668,16 @@ async function maybeAssertLiveRoutes() {
     if (response.status !== 200) {
       fail(`${liveBaseUrl}${pathname} returned ${response.status}, expected 200`);
     }
+    if (!pathname.startsWith("/api/")) {
+      const html = await response.text();
+      assertNoBannedUserFacingText(visibleTextFromHtml(html), `${liveBaseUrl}${pathname}`);
+    }
     pass(`${liveBaseUrl}${pathname} -> 200`);
   }
 }
 
 async function run() {
+  await assertNoNativeBrowserDialogsInMainUi();
   await startServerIfNeeded();
   await assertPublicPages();
   await assertProtectedPages();

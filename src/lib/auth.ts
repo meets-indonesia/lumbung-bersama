@@ -188,7 +188,7 @@ export function csrfRequiredResponse() {
   return Response.json(
     {
       error: "CSRF_REJECTED",
-      message: "Mutation ditolak karena bukan request same-origin.",
+      message: "Sesi keamanan tidak valid. Muat ulang halaman login lalu coba lagi.",
     },
     { status: 403 },
   );
@@ -201,6 +201,7 @@ export function isSameOriginMutation(request: Request) {
   if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
     return false;
   }
+  if (fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none") return true;
 
   const origin = requestOrigin(request);
   if (!origin) return true;
@@ -367,10 +368,11 @@ export function authRequiredResponse() {
 }
 
 export function roleRequiredResponse(allowedRoles: string[]) {
+  void allowedRoles;
   return Response.json(
     {
       error: "ROLE_REQUIRED",
-      message: `Aksi ini memerlukan role: ${allowedRoles.join(", ")}.`,
+      message: "Akun ini belum punya akses untuk aksi ini.",
     },
     { status: 403 },
   );

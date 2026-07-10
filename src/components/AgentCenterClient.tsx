@@ -46,7 +46,7 @@ export function AgentCenterClient() {
         <p className="mt-4 text-base font-semibold leading-8 text-[#53606A]">
           Fokus hanya pada unggulan desa, pasar dan mitra, serta laporan aksi.
           Saat API key belum aktif, hasil memakai rules lokal dan tetap perlu
-          approval manusia.
+          persetujuan manusia.
         </p>
 
         <label htmlFor="record-id" className="mt-6 block text-sm font-extrabold text-[#1F2933]">

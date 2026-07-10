@@ -111,7 +111,7 @@ export async function GET(request: Request) {
   );
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     count: rows.length,
     query: { q, areaCode, provinceCode, level, limit, includeReference },
     profiles: rows,

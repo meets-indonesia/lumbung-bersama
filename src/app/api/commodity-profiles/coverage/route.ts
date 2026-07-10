@@ -78,7 +78,7 @@ export async function GET() {
   ]);
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     totals: totals[0] ?? {
       totalAreas: "0",
       totalProfiles: "0",

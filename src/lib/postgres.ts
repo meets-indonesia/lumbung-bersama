@@ -18,7 +18,7 @@ export function getPool() {
     globalWithPg.lumbungPgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.PGSSLMODE === "require" ? { rejectUnauthorized: false } : undefined,
-      max: Number(process.env.POSTGRES_POOL_MAX ?? 5),
+      max: Number(process.env.DATABASE_POOL_MAX ?? process.env.POSTGRES_POOL_MAX ?? 5),
     });
   }
 
@@ -55,7 +55,7 @@ export function dbRequiredResponse() {
     {
       error: "DATABASE_URL_REQUIRED",
       message:
-        "Postgres belum dikonfigurasi. Isi DATABASE_URL, lalu jalankan npm run db:setup.",
+        "Data operasional aplikasi belum dikonfigurasi. Aktifkan koneksi data, lalu jalankan setup schema dan seed.",
     },
     { status: 503 },
   );

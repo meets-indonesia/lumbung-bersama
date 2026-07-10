@@ -28,6 +28,15 @@ import {
 
 const mvpName = "Lumbung Bersama - Koperasi Opportunity & Offtaker Radar";
 
+function publicStatusLabel(value: string) {
+  if (/ready|implemented/i.test(value)) return "Aktif";
+  if (/env|setup|required/i.test(value)) return "Perlu aktivasi";
+  if (/planned|connector/i.test(value)) return "Direncanakan";
+  if (/manual|reference/i.test(value)) return "Referensi";
+  if (/discovery/i.test(value)) return "Discovery";
+  return value.replace(/[-_]/g, " ");
+}
+
 const mvpFlow = [
   {
     step: "01",
@@ -37,45 +46,45 @@ const mvpFlow = [
   },
   {
     step: "02",
-    title: "Opportunity Score",
-    copy: "Skor menjelaskan potensi, kesiapan koperasi, stok, pasar, kemitraan, dan confidence.",
+    title: "Skor Peluang",
+    copy: "Skor menjelaskan potensi, kesiapan koperasi, stok, pasar, kemitraan, dan tingkat keyakinan.",
     icon: BarChart3,
   },
   {
     step: "03",
-    title: "Buyer Matching Lite",
-    copy: "Produk desa dicocokkan dengan archetype buyer tanpa klaim komitmen atau checkout.",
+    title: "Kecocokan Buyer Awal",
+    copy: "Produk desa dicocokkan dengan tipe kebutuhan buyer tanpa klaim komitmen atau checkout.",
     icon: Handshake,
   },
   {
     step: "04",
-    title: "Aggregation/Stock Readiness",
-    copy: "Stok, kualitas, bukti media, dan gap logistik dibaca sebelum outreach.",
+    title: "Kesiapan Stok",
+    copy: "Stok, kualitas, bukti media, dan celah logistik dibaca sebelum kontak buyer.",
     icon: Warehouse,
   },
   {
     step: "05",
-    title: "Financing Readiness",
-    copy: "Draft/requested/verified dibaca sebagai checklist deal room, bukan approval otomatis.",
+    title: "Kesiapan Pembiayaan",
+    copy: "Status dokumen dan komite dibaca sebagai checklist kesiapan, bukan persetujuan otomatis.",
     icon: ShieldCheck,
   },
   {
     step: "06",
     title: "Laporan Aksi",
-    copy: "Pengurus mendapat ringkasan evidence, risiko, keputusan, dan tindak lanjut.",
+    copy: "Pengurus mendapat ringkasan bukti, risiko, keputusan, dan tindak lanjut.",
     icon: FileDown,
   },
 ];
 
 const guardrails = [
   {
-    title: "Human-reviewed AI",
+    title: "AI dengan review manusia",
     copy: "AI memberi rekomendasi berbasis aturan dan data. Keputusan tetap oleh operator atau pengurus.",
     icon: ShieldCheck,
   },
   {
-    title: "Evidence first",
-    copy: "Setiap aksi punya status sumber: input warga, operator, app DB, shared DB read-only, atau connector planned.",
+    title: "Bukti lebih dulu",
+    copy: "Setiap aksi punya status sumber: input warga, operator, data operasional, sumber eksplorasi terbatas, atau calon konektor resmi.",
     icon: ClipboardCheck,
   },
   {
@@ -92,19 +101,19 @@ const faqItems = [
       "Bukan toko online. Ini ruang kerja koperasi untuk mengubah data potensi desa menjadi keputusan operasional yang bisa diverifikasi.",
   },
   {
-    question: "Apakah data shared DB dipakai sebagai sumber utama?",
+    question: "Apakah sumber eksplorasi dipakai sebagai sumber utama?",
     answer:
-      "Tidak. Shared DB hanya evidence eksplorasi terbatas. App DB sendiri dipakai untuk requirement, ledger, dan media evidence.",
+      "Tidak. Sumber eksplorasi hanya bukti terbatas. Data operasional tim dipakai untuk syarat buyer, riwayat stok, dan bukti media.",
   },
   {
     question: "Kenapa buyer tidak disebut nama asli?",
     answer:
-      "MVP memakai archetype buyer agar tidak membuat klaim komitmen palsu. Outreach tetap butuh verifikasi pengurus.",
+      "MVP memakai tipe kebutuhan buyer agar tidak membuat klaim komitmen palsu. Kontak buyer tetap butuh verifikasi pengurus.",
   },
   {
     question: "Alur pertama yang harus dibuka?",
     answer:
-      "Mulai dari Peta Unggulan, lalu masuk dashboard operator untuk rekomendasi, readiness, buyer matching, dan laporan aksi.",
+      "Mulai dari Peta Unggulan, lalu masuk dashboard operator untuk rekomendasi, kesiapan stok, buyer matching, dan laporan aksi.",
   },
 ];
 
@@ -253,7 +262,7 @@ export default function Home() {
                 Satu alur, bukan kumpulan fitur terpisah.
               </h2>
               <p className="mt-6 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
-                Flow MVP sengaja pendek agar juri melihat masalah, bukti,
+                Alur MVP sengaja pendek agar juri melihat masalah, bukti,
                 rekomendasi, kesiapan operasional, dan keputusan pengurus dalam
                 satu narasi.
               </p>
@@ -295,8 +304,8 @@ export default function Home() {
               </p>
               <div className="mt-7 grid gap-3">
                 {[
-                  "Layer nasional siap untuk baseline dan connector resmi.",
-                  "Klik wilayah mengantar ke detail komoditas, aset, risiko, dan readiness.",
+                  "Layer nasional siap untuk dasar wilayah dan konektor resmi.",
+                  "Klik wilayah mengantar ke detail komoditas, aset, risiko, dan kesiapan.",
                   "Peta tetap halaman mandiri agar fokus presentasi tidak pecah.",
                 ].map((item) => (
                   <div key={item} className="flex gap-3 rounded-[18px] border border-[#DDE7D6] bg-white/70 p-4">
@@ -384,7 +393,7 @@ export default function Home() {
         <section id="flow" className="px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="lb-view-reveal max-w-3xl">
-              <p className="text-sm font-black text-[#C92A2A]">Buyer dan readiness</p>
+              <p className="text-sm font-black text-[#C92A2A]">Buyer dan kesiapan</p>
               <h2 className="lb-display mt-4 text-4xl font-black leading-[0.98] sm:text-6xl">
                 Outreach hanya dilakukan saat stok siap.
               </h2>
@@ -406,9 +415,9 @@ export default function Home() {
               </div>
               <div className="lb-view-reveal rounded-[2rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_70px_rgba(31,41,51,0.22)] [--lb-delay:100ms]">
                 <Layers3 size={28} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
-                <p className="mt-8 text-5xl font-black leading-none">No fake demand</p>
+                <p className="mt-8 text-5xl font-black leading-none">Tanpa janji buyer palsu</p>
                 <p className="mt-5 text-sm font-semibold leading-7 text-[#C9D0D4]">
-                  Landing, dashboard, dan laporan memakai archetype buyer dan status readiness.
+                  Landing, dashboard, dan laporan memakai tipe kebutuhan buyer dan status kesiapan.
                   Tidak ada nama buyer palsu atau janji pembelian.
                 </p>
               </div>
@@ -438,8 +447,8 @@ export default function Home() {
                 Bukti ditandai, bukan dilebihkan.
               </h2>
               <p className="mt-6 max-w-2xl text-base font-semibold leading-8 text-[#53606A]">
-                Shared DB diperlakukan sebagai bahan eksplorasi terbatas. Data
-                operasional MVP disimpan di DB aplikasi dengan prefix tim.
+                Sumber eksplorasi diperlakukan sebagai bahan terbatas. Data
+                operasional MVP disimpan di ruang kerja aplikasi dengan ID tim.
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
@@ -463,10 +472,10 @@ export default function Home() {
           <div className="lb-view-reveal mx-auto mt-10 max-w-7xl rounded-[2rem] border border-[#E7DED1] bg-[#FFF8EA] p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-black text-[#7A4E2D]">Source registry</p>
-                <h3 className="mt-1 text-2xl font-black">Sumber nasional dan connector plan</h3>
+                <p className="text-sm font-black text-[#7A4E2D]">Registry sumber</p>
+                <h3 className="mt-1 text-2xl font-black">Sumber nasional dan rencana konektor</h3>
               </div>
-              <StatusBadge tone="warning">Source-labeled</StatusBadge>
+              <StatusBadge tone="warning">Berlabel sumber</StatusBadge>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-5">
               {nationalDataSources.slice(0, 5).map((source) => (
@@ -478,7 +487,7 @@ export default function Home() {
                   className="rounded-[18px] bg-[#FFFCF5] p-4 text-sm transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:bg-white focus-visible:lb-focus"
                 >
                   <p className="font-black">{source.name}</p>
-                  <p className="mt-2 font-semibold leading-6 text-[#53606A]">{source.status}</p>
+                  <p className="mt-2 font-semibold leading-6 text-[#53606A]">{publicStatusLabel(source.status)}</p>
                 </a>
               ))}
             </div>
@@ -542,7 +551,7 @@ export default function Home() {
             />
             <p className="mt-5 max-w-sm text-sm font-semibold leading-7 text-[#53606A]">
               {brand.tagline} Dibangun untuk membantu koperasi membaca peluang,
-              mengecek readiness, dan mengambil tindakan yang bisa diaudit.
+              mengecek kesiapan, dan mengambil tindakan yang bisa diaudit.
             </p>
           </div>
           <div>
@@ -564,8 +573,8 @@ export default function Home() {
           <div>
             <h3 className="font-black">Catatan</h3>
             <p className="mt-4 text-sm font-semibold leading-7 text-[#53606A]">
-              Platform hackathon/pilot. Integrasi produksi memerlukan izin,
-              credential resmi, dan pengamanan data.
+              Platform uji terbatas. Integrasi produksi memerlukan izin,
+              akses resmi, dan pengamanan data.
             </p>
           </div>
         </div>

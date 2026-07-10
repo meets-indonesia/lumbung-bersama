@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileCheck2, Lock, RefreshCcw } from "lucide-react";
 
 type DashboardReportPayload = {
-  source: "postgres";
+  source: "application-db";
   cooperative: {
     id: string;
     name: string;
@@ -210,7 +210,7 @@ type HackathonFinancingPayload = {
 };
 
 type OpenDataRegistryPayload = {
-  source: "static" | "postgres";
+  source: "static" | "application-db";
   registryStatus: string;
   docsReference: string;
   sourceLabels: string[];
@@ -320,7 +320,74 @@ function toCsv(rows: Array<Array<string | number | boolean | null | undefined>>)
 }
 
 function buyerEvidenceLabel(item: DashboardReportPayload["buyers"][number]) {
-  return item.sourceLabel ?? "Buyer archetype; bukan named buyer atau komitmen permintaan live.";
+  return item.sourceLabel ?? "Tipe kebutuhan buyer; bukan buyer bernama atau komitmen permintaan live.";
+}
+
+function publicSetupMessage(message: unknown, fallback: string) {
+  const raw = typeof message === "string" ? message.trim() : "";
+  if (!raw) return fallback;
+  if (
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|prefixed db|shared[-_\s]?db|db-read|database/i.test(
+      raw,
+    )
+  ) {
+    return fallback;
+  }
+  return publicProductText(raw, fallback);
+}
+
+function publicProductText(value: unknown, fallback = "Belum tersedia") {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return fallback;
+  return raw
+    .replace(/setup[-_\s]?required/gi, "perlu aktivasi")
+    .replace(/operator[-_\s]?ready/gi, "siap dipakai")
+    .replace(/operator/gi, "tim koperasi")
+    .replace(/shared[-_\s]?db/gi, "sumber eksplorasi")
+    .replace(/prefixed[-_\s]?db/gi, "tabel data tim")
+    .replace(/Postgres|postgres|database/gi, "data operasional")
+    .replace(/\bDB\b|\bdb\b/gi, "data")
+    .replace(/\benv(?:ironment)?\b/gi, "aktivasi")
+    .replace(/\bendpoint\b/gi, "layanan")
+    .replace(/\bconnector\b/gi, "konektor")
+    .replace(/smoke test/gi, "uji koneksi")
+    .replace(/aggregate-only/gi, "bukti agregat")
+    .replace(/aggregate/gi, "agregat")
+    .replace(/\braw\b/gi, "mentah");
+}
+
+function publicRegistryStatusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw) return "Belum dicek";
+  if (/unconfigured|not[-_\s]?configured|not[-_\s]?ready/i.test(raw)) return "Perlu aktivasi";
+  if (/operator[-_\s]?ready|implemented|ready|application/i.test(raw)) return "Siap dipakai";
+  if (/loading/i.test(raw)) return "Memuat";
+  if (/unverified|belum[-_\s]?terverifikasi/i.test(raw)) return "Belum terverifikasi";
+  if (/verified|terverifikasi/i.test(raw)) return "Terverifikasi";
+  if (/requested|diajukan/i.test(raw)) return "Diajukan";
+  if (/draft/i.test(raw)) return "Draft";
+  if (/limited|needs[-_\s]?verification/i.test(raw)) return "Terbatas";
+  if (/medium/i.test(raw)) return "Cukup";
+  if (/aggregate/i.test(raw)) return "Bukti agregat";
+  if (/env|setup|required|activation|static|fallback|pilot/i.test(raw)) return "Perlu aktivasi";
+  if (/source-discovery|discovery/i.test(raw)) return "Discovery";
+  if (/planned|connector/i.test(raw)) return "Direncanakan";
+  if (/manual|reference/i.test(raw)) return "Referensi";
+  return publicProductText(raw, "Belum dicek").replace(/[-_]/g, " ");
+}
+
+function publicSourceLabel(value: string) {
+  return publicProductText(value, "Sumber bukti").replace(/source-discovery/gi, "discovery").replace(/connector-planned/gi, "direncanakan");
+}
+
+function teamTableLabel(tableName: string) {
+  if (/buyer[_-]?requirements/i.test(tableName)) return "Syarat buyer";
+  if (/stock[_-]?ledger/i.test(tableName)) return "Riwayat stok";
+  if (/media[_-]?evidence/i.test(tableName)) return "Bukti media";
+  if (/finance/i.test(tableName)) return "Kesiapan pembiayaan";
+  if (/stock/i.test(tableName)) return "Data stok";
+  if (/buyer/i.test(tableName)) return "Kesiapan buyer";
+  return "Data tim";
 }
 
 function redactSensitiveText(value: unknown) {
@@ -342,7 +409,7 @@ function signalField(item: SignalSpineItem | Record<string, unknown> | null | un
   if (!item) return "";
   for (const key of keys) {
     const formatted = signalScalar(item[key]);
-    if (formatted) return formatted;
+    if (formatted) return publicSetupMessage(formatted, "Sumber eksplorasi terbatas");
   }
   return "";
 }
@@ -353,68 +420,68 @@ function signalItemLabel(item: SignalSpineItem | Record<string, unknown> | null 
 
 function signalItemStatus(item: SignalSpineItem | Record<string, unknown> | null | undefined) {
   const explicit = signalField(item, ["status", "state", "verdict"]);
-  if (explicit) return explicit;
-  return typeof item?.allowed === "boolean" ? (item.allowed ? "Allowed" : "Needs approval") : "Needs verification";
+  if (explicit) return publicRegistryStatusLabel(explicit);
+  return typeof item?.allowed === "boolean" ? (item.allowed ? "Diizinkan" : "Perlu persetujuan") : "Perlu verifikasi";
 }
 
-function signalItemSource(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "signal-spine aggregate") {
+function signalItemSource(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "Bukti agregat") {
   return signalField(item, ["sourceLabel", "source", "evidenceRef"]) || fallback;
 }
 
-function signalItemSummary(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "Aggregate row pending.") {
+function signalItemSummary(item: SignalSpineItem | Record<string, unknown> | null | undefined, fallback = "Baris bukti agregat belum tersedia.") {
   if (!item) return fallback;
   const metricParts = [
-    signalField(item, ["score"]) ? `score ${signalField(item, ["score"])}` : "",
-    signalField(item, ["value"]) ? `value ${signalField(item, ["value"])}` : "",
-    signalField(item, ["count"]) ? `count ${signalField(item, ["count"])}` : "",
+    signalField(item, ["score"]) ? `skor ${signalField(item, ["score"])}` : "",
+    signalField(item, ["value"]) ? `nilai ${signalField(item, ["value"])}` : "",
+    signalField(item, ["count"]) ? `jumlah ${signalField(item, ["count"])}` : "",
   ].filter(Boolean);
   const detail = signalField(item, ["detail", "description", "note"]);
   const nextAction = signalField(item, ["nextAction", "action"]);
   const caveat = signalField(item, ["caveat"]);
   const blockers = signalScalar(item.blockers);
-  const nestedCount = Array.isArray(item.items) && item.items.length > 0 ? `${formatInteger(item.items.length)} nested aggregate items` : "";
-  return [signalItemStatus(item), metricParts.join("; "), detail, nextAction ? `next: ${nextAction}` : "", caveat, blockers, nestedCount]
+  const nestedCount = Array.isArray(item.items) && item.items.length > 0 ? `${formatInteger(item.items.length)} bukti agregat turunan` : "";
+  return [signalItemStatus(item), metricParts.join("; "), detail, nextAction ? `lanjut: ${nextAction}` : "", caveat, blockers, nestedCount]
     .filter(Boolean)
     .join(" | ") || fallback;
 }
 
 const reportDemoFlowSteps = [
-  ["Dashboard", "Evidence, role, queue, and manager command center."],
-  ["Peta", "Wilayah/komoditas with source caveat."],
-  ["Score", "Explainable opportunity score and data-quality caveat."],
-  ["Buyer", "Buyer archetype, market check, and approval workflow."],
-  ["Laporan", "CSV/report artifact for cooperative meeting."],
+  ["Dashboard", "Ringkasan operasional, antrean bukti, dan tindak lanjut."],
+  ["Peta", "Wilayah dan komoditas dengan catatan sumber."],
+  ["Skor", "Prioritas peluang yang bisa dijelaskan."],
+  ["Buyer", "Profil kebutuhan, cek pasar, dan persetujuan pengurus."],
+  ["Laporan", "Ekspor rapat koperasi tanpa data pribadi."],
 ] as const;
 
 const reportRoleRows = [
-  ["Pengurus", "/dashboard, /laporan", "Final approval for outreach, finance, and locked report."],
-  ["Manager Koperasi", "/dashboard, /peta-unggulan, /laporan", "Monitors sales, stock, delivery, buyer, finance, and alerts."],
-  ["Staff/Admin Gudang", "Stock readiness", "Validates product, unit, inventory, location, and evidence."],
-  ["Staff/Admin Logistik", "Fulfillment", "Schedules pickup, courier assignment, delivery status, and proof."],
-  ["Kasir", "POS signal", "Aggregate transaction signal only; no customer detail."],
-  ["Kurir", "Delivery", "Marks delivery stages without public recipient data."],
-  ["Juri/Viewer demo", "Read-only demo routes", "Sample/aggregate/no PII view."],
+  ["Pengurus", "/dashboard, /laporan", "Menyetujui kontak buyer, pembiayaan, dan laporan rapat."],
+  ["Manager Koperasi", "/dashboard, /peta-unggulan, /laporan", "Memantau penjualan, stok, pengiriman, buyer, pembiayaan, dan peringatan."],
+  ["Staff/Admin Gudang", "Kesiapan stok", "Memeriksa produk, satuan, inventori, lokasi, dan bukti."],
+  ["Staff/Admin Logistik", "Pemenuhan pesanan", "Mengatur pickup, kurir, status pengiriman, dan bukti serah terima."],
+  ["Kasir", "Sinyal POS", "Menampilkan agregat transaksi saja, tanpa detail pelanggan."],
+  ["Kurir", "Pengiriman", "Memperbarui tahap pengiriman tanpa data penerima publik."],
+  ["Pembaca laporan", "Akses baca", "Melihat contoh agregat tanpa data pribadi."],
 ] as const;
 
 const reportApprovalStages = [
-  ["Recommended", "AI/rules produce source-grounded recommendation."],
-  ["Needs verification", "Operator checks stock, document, price, buyer requirement, and caveat."],
-  ["Approved", "Manager/pengurus approves next action; AI never approves automatically."],
+  ["Rekomendasi", "Sistem memberi saran berbasis sumber dan aturan."],
+  ["Perlu verifikasi", "Tim koperasi memeriksa stok, dokumen, harga, syarat buyer, dan catatan batas."],
+  ["Disetujui", "Manager/pengurus menyetujui tindak lanjut; AI tidak menyetujui otomatis."],
 ] as const;
 
 const reportSimkopdesChecklist = [
-  "Produk punya satuan, kategori, potensi desa, supplier/source, and status not draft.",
-  "Inventory readiness checks negative stock, generic labels, grade, packaging, and documentation.",
-  "POS signal is aggregate demand/cashflow proxy, not customer or receipt detail.",
-  "Logistics readiness covers warehouse location, courier, delivery status, and proof-of-delivery governance.",
-  "Member savings alignment covers Simpanan Pokok, Wajib, Sukarela, billing period, payment proof, withdrawal rules, and aggregate liquidity signal.",
+  "Produk punya satuan, kategori, potensi desa, pemasok/sumber, dan status bukan draft.",
+  "Kesiapan inventori mengecek stok negatif, label umum, grade, kemasan, dan dokumentasi.",
+  "Sinyal POS adalah agregat permintaan dan arus kas, bukan detail pelanggan atau struk.",
+  "Kesiapan logistik mencakup gudang, kurir, status pengiriman, dan bukti serah terima.",
+  "Keselarasan simpanan anggota memakai agregat likuiditas, bukan detail anggota publik.",
 ] as const;
 
 const reportAiGuardrails = [
-  "AI Business Analyst is aggregate early warning, not formal audit.",
-  "Borrower Risk uses risk flag and missing evidence, never automatic rejection or fraud labeling.",
-  "Market negotiation needs official/curated price source or operator input before offer/floor/target price.",
-  "Outreach script stays editable and requires operator/pengurus approval before buyer contact.",
+  "Analisis AI adalah peringatan awal berbasis agregat, bukan audit formal.",
+  "Risiko pembiayaan memakai flag dan bukti kurang lengkap, bukan penolakan otomatis atau label fraud.",
+  "Negosiasi pasar butuh sumber harga resmi/kurasi atau input tim koperasi sebelum harga ditawarkan.",
+  "Naskah kontak buyer tetap bisa diedit dan perlu persetujuan pengurus sebelum kontak buyer.",
 ] as const;
 
 export function ReportClient() {
@@ -430,7 +497,7 @@ export function ReportClient() {
   const [hackathonStatus, setHackathonStatus] = useState<LoadStatus>("loading");
   const [registryStatus, setRegistryStatus] = useState<LoadStatus>("loading");
   const [signalSpineStatus, setSignalSpineStatus] = useState<LoadStatus>("loading");
-  const [message, setMessage] = useState("Memuat laporan aksi dari API.");
+  const [message, setMessage] = useState("Memuat laporan aksi dari layanan.");
   const [locked, setLocked] = useState(false);
   const [working, setWorking] = useState("");
 
@@ -439,7 +506,7 @@ export function ReportClient() {
     setHackathonStatus((current) => (current === "ready" ? "ready" : "loading"));
     setRegistryStatus((current) => (current === "ready" ? "ready" : "loading"));
     setSignalSpineStatus((current) => (current === "ready" ? "ready" : "loading"));
-    setMessage("Memuat laporan aksi dari API.");
+    setMessage("Memuat laporan aksi dari layanan.");
 
     try {
       const dashboardResponse = await fetch("/api/dashboard", { cache: "no-store" });
@@ -451,18 +518,18 @@ export function ReportClient() {
       if (!dashboardResponse.ok) {
         setDashboardData(null);
         setStatus(dashboardResponse.status === 503 ? "setup" : "error");
-        setMessage(dashboardPayload?.message ?? dashboardPayload?.error ?? "Data operasional belum tersedia.");
+        setMessage(publicSetupMessage(dashboardPayload?.message ?? dashboardPayload?.error, "Data operasional belum tersedia."));
       } else {
         const payload = dashboardPayload as DashboardReportPayload;
         setDashboardData(payload);
         setLocked(Boolean(payload.reportPeriod?.locked));
         setStatus("ready");
-        setMessage("Laporan aksi memakai data operasional Postgres.");
+        setMessage("Laporan aksi memakai data operasional aplikasi.");
       }
     } catch (error) {
       setDashboardData(null);
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Gagal memuat dashboard API.");
+      setMessage(publicSetupMessage(error instanceof Error ? error.message : "", "Gagal memuat data operasional."));
     }
 
     try {
@@ -587,147 +654,149 @@ export function ReportClient() {
   const rolePermissionMatrix = signalSpine?.rolePermissionMatrix ?? [];
   const signalBoundarySentence = signalSpine?.boundarySentence
     ? redactSensitiveText(signalSpine.boundarySentence)
-    : "Signal spine boundary sentence belum tersedia dari API.";
+    : "Batas klaim bukti agregat belum tersedia dari layanan.";
   const signalSpineSummary =
     signalSpineStatus === "ready"
-      ? `${formatInteger(signalFamilies.length)} signal families; ${formatInteger(provenanceLedger.length)} provenance rows; ${formatInteger(managerActionQueue.length)} manager actions`
+      ? `${formatInteger(signalFamilies.length)} kelompok sinyal; ${formatInteger(provenanceLedger.length)} baris bukti; ${formatInteger(managerActionQueue.length)} tindak lanjut`
       : signalSpineStatus === "loading"
-        ? "Memuat signal spine"
-        : "Signal spine env-gated atau belum tersedia";
+        ? "Memuat bukti agregat"
+        : "Bukti agregat perlu aktivasi atau belum tersedia";
   const signalOverviewRows = [
-    ["Signal families", `${formatInteger(signalFamilies.length)} aggregate groups`, signalFamilies[0] ? signalItemSummary(signalFamilies[0]) : "Belum ada family dari endpoint."],
-    ["Provenance ledger", `${formatInteger(provenanceLedger.length)} source rows`, provenanceLedger[0] ? signalItemSummary(provenanceLedger[0]) : "Belum ada provenance dari endpoint."],
-    ["Manager actions", `${formatInteger(managerActionQueue.length)} queued actions`, managerActionQueue[0] ? signalItemSummary(managerActionQueue[0]) : "Belum ada action queue dari endpoint."],
-    ["Connectors", `${formatInteger(connectorScorecard.length)} scorecard rows`, connectorScorecard[0] ? signalItemSummary(connectorScorecard[0]) : "Connector scorecard belum tersedia."],
+    ["Kelompok sinyal", `${formatInteger(signalFamilies.length)} grup agregat`, signalFamilies[0] ? signalItemSummary(signalFamilies[0]) : "Belum ada kelompok sinyal dari layanan."],
+    ["Jejak bukti", `${formatInteger(provenanceLedger.length)} baris sumber`, provenanceLedger[0] ? signalItemSummary(provenanceLedger[0]) : "Belum ada jejak bukti dari layanan."],
+    ["Tindak lanjut", `${formatInteger(managerActionQueue.length)} antrean aksi`, managerActionQueue[0] ? signalItemSummary(managerActionQueue[0]) : "Belum ada antrean aksi dari layanan."],
+    ["Konektor", `${formatInteger(connectorScorecard.length)} baris kesiapan`, connectorScorecard[0] ? signalItemSummary(connectorScorecard[0]) : "Kesiapan konektor belum tersedia."],
   ] as const;
   const signalGateCards: Array<{
     label: string;
     item: SignalSpineItem | Record<string, unknown> | null | undefined;
     empty: string;
   }> = [
-    { label: "Readiness gate", item: signalSpine?.readinessGate, empty: "Readiness gate belum tersedia." },
-    { label: "Offer pack draft", item: signalSpine?.offerPackDraft, empty: "Offer pack draft belum tersedia." },
-    { label: "Working capital scenario", item: signalSpine?.workingCapitalScenario, empty: "Working capital scenario belum tersedia." },
-    { label: "Cooperative health gate", item: signalSpine?.cooperativeHealthGate, empty: "Cooperative health gate belum tersedia." },
-    { label: "Demo fixture", item: signalSpine?.demoFixture, empty: "Demo fixture belum tersedia." },
+    { label: "Gerbang kesiapan", item: signalSpine?.readinessGate, empty: "Gerbang kesiapan belum tersedia." },
+    { label: "Draft penawaran", item: signalSpine?.offerPackDraft, empty: "Draft penawaran belum tersedia." },
+    { label: "Skenario modal kerja", item: signalSpine?.workingCapitalScenario, empty: "Skenario modal kerja belum tersedia." },
+    { label: "Kesehatan koperasi", item: signalSpine?.cooperativeHealthGate, empty: "Indikator kesehatan koperasi belum tersedia." },
+    { label: "Data contoh", item: signalSpine?.demoFixture, empty: "Data contoh belum tersedia." },
   ];
   const signalActionGroups: Array<{ label: string; rows: SignalSpineItem[]; empty: string }> = [
-    { label: "Manager action queue", rows: managerActionQueue, empty: "Belum ada manager action dari endpoint." },
-    { label: "Remediation planner", rows: remediationPlanner, empty: "Belum ada remediation planner dari endpoint." },
-    { label: "Connector scorecard", rows: connectorScorecard, empty: "Belum ada connector scorecard dari endpoint." },
+    { label: "Antrean tindak lanjut", rows: managerActionQueue, empty: "Belum ada tindak lanjut dari layanan." },
+    { label: "Rencana perbaikan", rows: remediationPlanner, empty: "Belum ada rencana perbaikan dari layanan." },
+    { label: "Kesiapan konektor", rows: connectorScorecard, empty: "Belum ada kesiapan konektor dari layanan." },
   ];
   const sourceLabels = sourceRegistry?.sourceLabels ?? [];
   const p0Roadmap = sourceRegistry?.p0Roadmap ?? [];
   const registryCoverage = sourceRegistry?.coverage.administrativeAreasImported ?? {};
   const importedAreaTotal = Object.values(registryCoverage).reduce((total, value) => total + Number(value ?? 0), 0);
   const implementedConnectors = registrySources.filter((item) => item.integrationClaim === "implemented").length;
-  const envGatedConnectors = registrySources.filter((item) => item.integrationClaim === "env-gated").length;
+  const activationRequiredConnectors = registrySources.filter((item) =>
+    ["env-gated", "activation-required"].includes(item.integrationClaim),
+  ).length;
   const discoveryOrPlannedSources = registrySources.filter((item) =>
     ["source-discovery", "connector-planned"].includes(item.integrationClaim),
   ).length;
   const sourceRegistrySummary =
     registryStatus === "ready"
-      ? `${formatInteger(registrySources.length)} sumber; ${formatInteger(sourceLabels.length)} label; ${formatInteger(p0Roadmap.length)} roadmap P0`
+      ? `${formatInteger(registrySources.length)} sumber; ${formatInteger(sourceLabels.length)} label; ${formatInteger(p0Roadmap.length)} rencana aktivasi`
       : registryStatus === "loading"
         ? "Memuat registry sumber"
         : "Registry sumber belum tersedia";
   const buyerNeedsReview = buyers.filter((item) => !item.status.toLowerCase().includes("setuju")).length;
   const approvalSummary = [
-    ["Recommended", buyers.length + buyerRequirements.length],
-    ["Needs verification", pendingQueue.length + buyerNeedsReview + criticalStocks.length],
-    ["Approved", approvedBuyers.length],
+    ["Rekomendasi", buyers.length + buyerRequirements.length],
+    ["Perlu verifikasi", pendingQueue.length + buyerNeedsReview + criticalStocks.length],
+    ["Disetujui", approvedBuyers.length],
   ] as const;
   const managerCommandRows = [
-    ["Sales/POS signal", topHackathonOpportunity ? formatInteger(topHackathonOpportunity.transactions) : "Env gated", "Aggregate transaction signal only; no customer detail."],
-    ["Inventory readiness", `${formatInteger(criticalStocks.length)} gaps`, "Validate stock, grade, unit, packaging, and documentation."],
-    ["Warehouse/logistics", `${formatInteger(stockLedger.length)} ledger rows`, "Check pickup, courier, storage location, and proof-of-delivery stage."],
-    ["Buyer outreach", `${formatInteger(buyerNeedsReview)} need review`, "Approve script only after price, grade, volume, and packaging are checked."],
-    ["Financing readiness", financingReadiness ? `${formatInteger(financingReadiness.totals.verifiedRequests)} verified` : "Env gated", "Readiness only, not loan approval."],
-    ["Data quality", `${formatInteger(qualityIssueTotal || hackathonSummary?.dataQualityFlags.length || 0)} flags`, "Bad data becomes needs verification."],
+    ["Sinyal POS", topHackathonOpportunity ? formatInteger(topHackathonOpportunity.transactions) : "Perlu aktivasi", "Sinyal transaksi agregat saja, tanpa detail pelanggan."],
+    ["Kesiapan inventori", `${formatInteger(criticalStocks.length)} celah`, "Verifikasi stok, grade, satuan, kemasan, dan dokumentasi."],
+    ["Gudang/logistik", `${formatInteger(stockLedger.length)} catatan`, "Cek pickup, kurir, lokasi penyimpanan, dan bukti serah terima."],
+    ["Outreach buyer", `${formatInteger(buyerNeedsReview)} perlu review`, "Setujui naskah setelah harga, grade, volume, dan kemasan dicek."],
+    ["Kesiapan pembiayaan", financingReadiness ? `${formatInteger(financingReadiness.totals.verifiedRequests)} terverifikasi` : "Perlu aktivasi", "Hanya kesiapan dokumen, bukan persetujuan pinjaman."],
+    ["Kualitas data", `${formatInteger(qualityIssueTotal || hackathonSummary?.dataQualityFlags.length || 0)} catatan`, "Data bermasalah masuk antrean verifikasi."],
   ] as const;
   const simkopdesChecklistRows = reportSimkopdesChecklist.map((item, index) => {
     const status =
       index === 0
         ? stocks.length > 0
-          ? `${formatInteger(stocks.length)} stock rows`
+          ? `${formatInteger(stocks.length)} catatan stok`
           : "Checklist"
         : index === 1
           ? criticalStocks.length > 0
-            ? `${formatInteger(criticalStocks.length)} gaps`
-            : "No critical gap"
+            ? `${formatInteger(criticalStocks.length)} celah`
+            : "Tanpa celah kritis"
           : index === 2
             ? topHackathonOpportunity
-              ? `${formatInteger(topHackathonOpportunity.transactions)} transactions`
-              : "Env gated"
+              ? `${formatInteger(topHackathonOpportunity.transactions)} transaksi`
+              : "Perlu aktivasi"
             : index === 3
               ? stockLedger.length > 0
-                ? `${formatInteger(stockLedger.length)} ledger`
-                : "Workflow"
-              : "Aggregate/roadmap";
+                ? `${formatInteger(stockLedger.length)} catatan`
+                : "Alur kerja"
+              : "Agregat/rencana";
     return { item, status };
   });
   const businessAnalystRows = [
     [
-      "Health score koperasi",
+      "Skor kesehatan koperasi",
       financingReadiness
         ? financingReadiness.totals.verificationRate && financingReadiness.totals.verificationRate > 0.25
           ? "Sehat terbatas"
           : "Perlu perhatian"
-        : "Needs verification",
+        : "Perlu verifikasi",
       financingReadiness
-        ? `${formatInteger(financingReadiness.totals.totalRequests)} aggregate requests; ${formatInteger(financingReadiness.totals.verifiedRequests)} verified.`
-        : "Shared financing endpoint belum tersedia.",
+        ? `${formatInteger(financingReadiness.totals.totalRequests)} permintaan agregat; ${formatInteger(financingReadiness.totals.verifiedRequests)} terverifikasi.`
+        : "Kesiapan pembiayaan belum aktif.",
     ],
-    ["Liquidity/cashflow proxy", topHackathonOpportunity ? `${formatInteger(topHackathonOpportunity.transactions)} POS signals` : "Source required", "POS sample helps demand reading, not audited finance."],
-    ["Savings aggregate", `${formatInteger(reportSimkopdesChecklist.length)} mapped checklist items`, "Member savings detail is not exposed in the public/demo report."],
+    ["Sinyal likuiditas dan arus kas", topHackathonOpportunity ? `${formatInteger(topHackathonOpportunity.transactions)} sinyal POS` : "Perlu sumber resmi", "Sampel POS membantu membaca permintaan, bukan audit keuangan."],
+    ["Agregat simpanan", `${formatInteger(reportSimkopdesChecklist.length)} item checklist`, "Detail simpanan anggota tidak ditampilkan di laporan publik."],
   ] as const;
   const borrowerRiskRows = [
-    ["Duplicate/inconsistent request", finance.length > 1 ? "Check queue" : "Monitor", "Use risk flag and missing evidence, never fraud labels."],
-    ["Amount vs business scale", criticalStocks.length > 0 ? "Needs verification" : "Ready for review", "Compare purpose with inventory, stock, and repayment plan."],
-    ["Document completeness", pendingQueue.length > 0 ? "Missing evidence possible" : "Queue clear", "Committee review is required before status change."],
+    ["Permintaan ganda/tidak konsisten", finance.length > 1 ? "Cek antrean" : "Pantau", "Gunakan flag risiko dan bukti kurang lengkap, bukan label fraud."],
+    ["Nominal vs skala usaha", criticalStocks.length > 0 ? "Perlu verifikasi" : "Siap direview", "Bandingkan tujuan dengan inventori, stok, dan rencana bayar."],
+    ["Kelengkapan dokumen", pendingQueue.length > 0 ? "Bukti mungkin kurang" : "Antrean bersih", "Komite perlu review sebelum status berubah."],
   ] as const;
   const negotiationRows = [
-    ["Market reference price", "Source required", "Use official/curated source or operator input; do not invent live prices."],
-    ["Offer/floor/target price", buyerRequirements.length > 0 ? "Draft after requirement review" : "Waiting requirement", "Needs grade, packaging, logistics, and margin minimum."],
-    ["Outreach script", buyers.length > 0 ? "Human approval required" : "No buyer archetype", "Editable script, not automatic buyer contact."],
+    ["Harga referensi pasar", "Perlu sumber resmi", "Gunakan sumber resmi/kurasi atau input tim koperasi; jangan mengarang harga live."],
+    ["Harga penawaran/minimum/target", buyerRequirements.length > 0 ? "Draft setelah review syarat" : "Menunggu syarat", "Butuh grade, kemasan, logistik, dan batas margin minimum."],
+    ["Naskah kontak buyer", buyers.length > 0 ? "Perlu persetujuan pengurus" : "Belum ada profil buyer", "Naskah bisa diedit, bukan kontak buyer otomatis."],
   ] as const;
 
   const executiveRows = [
     ["Koperasi", dashboardData?.cooperative?.name ?? "Belum tersedia"],
     ["Lokasi", dashboardData?.cooperative ? `${dashboardData.cooperative.village}, ${dashboardData.cooperative.regency}` : "Belum tersedia"],
-    ["Source operasional", status === "ready" ? "Postgres operational" : "Setup required"],
-    ["Shared DB evidence", hackathonStatus === "ready" ? "Shared DB read-only" : "Env gated"],
-    ["Headline evidence", headlineMetrics.length ? `${formatInteger(headlineMetrics.length)} aggregate metrics` : "Env gated"],
-    ["Opportunity score endpoint", directOpportunityAreas.length ? `${formatInteger(directOpportunityAreas.length)} ranked areas` : "Env gated"],
-    ["Buyer matching lite endpoint", directBuyerMatches.length ? `${formatInteger(directBuyerMatches.length)} archetype matches` : "Env gated"],
-    ["Data-quality endpoint", qualityChecks.length ? `${formatInteger(qualityChecks.length)} table checks` : "Env gated"],
-    ["Signal spine backlog 29-46", signalSpineSummary],
-    ["External source registry", sourceRegistrySummary],
-    ["Guided demo flow", reportDemoFlowSteps.map(([label]) => label).join(" -> ")],
-    ["Role/access alignment", `${formatInteger(reportRoleRows.length)} SIMKOPDES roles mapped`],
-    ["Manager command actions", `${formatInteger(managerCommandRows.length)} action rows`],
-    ["SIMKOPDES readiness checklist", `${formatInteger(simkopdesChecklistRows.length)} checklist rows`],
-    ["Operator approval workflow", approvalSummary.map(([label, value]) => `${label}: ${formatInteger(value)}`).join("; ")],
-    ["AI business analyst", String(businessAnalystRows[0]?.[1] ?? "Needs verification")],
-    ["Borrower risk guardrail", String(borrowerRiskRows[0]?.[1] ?? "Monitor")],
-    ["Market negotiation", String(negotiationRows[0]?.[1] ?? "Source required")],
+    ["Sumber operasional", status === "ready" ? "Data operasional aplikasi" : "Perlu aktivasi"],
+    ["Bukti eksplorasi", hackathonStatus === "ready" ? "Bukti agregat terbatas" : "Perlu aktivasi"],
+    ["Bukti ringkas", headlineMetrics.length ? `${formatInteger(headlineMetrics.length)} metrik agregat` : "Perlu aktivasi"],
+    ["Skor peluang", directOpportunityAreas.length ? `${formatInteger(directOpportunityAreas.length)} area prioritas` : "Perlu aktivasi"],
+    ["Kecocokan buyer", directBuyerMatches.length ? `${formatInteger(directBuyerMatches.length)} profil kebutuhan` : "Perlu aktivasi"],
+    ["Kualitas data", qualityChecks.length ? `${formatInteger(qualityChecks.length)} pemeriksaan` : "Perlu aktivasi"],
+    ["Bukti agregat", signalSpineSummary],
+    ["Daftar sumber eksternal", sourceRegistrySummary],
+    ["Alur MVP", reportDemoFlowSteps.map(([label]) => label).join(" -> ")],
+    ["Kewenangan akses", `${formatInteger(reportRoleRows.length)} peran SIMKOPDES dipetakan`],
+    ["Tindak lanjut", `${formatInteger(managerCommandRows.length)} baris aksi`],
+    ["Checklist SIMKOPDES", `${formatInteger(simkopdesChecklistRows.length)} baris checklist`],
+    ["Alur persetujuan", approvalSummary.map(([label, value]) => `${label}: ${formatInteger(value)}`).join("; ")],
+    ["Analisis AI", String(businessAnalystRows[0]?.[1] ?? "Perlu verifikasi")],
+    ["Batas risiko pembiayaan", String(borrowerRiskRows[0]?.[1] ?? "Pantau")],
+    ["Negosiasi pasar", String(negotiationRows[0]?.[1] ?? "Perlu sumber resmi")],
     ["Draft perlu verifikasi", formatInteger(pendingQueue.length)],
-    ["Stok/readiness gap", formatInteger(criticalStocks.length)],
-    ["Buyer readiness approved", formatInteger(approvedBuyers.length)],
-    ["Buyer requirement rows", formatInteger(buyerRequirements.length)],
-    ["Financing shared DB requests", financingReadiness ? formatInteger(financingReadiness.totals.totalRequests) : "Env gated"],
-    ["Financing verified aggregate", financingReadiness ? formatInteger(financingReadiness.totals.verifiedRequests) : "Env gated"],
-    ["Stock ledger rows", formatInteger(stockLedger.length)],
-    ["Media evidence rows", formatInteger(mediaEvidence.length)],
-    ["Team table prefix", dashboardData?.teamTablePrefix ?? "anak_sarengklek_"],
-    ["Prefixed DB status", dashboardData?.prefixedDbStatus?.status ?? "unknown"],
+    ["Celah stok/kesiapan", formatInteger(criticalStocks.length)],
+    ["Aksi buyer disetujui", formatInteger(approvedBuyers.length)],
+    ["Baris syarat buyer", formatInteger(buyerRequirements.length)],
+    ["Permintaan pembiayaan agregat", financingReadiness ? formatInteger(financingReadiness.totals.totalRequests) : "Perlu aktivasi"],
+    ["Pembiayaan terverifikasi", financingReadiness ? formatInteger(financingReadiness.totals.verifiedRequests) : "Perlu aktivasi"],
+    ["Catatan stok", formatInteger(stockLedger.length)],
+    ["Bukti media", formatInteger(mediaEvidence.length)],
+    ["Sumber tabel tim", dashboardData?.prefixedDbStatus ? "Data operasional tim" : "Belum tersedia"],
+    ["Status tabel data tim", dashboardData?.prefixedDbStatus?.status === "ready" ? "Siap dipakai" : "Perlu aktivasi"],
     ["Section laporan aktif", `${formatInteger(includedSections.length)} dari ${formatInteger(reportSections.length)}`],
-    ["Decision status", locked ? "Dikunci untuk rapat pengurus" : "Draft laporan aksi"],
+    ["Status keputusan", locked ? "Dikunci untuk rapat pengurus" : "Draft laporan aksi"],
   ];
 
   async function toggleReportLock() {
     if (!dashboardData?.reportPeriod) {
-      setMessage("Report period belum tersedia dari Postgres.");
+      setMessage("Periode laporan belum tersedia dari data operasional.");
       return;
     }
     setWorking("lock");
@@ -769,7 +838,17 @@ export function ReportClient() {
         privacyScope?: string;
         caveat?: string;
       } = {},
-    ) => [section, field, value, sourceLabel, freshness, confidence, nextAction, privacyScope, caveat];
+    ) => [
+      section,
+      redactSensitiveText(field),
+      redactSensitiveText(value),
+      publicSetupMessage(sourceLabel, "Sumber eksplorasi terbatas"),
+      redactSensitiveText(freshness),
+      redactSensitiveText(confidence),
+      redactSensitiveText(nextAction),
+      redactSensitiveText(privacyScope),
+      publicSetupMessage(caveat, "Caveat sumber eksplorasi terbatas."),
+    ];
 
     const signalExportRows = (
       section: string,
@@ -782,183 +861,183 @@ export function ReportClient() {
           section,
           item ? signalItemLabel(item, `${fallbackField}-${index + 1}`) : fallbackField,
           item ? signalItemSummary(item) : fallbackValue,
-          item ? signalItemSource(item) : "signal-spine aggregate",
+          item ? signalItemSource(item) : "Bukti agregat",
           {
-            confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
+            confidence: signalSpineStatus === "ready" ? "aggregate" : "perlu aktivasi",
             nextAction: item
               ? signalField(item, ["nextAction", "action"]) || "Review manager/pengurus sebelum aksi bisnis."
-              : "Tunggu endpoint signal-spine tersedia sebelum memakai section ini.",
+              : "Tunggu bukti agregat tersedia sebelum memakai bagian ini.",
             privacyScope: "aggregate-no-pii-no-secrets",
-            caveat: "Signal spine CSV hanya mengekspor label/status aggregate; tidak ada PII, secret, atau klaim official external connector.",
+            caveat: "CSV hanya mengekspor label/status agregat; tidak ada PII, secret, atau klaim konektor resmi.",
           },
         ),
       );
 
     const rows = [
       [
-        "section",
+        "bagian",
         "field",
-        "value",
-        "source_label",
-        "freshness",
-        "confidence",
-        "next_action",
-        "privacy_scope",
+        "nilai",
+        "label_sumber",
+        "kemutakhiran",
+        "keyakinan",
+        "aksi_lanjutan",
+        "ruang_lingkup_privasi",
         "caveat",
       ],
       ...executiveRows.map(([field, value]) => reportRow(
         "executive-summary",
         field,
         value,
-        "Postgres operational + shared DB read-only + source registry",
+        "Data operasional aplikasi + bukti agregat terbatas + daftar sumber",
         {
           confidence: status === "ready" ? "medium" : "limited",
-          nextAction: "Gunakan sebagai pembuka rapat, lalu cek section detail sebelum outreach atau pembiayaan.",
-          caveat: "Ringkasan menggabungkan API operasional dan evidence aggregate; bukan klaim produksi SIMKOPDES.",
+          nextAction: "Gunakan sebagai pembuka rapat, lalu cek bagian detail sebelum kontak buyer atau pembiayaan.",
+          caveat: "Ringkasan menggabungkan layanan operasional dan bukti agregat; bukan klaim produksi SIMKOPDES.",
         },
       )),
       ...signalExportRows(
-        "signal-spine-signal",
+        "bukti-agregat-sinyal",
         signalFamilies,
-        "signal families",
-        "Tidak ada signal family aggregate dari endpoint.",
+        "kelompok sinyal",
+        "Tidak ada kelompok sinyal agregat dari layanan.",
       ),
       ...signalExportRows(
-        "signal-spine-provenance",
+        "bukti-agregat-jejak",
         provenanceLedger,
-        "provenance ledger",
-        "Tidak ada provenance ledger aggregate dari endpoint.",
+        "jejak bukti",
+        "Tidak ada jejak bukti agregat dari layanan.",
       ),
       reportRow(
-        "signal-spine-gate",
-        "readiness gate",
-        signalSpine?.readinessGate ? signalItemSummary(signalSpine.readinessGate) : "Readiness gate belum tersedia.",
-        signalItemSource(signalSpine?.readinessGate, "signal-spine aggregate"),
+        "bukti-agregat-gerbang-kesiapan",
+        "gerbang kesiapan",
+        signalSpine?.readinessGate ? signalItemSummary(signalSpine.readinessGate) : "Gerbang kesiapan belum tersedia.",
+        signalItemSource(signalSpine?.readinessGate, "Bukti agregat"),
         {
-          confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
-          nextAction: signalField(signalSpine?.readinessGate, ["nextAction", "action"]) || "Manager memverifikasi readiness sebelum outreach atau pembiayaan.",
+          confidence: signalSpineStatus === "ready" ? "aggregate" : "perlu aktivasi",
+          nextAction: signalField(signalSpine?.readinessGate, ["nextAction", "action"]) || "Manager memverifikasi kesiapan sebelum kontak buyer atau pembiayaan.",
           privacyScope: "aggregate-no-pii-no-secrets",
-          caveat: "Gate bersifat decision-support; tidak ada approval otomatis atau klaim integrasi resmi.",
+          caveat: "Gerbang kesiapan bersifat pendukung keputusan; tidak ada persetujuan otomatis atau klaim integrasi resmi.",
         },
       ),
       reportRow(
-        "signal-spine-offer",
-        "offer pack draft",
-        signalSpine?.offerPackDraft ? signalItemSummary(signalSpine.offerPackDraft) : "Offer pack draft belum tersedia.",
-        signalItemSource(signalSpine?.offerPackDraft, "signal-spine aggregate"),
+        "bukti-agregat-draft-penawaran",
+        "draft penawaran",
+        signalSpine?.offerPackDraft ? signalItemSummary(signalSpine.offerPackDraft) : "Draft penawaran belum tersedia.",
+        signalItemSource(signalSpine?.offerPackDraft, "Bukti agregat"),
         {
-          confidence: signalSpineStatus === "ready" ? "draft" : "env-gated",
+          confidence: signalSpineStatus === "ready" ? "draft" : "perlu aktivasi",
           nextAction: signalField(signalSpine?.offerPackDraft, ["nextAction", "action"]) || "Validasi grade, stok, harga, margin, dan logistik sebelum offer dipakai.",
           privacyScope: "aggregate-no-pii-no-named-buyer",
-          caveat: "Offer pack adalah draft internal; bukan komitmen buyer atau kontak otomatis.",
+          caveat: "Draft penawaran adalah bahan internal; bukan komitmen buyer atau kontak otomatis.",
         },
       ),
       ...signalExportRows(
-        "signal-spine-action",
+        "bukti-agregat-tindak-lanjut",
         managerActionQueue,
-        "manager action queue",
-        "Tidak ada manager action aggregate dari endpoint.",
+        "antrean tindak lanjut",
+        "Tidak ada tindak lanjut agregat dari layanan.",
       ),
       ...signalExportRows(
-        "signal-spine-remediation",
+        "bukti-agregat-rencana-perbaikan",
         remediationPlanner,
-        "remediation planner",
-        "Tidak ada remediation aggregate dari endpoint.",
+        "rencana perbaikan",
+        "Tidak ada rencana perbaikan agregat dari layanan.",
       ),
       ...signalExportRows(
-        "signal-spine-connector",
+        "bukti-agregat-kesiapan-konektor",
         connectorScorecard,
-        "connector scorecard",
-        "Tidak ada connector scorecard aggregate dari endpoint.",
+        "kesiapan konektor",
+        "Tidak ada kesiapan konektor agregat dari layanan.",
       ),
       reportRow(
-        "signal-spine-working-capital",
-        "working capital scenario",
-        signalSpine?.workingCapitalScenario ? signalItemSummary(signalSpine.workingCapitalScenario) : "Working capital scenario belum tersedia.",
-        signalItemSource(signalSpine?.workingCapitalScenario, "signal-spine aggregate"),
+        "bukti-agregat-modal-kerja",
+        "skenario modal kerja",
+        signalSpine?.workingCapitalScenario ? signalItemSummary(signalSpine.workingCapitalScenario) : "Skenario modal kerja belum tersedia.",
+        signalItemSource(signalSpine?.workingCapitalScenario, "Bukti agregat"),
         {
-          confidence: signalSpineStatus === "ready" ? "scenario" : "env-gated",
-          nextAction: signalField(signalSpine?.workingCapitalScenario, ["nextAction", "action"]) || "Gunakan sebagai skenario kerja, bukan approval pembiayaan.",
-          privacyScope: "aggregate-no-pii-no-approval-claim",
+          confidence: signalSpineStatus === "ready" ? "scenario" : "perlu aktivasi",
+          nextAction: signalField(signalSpine?.workingCapitalScenario, ["nextAction", "action"]) || "Gunakan sebagai skenario kerja, bukan persetujuan pembiayaan.",
+          privacyScope: "aggregate-no-pii-no-auto-approval-claim",
           caveat: "Skenario modal kerja bukan keputusan kredit, audit, atau penilaian resmi.",
         },
       ),
       reportRow(
-        "signal-spine-health-gate",
-        "cooperative health gate",
-        signalSpine?.cooperativeHealthGate ? signalItemSummary(signalSpine.cooperativeHealthGate) : "Cooperative health gate belum tersedia.",
-        signalItemSource(signalSpine?.cooperativeHealthGate, "signal-spine aggregate"),
+        "bukti-agregat-kesehatan-koperasi",
+        "kesehatan koperasi",
+        signalSpine?.cooperativeHealthGate ? signalItemSummary(signalSpine.cooperativeHealthGate) : "Indikator kesehatan koperasi belum tersedia.",
+        signalItemSource(signalSpine?.cooperativeHealthGate, "Bukti agregat"),
         {
-          confidence: signalSpineStatus === "ready" ? "aggregate" : "env-gated",
-          nextAction: signalField(signalSpine?.cooperativeHealthGate, ["nextAction", "action"]) || "Pengurus mengecek indikator aggregate sebelum keputusan rapat.",
+          confidence: signalSpineStatus === "ready" ? "aggregate" : "perlu aktivasi",
+          nextAction: signalField(signalSpine?.cooperativeHealthGate, ["nextAction", "action"]) || "Pengurus mengecek indikator agregat sebelum keputusan rapat.",
           privacyScope: "aggregate-no-member-pii",
-          caveat: "Health gate adalah indikator awal, bukan audit formal koperasi.",
+          caveat: "Indikator kesehatan adalah sinyal awal, bukan audit formal koperasi.",
         },
       ),
       ...signalExportRows(
-        "signal-spine-role-permission",
+        "bukti-agregat-kewenangan",
         rolePermissionMatrix,
-        "role permission matrix",
-        "Tidak ada role permission matrix dari endpoint.",
+        "kewenangan akses",
+        "Tidak ada kewenangan akses dari layanan.",
       ),
       reportRow(
-        "signal-spine-demo-fixture",
-        "demo fixture",
-        signalSpine?.demoFixture ? signalItemSummary(signalSpine.demoFixture) : "Demo fixture belum tersedia.",
-        signalItemSource(signalSpine?.demoFixture, "signal-spine aggregate"),
+        "bukti-agregat-data-awal",
+        "data awal",
+        signalSpine?.demoFixture ? signalItemSummary(signalSpine.demoFixture) : "Data contoh belum tersedia.",
+        signalItemSource(signalSpine?.demoFixture, "Bukti agregat"),
         {
-          confidence: signalSpineStatus === "ready" ? "demo" : "env-gated",
-          nextAction: "Label demo data secara eksplisit saat presentasi.",
-          privacyScope: "demo-aggregate-no-pii",
-          caveat: "Demo fixture tidak membuktikan integrasi produksi atau endorsement resmi.",
+          confidence: signalSpineStatus === "ready" ? "sampel awal" : "perlu aktivasi",
+          nextAction: "Label data awal secara eksplisit saat presentasi.",
+          privacyScope: "aggregate-no-pii",
+          caveat: "Data awal tidak membuktikan integrasi produksi atau endorsement resmi.",
         },
       ),
       reportRow(
-        "signal-spine-boundary",
-        "boundary sentence",
+        "bukti-agregat-batas-klaim",
+        "batas klaim",
         signalBoundarySentence,
-        "signal-spine aggregate",
+        "Bukti agregat",
         {
-          confidence: signalSpineStatus === "ready" ? "policy" : "env-gated",
-          nextAction: "Gunakan kalimat batas ini di narasi demo dan laporan rapat.",
+          confidence: signalSpineStatus === "ready" ? "policy" : "perlu aktivasi",
+          nextAction: "Gunakan kalimat batas ini di narasi dan laporan rapat.",
           privacyScope: "policy-no-pii",
-          caveat: "Boundary menjaga klaim tetap aggregate-only dan human-reviewed.",
+          caveat: "Batas klaim menjaga narasi tetap berbasis bukti agregat dan direview manusia.",
         },
       ),
       ...reportDemoFlowSteps.map(([label, detail], index) => reportRow(
-        "guided-demo-flow",
+        "guided-mvp-flow",
         `step-${index + 1}-${label}`,
         detail,
         "MVP backlog",
         {
           confidence: "medium",
-          nextAction: "Presenter mengikuti urutan flow dari dashboard ke laporan aksi.",
+          nextAction: "Presenter mengikuti urutan alur dari dashboard ke laporan aksi.",
           privacyScope: "navigation-only",
-          caveat: "Flow ini memandu demo; bukan bukti integrasi produksi.",
+          caveat: "Alur ini memandu penggunaan; bukan bukti integrasi produksi.",
         },
       )),
       ...reportRoleRows.map(([role, surface, workflow]) => reportRow(
-        "role-access-alignment",
+        "kewenangan-akses",
         role,
         `${surface}; ${workflow}`,
-        "SIMKOPDES role alignment backlog",
+        "Checklist kewenangan SIMKOPDES",
         {
           confidence: "workflow-design",
-          nextAction: "Gunakan role sesuai kewenangan saat aksi bisnis direview.",
-          privacyScope: "role-matrix-no-employee-pii",
-          caveat: "Role matrix adalah alignment operasional demo; connector resmi SIMKOPDES belum aktif.",
+          nextAction: "Gunakan peran sesuai kewenangan saat aksi bisnis direview.",
+          privacyScope: "peran-no-employee-pii",
+          caveat: "Pemetaan peran adalah penyelarasan operasional presentasi; konektor resmi SIMKOPDES perlu aktivasi.",
         },
       )),
       ...reportApprovalStages.map(([stage, detail]) => reportRow(
-        "operator-approval-workflow",
+        "alur-persetujuan",
         stage,
         detail,
         "human-in-the-loop policy",
         {
           confidence: "medium",
-          nextAction: "Pastikan buyer outreach, pembiayaan, dan report lock tetap perlu approval pengurus/manager.",
+          nextAction: "Pastikan kontak buyer, pembiayaan, dan penguncian laporan tetap perlu persetujuan pengurus/manager.",
           privacyScope: "workflow-only",
-          caveat: "AI tidak melakukan approval otomatis.",
+          caveat: "AI tidak melakukan persetujuan otomatis.",
         },
       )),
       ...reportAiGuardrails.map((guardrail, index) => reportRow(
@@ -968,272 +1047,272 @@ export function ReportClient() {
         "MVP safety guardrail",
         {
           confidence: "policy",
-          nextAction: "Tampilkan guardrail ini saat membahas AI Business Analyst, Borrower Risk, dan Negotiation Agent.",
+          nextAction: "Tampilkan batas ini saat membahas analisis AI, risiko pembiayaan, dan negosiasi pasar.",
           privacyScope: "policy-no-pii",
           caveat: "Guardrail membatasi output AI agar tetap decision-support.",
         },
       )),
       reportRow(
-        "evidence-source",
-        "source registry",
-        `${sourceRegistrySummary}; status ${sourceRegistry?.registryStatus ?? registryStatus}`,
-        sourceRegistry?.source ?? "open-data API",
+        "sumber-bukti",
+        "daftar sumber",
+        `${sourceRegistrySummary}; status ${publicRegistryStatusLabel(sourceRegistry?.registryStatus ?? registryStatus)}`,
+        publicSourceLabel(sourceRegistry?.source ?? "layanan sumber terbuka"),
         {
           confidence: registryStatus === "ready" ? "medium" : "limited",
-          nextAction: "Aktifkan connector hanya setelah akses resmi dan smoke test tersedia.",
+          nextAction: "Aktifkan konektor hanya setelah akses resmi dan uji koneksi tersedia.",
           privacyScope: "registry-only-no-secrets",
-          caveat: sourceRegistry?.registryPolicy?.externalClaims ?? "External integrations stay planned unless tested.",
+          caveat: sourceRegistry?.registryPolicy?.externalClaims ?? "Integrasi eksternal tetap direncanakan sampai diuji.",
         },
       ),
       ...headlineMetrics.map((item) => reportRow(
-        "shared-db-headline-evidence",
+        "bukti-agregat-ringkas",
         item.label,
         item.amountIdr ? `${formatInteger(item.value)} ${item.unit}; Rp${formatInteger(item.amountIdr)}` : `${formatInteger(item.value)} ${item.unit}`,
-        hackathonSummary?.headlineEvidence?.caveat ?? "hackathon shared DB aggregate verification",
+        hackathonSummary?.headlineEvidence?.caveat ?? "verifikasi bukti agregat",
         {
-          confidence: "aggregate-sample",
-          nextAction: "Gunakan sebagai bukti konteks eksplorasi, lalu cek endpoint detail sebelum keputusan.",
+          confidence: "sampel-agregat",
+          nextAction: "Gunakan sebagai bukti konteks eksplorasi, lalu cek detail sebelum keputusan.",
           privacyScope: "aggregate-no-pii",
-          caveat: hackathonSummary?.headlineEvidence?.caveat ?? "Sample eksplorasi, bukan KPI produksi.",
+          caveat: hackathonSummary?.headlineEvidence?.caveat ?? "Sampel eksplorasi, bukan KPI produksi.",
         },
       )),
       ...qualityChecks.map((check) => reportRow(
-        "data-quality-endpoint",
+        "kualitas-data",
         check.table,
-        `${formatInteger(check.totalRows)} rows; ${formatInteger(
+        `${formatInteger(check.totalRows)} baris; ${formatInteger(
           check.quality.reduce((total, item) => total + item.affectedRows, 0),
-        )} quality flags`,
-        hackathonDataQuality?.source ?? "hackathon data-quality API",
+        )} catatan kualitas`,
+        publicSourceLabel(hackathonDataQuality?.source ?? "layanan kualitas data"),
         {
           confidence: hackathonDataQuality ? "medium" : "limited",
-          nextAction: "Ubah issue menjadi verification task sebelum rekomendasi dijalankan.",
+          nextAction: "Ubah catatan kualitas menjadi tugas verifikasi sebelum rekomendasi dijalankan.",
           privacyScope: "aggregate-no-pii",
-          caveat: "Warning agregat tidak membuka row pribadi atau dokumen mentah.",
+          caveat: "Catatan agregat tidak membuka baris pribadi atau dokumen mentah.",
         },
       )),
       ...directOpportunityAreas.slice(0, 5).map((item, index) => reportRow(
-        "opportunity-score-endpoint",
+        "skor-peluang",
         `rank-${index + 1}`,
-        `${[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area aggregate"}; score ${item.score}`,
-        hackathonOpportunityScores?.source ?? "hackathon opportunity-scores API",
+        `${[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area agregat"}; skor ${item.score}`,
+        publicSourceLabel(hackathonOpportunityScores?.source ?? "layanan skor peluang"),
         {
           confidence: item.sourceCaveat?.confidence ?? "limited",
-          nextAction: "Validasi stok, kualitas, buyer need, dan data source sebelum tindak lanjut.",
+          nextAction: "Validasi stok, kualitas, kebutuhan buyer, dan sumber data sebelum tindak lanjut.",
           privacyScope: "area-aggregate-no-pii",
-          caveat: item.sourceCaveat?.caveat ?? "Score explainable adalah prioritas awal, bukan keputusan otomatis.",
+          caveat: item.sourceCaveat?.caveat ?? "Skor yang bisa dijelaskan adalah prioritas awal, bukan keputusan otomatis.",
         },
       )),
       ...directBuyerMatches.slice(0, 5).map((item) => reportRow(
-        "buyer-matching-endpoint",
+        "kecocokan-buyer",
         `rank-${item.rank}-${item.buyerArchetypeLabel}`,
-        `${item.cooperativeRef}; score ${item.score}; ${item.readinessCluster}`,
-        hackathonBuyerMatching?.source ?? "hackathon buyer-matching API",
+        `${item.cooperativeRef}; skor ${item.score}; ${publicRegistryStatusLabel(item.readinessCluster)}`,
+        publicSourceLabel(hackathonBuyerMatching?.source ?? "layanan kecocokan buyer"),
         {
           confidence: item.score >= 60 ? "medium" : "limited",
-          nextAction: item.readinessGaps?.[0] ?? hackathonBuyerMatching?.nextActions?.[0] ?? "Human review before outreach.",
-          privacyScope: "buyer-archetype-pseudonymous-profile",
-          caveat: "Buyer matching lite memakai archetype dan profile pseudonymous, bukan buyer/koperasi bernama.",
+          nextAction: item.readinessGaps?.[0] ?? hackathonBuyerMatching?.nextActions?.[0] ?? "Review manusia sebelum kontak buyer.",
+          privacyScope: "tipe-buyer-tanpa-pii",
+          caveat: "Kecocokan buyer memakai tipe kebutuhan dan profil tersamarkan, bukan buyer/koperasi bernama.",
         },
       )),
       ...p0Roadmap.map((item) => reportRow(
-        "evidence-source",
+        "sumber-bukti",
         item.title,
         `${item.sources.join(" | ")}; ${item.output}`,
-        "docs/37 P0 roadmap",
+        "Rencana aktivasi sumber",
         {
           confidence: "planned-source",
-          nextAction: "Jalankan import/source-check sebelum memakai data sebagai evidence operasional.",
+          nextAction: "Jalankan cek sumber sebelum memakai data sebagai bukti operasional.",
           privacyScope: "registry-only-no-secrets",
           caveat: item.caveat,
         },
       )),
       ...reportDemoFlowSteps.map(([label, detail], index) => reportRow(
-        "guided-demo-mode",
+        "alur-mvp-terpandu",
         `step-${index + 1}-${label}`,
         detail,
         "dashboard/report UI",
         {
-          nextAction: "Ikuti flow demo tanpa melompat ke klaim marketplace penuh.",
-          privacyScope: "demo-navigation-no-pii",
-          caveat: "Demo mode adalah presenter guide, bukan bukti integrasi eksternal.",
+          nextAction: "Ikuti alur MVP tanpa melompat ke klaim marketplace penuh.",
+          privacyScope: "alur-presentasi-tanpa-pii",
+          caveat: "Mode panduan presenter bukan bukti integrasi eksternal.",
         },
       )),
       ...reportRoleRows.map(([role, surfaces, workflow]) => reportRow(
-        "role-access-matrix",
+        "kewenangan-akses",
         role,
         `${surfaces}; ${workflow}`,
-        "SIMKOPDES alignment checklist",
+        "Checklist kewenangan SIMKOPDES",
         {
           confidence: "workflow-alignment",
-          nextAction: "Pastikan aksi bisnis direview role yang sesuai.",
-          privacyScope: "role-only-no-employee-pii",
-          caveat: "Role model mengikuti pola operasional, bukan daftar karyawan asli.",
+          nextAction: "Pastikan aksi bisnis direview peran yang sesuai.",
+          privacyScope: "peran-no-employee-pii",
+          caveat: "Model peran mengikuti pola operasional, bukan daftar karyawan asli.",
         },
       )),
       ...managerCommandRows.map(([label, value, note]) => reportRow(
         "manager-command-center",
         label,
         value,
-        "dashboard aggregate command rows",
+        "Baris tindak lanjut agregat",
         {
           nextAction: note,
-          caveat: "Manager command center memberi daftar aksi, bukan keputusan otomatis.",
+          caveat: "Pusat tindak lanjut memberi daftar aksi, bukan keputusan otomatis.",
         },
       )),
       ...simkopdesChecklistRows.map((row) => reportRow(
-        "simkopdes-readiness-checklist",
+        "checklist-kesiapan-simkopdes",
         row.item,
         row.status,
-        "SIMKOPDES warehouse/POS/logistics/savings alignment",
+        "Penyelarasan gudang/POS/logistik/simpanan SIMKOPDES",
         {
-          confidence: row.status === "Checklist" || row.status === "Workflow" ? "workflow" : "medium",
-          nextAction: "Lengkapi readiness sebelum buyer outreach agresif.",
+          confidence: row.status === "Checklist" || row.status === "Alur kerja" ? "alur-kerja" : "medium",
+          nextAction: "Lengkapi kesiapan sebelum kontak buyer agresif.",
           caveat: "Checklist operasional; stok resmi SIMKOPDES belum disinkronkan.",
         },
       )),
       ...approvalSummary.map(([label, value]) => reportRow(
-        "operator-approval-workflow",
+        "alur-persetujuan",
         label,
         value,
-        "operator queue + buyer readiness summary",
+        "antrean verifikasi + ringkasan kesiapan buyer",
         {
-          nextAction: "Move recommended items through verification before approval.",
+          nextAction: "Pindahkan rekomendasi melalui verifikasi sebelum persetujuan.",
           privacyScope: "aggregate-count-no-pii",
-          caveat: "Approved means internal readiness approval, not automatic outreach or financing approval.",
+          caveat: "Disetujui berarti kesiapan internal, bukan kontak buyer atau pembiayaan otomatis.",
         },
       )),
       ...businessAnalystRows.map(([label, value, note]) => reportRow(
         "ai-business-analyst",
         label,
         value,
-        "financing readiness + POS aggregate signals",
+        "Kesiapan pembiayaan + sinyal POS agregat",
         {
           confidence: financingReadiness ? "limited-aggregate" : "needs-verification",
           nextAction: note,
           privacyScope: "aggregate-no-member-pii",
-          caveat: "Early warning only, not formal audit or accounting opinion.",
+          caveat: "Peringatan awal saja, bukan audit formal atau opini akuntansi.",
         },
       )),
       ...borrowerRiskRows.map(([label, value, note]) => reportRow(
-        "borrower-risk",
+        "risiko-pembiayaan",
         label,
         value,
-        "finance queue + stock/readiness signals",
+        "Antrean pembiayaan + sinyal stok/kesiapan",
         {
           confidence: "risk-flag",
           nextAction: note,
-          privacyScope: "pseudonymous-no-member-identity",
-          caveat: "No automatic approval/rejection and no fraud labels.",
+          privacyScope: "tersamarkan-tanpa-identitas-anggota",
+          caveat: "Tidak ada persetujuan/penolakan otomatis dan tidak ada label fraud.",
         },
       )),
       ...negotiationRows.map(([label, value, note]) => reportRow(
-        "market-negotiation",
+        "negosiasi-pasar",
         label,
         value,
-        "buyer requirement + market source readiness",
+        "Syarat buyer + kesiapan sumber pasar",
         {
-          confidence: value === "Source required" ? "source-required" : "draft",
+          confidence: value === "Perlu sumber resmi" ? "source-required" : "draft",
           nextAction: note,
-          privacyScope: "archetype-no-named-buyer",
-          caveat: "No fake real-time price and no automatic buyer contact.",
+          privacyScope: "tipe-buyer-tanpa-buyer-bernama",
+          caveat: "Tidak ada harga real-time palsu dan tidak ada kontak buyer otomatis.",
         },
       )),
       ...commodityHighlights.slice(0, 5).map((item) => reportRow(
-        "top-opportunity",
+        "peluang-utama",
         `rank-${item.rank}`,
-        `${item.commodity}; ${item.sector}; rank ${item.rank}; confidence ${item.confidence}`,
+        `${item.commodity}; ${item.sector}; peringkat ${item.rank}; keyakinan ${item.confidence}`,
         item.sourceLevel,
         {
           confidence: item.confidence,
           nextAction: item.basis,
           privacyScope: "commodity-label-no-member-pii",
-          caveat: "Opportunity highlight perlu validasi operator sebelum buyer outreach.",
+          caveat: "Sorotan peluang perlu validasi tim koperasi sebelum kontak buyer.",
         },
       )),
-      reportRow("pending-verification", "total pending items", pendingQueue.length, "Postgres operational", {
-        nextAction: "Operator menutup draft atau minta bukti tambahan.",
+      reportRow("verifikasi-tertunda", "total item tertunda", pendingQueue.length, "Data operasional aplikasi", {
+        nextAction: "Tim koperasi menutup draft atau minta bukti tambahan.",
         caveat: "Menampilkan jumlah, bukan isi pesan atau kontak warga.",
       }),
-      reportRow("buyer-action", "total buyer archetype actions", buyers.length, "Postgres operational", {
-        nextAction: "Review archetype dan syarat kualitas sebelum outreach.",
-        privacyScope: "archetype-no-named-buyer",
+      reportRow("aksi-buyer", "total aksi tipe buyer", buyers.length, "Data operasional aplikasi", {
+        nextAction: "Review tipe buyer dan syarat kualitas sebelum kontak buyer.",
+        privacyScope: "tipe-buyer-tanpa-buyer-bernama",
         caveat: "Buyer matching lite bukan komitmen buyer bernama.",
       }),
-      reportRow("buyer-action", "approved buyer readiness actions", approvedBuyers.length, "Postgres operational", {
-        nextAction: "Gunakan approval sebagai izin internal untuk draft outreach, bukan klaim penjualan.",
-        privacyScope: "archetype-no-named-buyer",
-        caveat: "Approval pengurus tidak membuktikan buyer siap membeli.",
+      reportRow("aksi-buyer", "aksi buyer disetujui", approvedBuyers.length, "Data operasional aplikasi", {
+        nextAction: "Gunakan persetujuan sebagai izin internal untuk draft kontak buyer, bukan klaim penjualan.",
+        privacyScope: "tipe-buyer-tanpa-buyer-bernama",
+        caveat: "Persetujuan pengurus tidak membuktikan buyer siap membeli.",
       }),
-      reportRow("buyer-requirement", "prefixed buyer requirement rows", buyerRequirements.length, "anak_sarengklek_buyer_requirements", {
-        nextAction: "Cek grade, packaging, target window, dan source label.",
-        privacyScope: "archetype-no-named-buyer",
-        caveat: "Requirement adalah readiness proxy sampai buyer record verified tersedia.",
+      reportRow("syarat-buyer", "baris syarat buyer", buyerRequirements.length, "Syarat buyer", {
+        nextAction: "Cek grade, kemasan, target waktu, dan label sumber.",
+        privacyScope: "tipe-buyer-tanpa-buyer-bernama",
+        caveat: "Syarat buyer adalah proxy kesiapan sampai catatan buyer terverifikasi tersedia.",
       }),
       ...financingStatuses.map((item) => reportRow(
         "financing-readiness",
         item.status,
-        `${formatInteger(item.requests)} requests; ${formatInteger(item.amount)} nominal aggregate`,
-        financingReadiness?.source ?? "hackathon financing-readiness API",
+        `${formatInteger(item.requests)} permintaan; ${formatInteger(item.amount)} nominal agregat`,
+        publicSourceLabel(financingReadiness?.source ?? "layanan kesiapan pembiayaan"),
         {
-          freshness: financingReadiness?.freshness?.generatedAt ?? "env-gated",
+          freshness: financingReadiness?.freshness?.generatedAt ?? "perlu aktivasi",
           confidence: financingReadiness?.confidence?.level ?? "limited",
           nextAction: `Deal room: lanjutkan checklist untuk status ${item.status}.`,
-          privacyScope: "aggregate-no-pii-no-approval-claim",
-          caveat: financingReadiness?.confidence?.caveat ?? "Financing readiness bukan approval otomatis.",
+          privacyScope: "aggregate-no-pii-no-auto-approval-claim",
+          caveat: financingReadiness?.confidence?.caveat ?? "Kesiapan pembiayaan bukan persetujuan otomatis.",
         },
       )),
       ...financingChecklist.map((item) => reportRow(
         "financing-checklist",
         item.title,
         item.status,
-        item.source,
+        publicSourceLabel(item.source),
         {
-          freshness: financingReadiness?.freshness?.generatedAt ?? "env-gated",
+          freshness: financingReadiness?.freshness?.generatedAt ?? "perlu aktivasi",
           confidence: financingReadiness?.confidence?.level ?? "limited",
           nextAction: item.nextAction,
-          privacyScope: "aggregate-no-pii-no-approval-claim",
+          privacyScope: "aggregate-no-pii-no-auto-approval-claim",
           caveat: item.caveat,
         },
       )),
-      reportRow("stock-readiness-gap", "critical stock/readiness rows", criticalStocks.length, "Postgres operational", {
+      reportRow("stock-readiness-gap", "baris stok/kesiapan kritis", criticalStocks.length, "Data operasional aplikasi", {
         nextAction: "Verifikasi stok, grade, dan jadwal pickup sebelum buyer action.",
         caveat: "Jumlah stok kritis berasal dari state operasional app, bukan stok nasional.",
       }),
-      reportRow("stock-readiness-gap", "total stock rows", stocks.length, "Postgres operational", {
+      reportRow("stock-readiness-gap", "total baris stok", stocks.length, "Data operasional aplikasi", {
         nextAction: "Pisahkan stok aman, terbatas, restock, dan menunggu grade.",
         caveat: "Stock row bukan bukti volume siap kirim tanpa verifikasi.",
       }),
-      reportRow("stock-ledger", "prefixed stock ledger rows", stockLedger.length, "anak_sarengklek_stock_ledger", {
-        nextAction: "Cek evidence_ref untuk pergerakan stok yang masuk laporan.",
-        caveat: "Ledger metadata tidak menyertakan raw media atau dokumen.",
+      reportRow("stock-ledger", "baris riwayat stok", stockLedger.length, "Riwayat stok", {
+        nextAction: "Cek referensi bukti untuk pergerakan stok yang masuk laporan.",
+        caveat: "Metadata riwayat tidak menyertakan media mentah atau dokumen.",
       }),
-      reportRow("media-evidence", "prefixed media evidence rows", mediaEvidence.length, "anak_sarengklek_media_evidence", {
+      reportRow("media-evidence", "baris bukti media", mediaEvidence.length, "Bukti media", {
         nextAction: "Gunakan label redacted dan status verifikasi, bukan file mentah.",
-        privacyScope: "metadata-no-raw-media",
-        caveat: "Raw media/storage URI tidak diekspor ke CSV demo.",
+        privacyScope: "metadata-no-media-mentah",
+        caveat: "Media mentah/storage URI tidak diekspor ke CSV.",
       }),
       reportRow(
-        "prefixed-db-status",
-        dashboardData?.prefixedDbStatus?.message ?? "status unavailable",
+        "team-table-status",
+        publicSetupMessage(dashboardData?.prefixedDbStatus?.message, "Status tabel data tim perlu dicek di server."),
         dashboardData?.prefixedDbStatus?.tables.length ?? 0,
-        dashboardData?.teamTablePrefix ?? "anak_sarengklek_",
+        "Data operasional tim",
         {
           confidence: dashboardData?.prefixedDbStatus?.status ?? "unknown",
-          nextAction: "Jalankan migrasi app DB bila status setup-required.",
-          caveat: "Tabel prefixed adalah app-owned; shared DB tetap read-only.",
+          nextAction: "Jalankan aktivasi data tim bila status belum siap.",
+          caveat: "Tabel tim milik aplikasi; sumber eksplorasi tetap agregat terbatas.",
         },
       ),
       ...(topHackathonOpportunity
         ? [reportRow(
-            "shared-db-opportunity",
+            "bukti-agregat-peluang",
             topHackathonOpportunity.province,
-            `${topHackathonOpportunity.commodityRows} commodity rows; ${topHackathonOpportunity.cooperatives} cooperatives`,
-            "Shared DB read-only aggregate",
+            `${topHackathonOpportunity.commodityRows} baris komoditas; ${topHackathonOpportunity.cooperatives} koperasi`,
+            "Bukti agregat terbatas",
             {
-              freshness: hackathonStatus === "ready" ? generatedAt : "env-gated",
-              confidence: "sample-exploration",
-              nextAction: "Kirim area teratas ke opportunity-score dan buyer-matching review.",
-              caveat: hackathonSummary?.schemaScope?.description ?? "Sample eksplorasi, bukan KPI produksi.",
+              freshness: hackathonStatus === "ready" ? generatedAt : "perlu aktivasi",
+              confidence: "sampel-eksplorasi",
+              nextAction: "Kirim area teratas ke review skor peluang dan kecocokan buyer.",
+              caveat: hackathonSummary?.schemaScope?.description ?? "Sampel eksplorasi, bukan KPI produksi.",
             },
           )]
         : []),
@@ -1261,8 +1340,8 @@ export function ReportClient() {
           <FileCheck2 size={28} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
         </div>
         <p className="mt-4 text-sm font-semibold leading-7 text-[#53606A]">
-          Laporan ini menutup flow MVP: executive summary, peluang teratas, evidence/source,
-          pending verification, buyer action, stok/readiness gap, dan decision status.
+          Laporan ini menutup alur MVP: ringkasan keputusan, peluang teratas, bukti agregat,
+          antrean verifikasi, aksi buyer, celah stok, dan status keputusan.
         </p>
 
         <div className="mt-5 grid gap-3">
@@ -1308,11 +1387,11 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Guided demo and access</p>
-              <h2 className="mt-2 text-2xl font-black">Flow juri dan matrix role SIMKOPDES</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Alur laporan</p>
+              <h2 className="mt-2 text-2xl font-black">Urutan MVP dan kewenangan SIMKOPDES</h2>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              sample/aggregate/no PII
+              bukti agregat
             </span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-5">
@@ -1328,7 +1407,7 @@ export function ReportClient() {
             <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-[#E7DED1]">
-                  {["Role", "Surface", "Workflow"].map((heading) => (
+                  {["Peran", "Area", "Alur kerja"].map((heading) => (
                     <th key={heading} className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#7A4E2D]">
                       {heading}
                     </th>
@@ -1351,14 +1430,14 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Signal spine backlog 29-46</p>
-              <h2 className="mt-2 text-2xl font-black">Aggregate signal, provenance, gate, dan action spine</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Bukti agregat</p>
+              <h2 className="mt-2 text-2xl font-black">Sinyal kesiapan, jejak bukti, dan tindak lanjut</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
-                Section ini membaca `/api/hackathon/signal-spine` untuk ringkasan aggregate-only; tidak menampilkan PII, secret, atau klaim connector resmi.
+                Section ini membaca sumber bukti agregat untuk ringkasan audit; tidak menampilkan PII, secret, atau klaim konektor resmi.
               </p>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              {signalSpineStatus === "ready" ? "aggregate endpoint" : signalSpineStatus === "loading" ? "loading" : "env-gated"}
+              {signalSpineStatus === "ready" ? "agregat siap" : signalSpineStatus === "loading" ? "memuat" : "perlu aktivasi"}
             </span>
           </div>
 
@@ -1374,35 +1453,35 @@ export function ReportClient() {
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Signal families</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Kelompok sinyal</p>
               <div className="mt-3 space-y-2">
                 {signalFamilies.length > 0 ? (
                   signalFamilies.slice(0, 4).map((item, index) => (
                     <div key={`${signalItemLabel(item, "signal")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
-                      <p className="font-black">{signalItemLabel(item, `Signal ${index + 1}`)}</p>
+                      <p className="font-black">{signalItemLabel(item, `Sinyal ${index + 1}`)}</p>
                       <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(item)}</p>
                       <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm font-semibold text-[#53606A]">Signal families belum tersedia dari endpoint.</p>
+                  <p className="text-sm font-semibold text-[#53606A]">Kelompok sinyal belum tersedia dari layanan.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Provenance ledger</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Jejak bukti</p>
               <div className="mt-3 space-y-2">
                 {provenanceLedger.length > 0 ? (
                   provenanceLedger.slice(0, 4).map((item, index) => (
                     <div key={`${signalItemLabel(item, "provenance")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
-                      <p className="font-black">{signalItemLabel(item, `Provenance ${index + 1}`)}</p>
+                      <p className="font-black">{signalItemLabel(item, `Jejak ${index + 1}`)}</p>
                       <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemSource(item)}</p>
                       <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm font-semibold text-[#53606A]">Provenance ledger belum tersedia dari endpoint.</p>
+                  <p className="text-sm font-semibold text-[#53606A]">Jejak bukti belum tersedia dari layanan.</p>
                 )}
               </div>
             </div>
@@ -1448,27 +1527,27 @@ export function ReportClient() {
 
           <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Role permission matrix</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Kewenangan akses</p>
               <div className="mt-3 space-y-2">
                 {rolePermissionMatrix.length > 0 ? (
                   rolePermissionMatrix.slice(0, 5).map((item, index) => (
                     <div key={`${signalItemLabel(item, "role")}-${index}`} className="rounded-[12px] bg-[#FFFCF5] p-3">
-                      <p className="font-black">{signalItemLabel(item, `Role ${index + 1}`)}</p>
+                      <p className="font-black">{signalItemLabel(item, `Peran ${index + 1}`)}</p>
                       <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{signalItemStatus(item)}</p>
                       <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{signalItemSummary(item)}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm font-semibold text-[#53606A]">Role permission matrix belum tersedia dari endpoint.</p>
+                  <p className="text-sm font-semibold text-[#53606A]">Kewenangan akses belum tersedia dari layanan.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Boundary sentence</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Batas klaim</p>
               <p className="mt-3 text-sm font-semibold leading-6 text-[#53606A]">{signalBoundarySentence}</p>
               <p className="mt-4 text-xs font-bold leading-5 text-[#7A4E2D]">
-                Connector scorecard adalah readiness/discovery sampai akses resmi, implementasi, dan smoke test terverifikasi.
+                Kesiapan konektor tetap discovery sampai akses resmi, implementasi, dan uji koneksi terverifikasi.
               </p>
             </div>
           </div>
@@ -1477,14 +1556,14 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Manager command center</p>
-              <h2 className="mt-2 text-2xl font-black">Aksi operasional dan readiness SIMKOPDES</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Pusat tindak lanjut</p>
+              <h2 className="mt-2 text-2xl font-black">Aksi operasional dan kesiapan SIMKOPDES</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
-                Laporan menunjukkan tindak lanjut manager untuk sales/POS, inventory, logistics, buyer, finance, dan data-quality alerts.
+                Laporan menunjukkan tindak lanjut tim koperasi untuk POS, inventori, logistik, buyer, pembiayaan, dan kualitas data.
               </p>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              official connector not active
+              perlu aktivasi resmi
             </span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1516,16 +1595,16 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">AI guardrails</p>
-              <h2 className="mt-2 text-2xl font-black">Business analyst, borrower risk, and negotiation summary</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Batas penggunaan AI</p>
+              <h2 className="mt-2 text-2xl font-black">Analisis, risiko pembiayaan, dan negosiasi</h2>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              human approval required
+              perlu persetujuan
             </span>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">AI Business Analyst</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Analisis AI</p>
               <div className="mt-3 space-y-2">
                 {businessAnalystRows.map(([label, value, note]) => (
                   <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
@@ -1537,7 +1616,7 @@ export function ReportClient() {
               </div>
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Borrower risk</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Risiko pembiayaan</p>
               <div className="mt-3 space-y-2">
                 {borrowerRiskRows.map(([label, value, note]) => (
                   <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
@@ -1549,7 +1628,7 @@ export function ReportClient() {
               </div>
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Market negotiation</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Negosiasi pasar</p>
               <div className="mt-3 space-y-2">
                 {negotiationRows.map(([label, value, note]) => (
                   <div key={label} className="rounded-[12px] bg-[#FFF8EA] p-3">
@@ -1573,35 +1652,35 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Evidence/source</p>
-              <h2 className="mt-2 text-2xl font-black">Top opportunities dan data pendukung</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Bukti dan sumber</p>
+              <h2 className="mt-2 text-2xl font-black">Peluang teratas dan data pendukung</h2>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              {hackathonStatus === "ready" ? "Shared DB read-only" : "Shared DB env-gated"}
+              {hackathonStatus === "ready" ? "Bukti agregat" : "Perlu aktivasi"}
             </span>
           </div>
 
           <div className="mt-5 grid gap-3 xl:grid-cols-3">
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-sm font-black text-[#D79A2B]">Opportunity highlight</p>
+              <p className="text-sm font-black text-[#D79A2B]">Highlight peluang</p>
               <div className="mt-3 space-y-3">
                 {commodityHighlights.length > 0 ? (
                   commodityHighlights.slice(0, 4).map((item) => (
                     <div key={`${item.commodity}-${item.rank}`} className="rounded-[12px] bg-black/5 p-3">
                       <p className="font-black">{item.commodity}</p>
                       <p className="mt-1 text-xs font-semibold text-[#53606A]">
-                        {item.sector} - source {item.sourceLevel} - confidence {item.confidence}
+                        {item.sector} - sumber {publicSourceLabel(item.sourceLevel)} - keyakinan {publicRegistryStatusLabel(item.confidence)}
                       </p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm font-semibold text-[#53606A]">Belum ada highlight komoditas dari Postgres.</p>
+                  <p className="text-sm font-semibold text-[#53606A]">Belum ada highlight komoditas dari data operasional.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-sm font-black text-[#D79A2B]">Shared DB aggregate</p>
+              <p className="text-sm font-black text-[#D79A2B]">Agregat eksplorasi</p>
               {topHackathonOpportunity ? (
                 <div className="mt-3 rounded-[12px] bg-black/5 p-3">
                   <p className="font-black">{topHackathonOpportunity.province}</p>
@@ -1609,43 +1688,43 @@ export function ReportClient() {
                     {formatInteger(topHackathonOpportunity.villages)} wilayah, {formatInteger(topHackathonOpportunity.commodityRows)} komoditas, {formatInteger(topHackathonOpportunity.cooperatives)} koperasi.
                   </p>
                   <p className="mt-2 text-xs font-bold text-[#7A4E2D]">
-                    {hackathonSummary?.schemaScope?.description ?? "Sample eksplorasi, bukan referensi utama SIMKOPDES."}
+                    {publicProductText(hackathonSummary?.schemaScope?.description, "Sampel eksplorasi, bukan referensi utama SIMKOPDES.")}
                   </p>
                 </div>
               ) : (
                 <p className="mt-3 text-sm font-semibold text-[#53606A]">
-                  Shared DB belum configured atau butuh login/env. Laporan tetap tidak membuat angka palsu.
+                  Sumber eksplorasi belum aktif atau butuh login. Laporan tetap tidak membuat angka palsu.
                 </p>
               )}
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-sm font-black text-[#D79A2B]">External source registry</p>
+              <p className="text-sm font-black text-[#D79A2B]">Daftar sumber eksternal</p>
               {registryStatus === "ready" ? (
                 <div className="mt-3 space-y-3">
                   <div className="rounded-[12px] bg-black/5 p-3">
                     <p className="font-black">{sourceRegistrySummary}</p>
                     <p className="mt-1 text-xs font-semibold text-[#53606A]">
-                      {sourceRegistry?.registryStatus ?? "static registry"} - {formatInteger(importedAreaTotal)} wilayah terhitung.
+                      {publicRegistryStatusLabel(sourceRegistry?.registryStatus ?? "static registry")} - {formatInteger(importedAreaTotal)} wilayah terhitung.
                     </p>
                   </div>
                   <div className="grid gap-2">
-                    <p className="text-xs font-black uppercase text-[#7A4E2D]">Connector claims</p>
+                    <p className="text-xs font-black uppercase text-[#7A4E2D]">Klaim konektor</p>
                     <p className="text-xs font-semibold text-[#53606A]">
-                      {formatInteger(discoveryOrPlannedSources)} discovery/planned, {formatInteger(envGatedConnectors)} env-gated, {formatInteger(implementedConnectors)} implemented.
+                      {formatInteger(discoveryOrPlannedSources)} discovery/direncanakan, {formatInteger(activationRequiredConnectors)} perlu aktivasi, {formatInteger(implementedConnectors)} siap dipakai.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {sourceLabels.slice(0, 5).map((label) => (
                       <span key={label} className="rounded-full border border-[#E7DED1] bg-[#FFFCF5] px-3 py-1 text-[11px] font-black text-[#7A4E2D]">
-                        {label}
+                        {publicSourceLabel(label)}
                       </span>
                     ))}
                   </div>
                 </div>
               ) : (
                 <p className="mt-3 text-sm font-semibold text-[#53606A]">
-                  Source registry belum terbaca. Klaim integrasi tetap discovery/planned.
+                  Daftar sumber belum terbaca. Klaim integrasi tetap discovery/direncanakan.
                 </p>
               )}
             </div>
@@ -1655,10 +1734,10 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">SIMKOPDES alignment</p>
-              <h2 className="mt-2 text-2xl font-black">Role, approval, dan guardrail AI</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Keselarasan SIMKOPDES</p>
+              <h2 className="mt-2 text-2xl font-black">Peran, persetujuan, dan batas AI</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
-                Laporan ini memosisikan Lumbung Bersama sebagai operating layer koperasi: role-aware, human-reviewed, dan aggregate-only.
+                Laporan ini memosisikan Lumbung Bersama sebagai lapisan operasional koperasi: sesuai kewenangan, direview manusia, dan berbasis bukti agregat.
               </p>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
@@ -1668,7 +1747,7 @@ export function ReportClient() {
 
           <div className="mt-5 grid gap-4 xl:grid-cols-3">
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Role matrix</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Kewenangan peran</p>
               <div className="mt-3 space-y-2">
                 {reportRoleRows.slice(0, 4).map(([role, surface, workflow]) => (
                   <div key={role} className="rounded-[12px] bg-[#FFFCF5] p-3">
@@ -1681,7 +1760,7 @@ export function ReportClient() {
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Approval workflow</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Alur persetujuan</p>
               <div className="mt-3 space-y-2">
                 {reportApprovalStages.map(([stage, detail], index) => (
                   <div key={stage} className="rounded-[12px] bg-[#FFFCF5] p-3">
@@ -1696,7 +1775,7 @@ export function ReportClient() {
             </div>
 
             <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-              <p className="text-xs font-black uppercase text-[#C92A2A]">AI guardrails</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Batas AI</p>
               <div className="mt-3 space-y-2">
                 {reportAiGuardrails.map((guardrail) => (
                   <div key={guardrail} className="rounded-[12px] bg-[#FFFCF5] p-3 text-xs font-bold leading-5 text-[#53606A]">
@@ -1711,74 +1790,76 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Evidence/source roadmap</p>
-              <h2 className="mt-2 text-2xl font-black">P0 source labels dan connector plan</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Rencana sumber bukti</p>
+              <h2 className="mt-2 text-2xl font-black">Label bukti dan rencana aktivasi</h2>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              docs/37
+              rencana sumber
             </span>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {p0Roadmap.length > 0 ? (
               p0Roadmap.map((item) => (
                 <div key={item.id} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-                  <p className="font-black text-[#1F2933]">{item.title}</p>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{item.output}</p>
+                  <p className="font-black text-[#1F2933]">{publicProductText(item.title, "Sumber bukti")}</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{publicProductText(item.output, "Output sumber belum tersedia.")}</p>
                   <p className="mt-3 text-xs font-black text-[#7A4E2D]">
-                    {item.sources.join(" / ")}
+                    {item.sources.map((source) => publicSourceLabel(source)).join(" / ")}
                   </p>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{item.caveat}</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{publicProductText(item.caveat, "Catatan sumber belum tersedia.")}</p>
                 </div>
               ))
             ) : (
               <p className="text-sm font-semibold text-[#53606A]">
-                Roadmap sumber belum tersedia dari API.
+                Rencana sumber belum tersedia dari layanan.
               </p>
             )}
           </div>
           <p className="mt-4 text-xs font-bold leading-5 text-[#7A4E2D]">
-            {sourceRegistry?.registryPolicy?.externalClaims ??
-              "External integrations stay source-discovery or connector-planned unless an implemented connector is tested."}
+            {publicSetupMessage(
+              sourceRegistry?.registryPolicy?.externalClaims,
+              "Integrasi eksternal tetap berstatus discovery atau direncanakan sampai konektor diuji.",
+            )}
           </p>
         </article>
 
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="grid gap-4 lg:grid-cols-3">
             <div>
-              <p className="text-sm font-black text-[#C92A2A]">Pending verification</p>
+              <p className="text-sm font-black text-[#C92A2A]">Perlu verifikasi</p>
               <div className="mt-3 space-y-2">
                 {pendingQueue.slice(0, 4).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.id}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{item.module} - {item.status}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{publicProductText(item.module, "Modul operasional")} - {publicRegistryStatusLabel(item.status)}</p>
                   </div>
                 ))}
-                {pendingQueue.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Tidak ada draft pending dari API.</p> : null}
+                {pendingQueue.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Tidak ada draft tertunda dari layanan.</p> : null}
               </div>
             </div>
             <div>
-              <p className="text-sm font-black text-[#C92A2A]">Buyer readiness</p>
+              <p className="text-sm font-black text-[#C92A2A]">Kesiapan buyer</p>
               <div className="mt-3 space-y-2">
                 {buyers.slice(0, 4).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.buyer}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{item.matchScore}% - {item.status}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{item.matchScore}% - {publicRegistryStatusLabel(item.status)}</p>
                     <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{buyerEvidenceLabel(item)}</p>
                   </div>
                 ))}
-                {buyers.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Belum ada buyer readiness dari API.</p> : null}
+                {buyers.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Belum ada kesiapan buyer dari layanan.</p> : null}
               </div>
             </div>
             <div>
-              <p className="text-sm font-black text-[#C92A2A]">Stock/readiness gap</p>
+              <p className="text-sm font-black text-[#C92A2A]">Celah stok/kesiapan</p>
               <div className="mt-3 space-y-2">
                 {criticalStocks.slice(0, 4).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.name}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{item.state} - {item.location}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{publicRegistryStatusLabel(item.state)} - {item.location}</p>
                   </div>
                 ))}
-                {criticalStocks.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Tidak ada gap stok kritis dari API.</p> : null}
+                {criticalStocks.length === 0 ? <p className="text-sm font-semibold text-[#53606A]">Tidak ada celah stok kritis dari layanan.</p> : null}
               </div>
             </div>
           </div>
@@ -1787,14 +1868,14 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Financing readiness</p>
-              <h2 className="mt-2 text-2xl font-black">Deal room aggregate-only</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Kesiapan pembiayaan</p>
+              <h2 className="mt-2 text-2xl font-black">Ruang keputusan berbasis agregat</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[#53606A]">
-                Status draft/requested/verified ditampilkan sebagai kesiapan dokumen dan komite, bukan approval otomatis.
+                Status draft, diajukan, dan terverifikasi ditampilkan sebagai kesiapan dokumen dan komite, bukan persetujuan otomatis.
               </p>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              {financingReadiness ? "Shared DB read-only" : "Env-gated"}
+              {financingReadiness ? "Bukti agregat" : "Perlu aktivasi"}
             </span>
           </div>
           {financingReadiness ? (
@@ -1802,15 +1883,15 @@ export function ReportClient() {
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 {financingStatuses.map((item) => (
                   <div key={item.statusKey} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-                    <p className="text-sm font-black text-[#D79A2B]">{item.status}</p>
+                    <p className="text-sm font-black text-[#D79A2B]">{publicRegistryStatusLabel(item.status)}</p>
                     <p className="mt-2 text-3xl font-black">{formatInteger(item.requests)}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{formatInteger(item.amount)} nominal aggregate</p>
+                    <p className="mt-1 text-xs font-semibold text-[#53606A]">{formatInteger(item.amount)} nominal agregat</p>
                   </div>
                 ))}
               </div>
               <div className="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
                 <div className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
-                  <p className="text-xs font-black uppercase text-[#C92A2A]">LPDB/HIMBARA proxy</p>
+                  <p className="text-xs font-black uppercase text-[#C92A2A]">Kanal pembiayaan</p>
                   <div className="mt-3 space-y-2">
                     {financingChannels.length > 0 ? (
                       financingChannels.map((item) => (
@@ -1824,21 +1905,21 @@ export function ReportClient() {
                     )}
                   </div>
                   <p className="mt-4 text-xs font-bold leading-5 text-[#7A4E2D]">
-                    Freshness: {financingReadiness.freshness?.generatedAt ?? "current request"}.
-                    Confidence: {financingReadiness.confidence?.level ?? "limited"}.
+                    Diperbarui: {financingReadiness.freshness?.generatedAt ?? "permintaan saat ini"}.
+                    Keyakinan: {publicRegistryStatusLabel(financingReadiness.confidence?.level ?? "limited")}.
                   </p>
                 </div>
                 <div className="grid gap-3">
                   {financingChecklist.map((item) => (
                     <div key={item.id} className="rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-black">{item.title}</p>
+                        <p className="font-black">{publicProductText(item.title, "Checklist pembiayaan")}</p>
                         <span className="rounded-[8px] bg-[#FFFCF5] px-2.5 py-1 text-[11px] font-black text-[#7A4E2D]">
-                          {item.status}
+                          {publicRegistryStatusLabel(item.status)}
                         </span>
                       </div>
-                      <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{item.nextAction}</p>
-                      <p className="mt-2 text-xs font-bold leading-5 text-[#7A4E2D]">{item.caveat}</p>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-[#53606A]">{publicProductText(item.nextAction, "Lanjutkan review komite.")}</p>
+                      <p className="mt-2 text-xs font-bold leading-5 text-[#7A4E2D]">{publicProductText(item.caveat, "Bukti agregat perlu direview sebelum keputusan.")}</p>
                     </div>
                   ))}
                 </div>
@@ -1846,7 +1927,7 @@ export function ReportClient() {
             </>
           ) : (
             <p className="mt-4 rounded-[14px] border border-[#E7DED1] bg-[#FFF8EA] p-4 text-sm font-semibold text-[#53606A]">
-              Shared DB belum configured atau butuh login/env. Laporan tidak membuat angka pembiayaan palsu.
+              Sumber eksplorasi belum aktif atau butuh login. Laporan tidak membuat angka pembiayaan palsu.
             </p>
           )}
         </article>
@@ -1854,27 +1935,29 @@ export function ReportClient() {
         <article className="rounded-[20px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-black text-[#7A4E2D]">Prefixed app DB</p>
-              <h2 className="mt-2 text-2xl font-black">Requirement, ledger, dan evidence</h2>
+              <p className="text-sm font-black text-[#7A4E2D]">Tabel data tim</p>
+              <h2 className="mt-2 text-2xl font-black">Syarat buyer, riwayat stok, dan bukti</h2>
             </div>
             <span className="rounded-[10px] bg-[#FFF3D8] px-3 py-2 text-xs font-black text-[#7A4E2D]">
-              {dashboardData?.teamTablePrefix ?? "anak_sarengklek_"}
+              {dashboardData?.prefixedDbStatus?.status === "ready" ? "data siap" : "perlu aktivasi"}
             </span>
           </div>
           {dashboardData?.prefixedDbStatus ? (
             <div className="mt-4 rounded-[12px] bg-[#FFF8EA] p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-black">{dashboardData.prefixedDbStatus.message}</p>
+                <p className="text-sm font-black">
+                  {publicSetupMessage(dashboardData.prefixedDbStatus.message, "Status tabel data tim perlu dicek di server.")}
+                </p>
                 <span className="w-fit rounded-[8px] bg-white px-2.5 py-1 text-xs font-black text-[#7A4E2D]">
-                  {dashboardData.prefixedDbStatus.status}
+                  {dashboardData.prefixedDbStatus.status === "ready" ? "Siap dipakai" : "Perlu aktivasi"}
                 </span>
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-3">
                 {dashboardData.prefixedDbStatus.tables.map((table) => (
                   <div key={table.tableName} className="rounded-[10px] bg-white p-2 text-xs font-bold text-[#53606A]">
-                    <p className="truncate text-[#172027]">{table.tableName}</p>
+                    <p className="truncate text-[#172027]">{teamTableLabel(table.tableName)}</p>
                     <p className="mt-1">
-                      {table.status === "ready" ? `${formatInteger(table.rows)} rows` : table.errorCode ?? "setup-required"}
+                      {table.status === "ready" ? `${formatInteger(table.rows)} catatan` : "perlu aktivasi"}
                     </p>
                   </div>
                 ))}
@@ -1883,41 +1966,41 @@ export function ReportClient() {
           ) : null}
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Buyer requirements</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Syarat buyer</p>
               <div className="mt-3 space-y-2">
                 {buyerRequirements.slice(0, 3).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.productName}</p>
                     <p className="mt-1 text-xs font-semibold text-[#53606A]">
-                      {formatInteger(item.requiredQuantity)} {item.unitLabel} - {item.verificationStatus}
+                      {formatInteger(item.requiredQuantity)} {item.unitLabel} - {publicRegistryStatusLabel(item.verificationStatus)}
                     </p>
-                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{item.sourceLabel}</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{publicSourceLabel(item.sourceLabel)}</p>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Stock ledger</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Riwayat stok</p>
               <div className="mt-3 space-y-2">
                 {stockLedger.slice(0, 3).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.stockName}</p>
                     <p className="mt-1 text-xs font-semibold text-[#53606A]">
-                      {item.movementType} - {formatInteger(item.quantity)} {item.unitLabel}
+                      {publicProductText(item.movementType, "Pergerakan stok")} - {formatInteger(item.quantity)} {item.unitLabel}
                     </p>
-                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">Evidence: {item.evidenceRef}</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">Bukti: {publicSourceLabel(item.evidenceRef)}</p>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[#C92A2A]">Media evidence</p>
+              <p className="text-xs font-black uppercase text-[#C92A2A]">Bukti media</p>
               <div className="mt-3 space-y-2">
                 {mediaEvidence.slice(0, 3).map((item) => (
                   <div key={item.id} className="rounded-[12px] bg-[#FFF8EA] p-3">
                     <p className="font-black">{item.redactedLabel}</p>
                     <p className="mt-1 text-xs font-semibold leading-5 text-[#53606A]">{item.caption}</p>
-                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{item.verificationStatus}</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-[#7A4E2D]">{publicRegistryStatusLabel(item.verificationStatus)}</p>
                   </div>
                 ))}
               </div>
@@ -1933,10 +2016,10 @@ export function ReportClient() {
               <AlertTriangle size={20} strokeWidth={2.2} className="mt-0.5 text-[#D79A2B]" aria-hidden="true" />
             )}
             <div>
-              <p className="font-black">Decision status</p>
+              <p className="font-black">Status keputusan</p>
               <p className="mt-1 text-sm font-semibold leading-6 text-[#53606A]">{message}</p>
               <p className="mt-2 text-xs font-bold text-[#7A4E2D]">
-                Financing ditampilkan sebagai readiness saja. Keputusan tetap oleh komite/pengurus koperasi.
+                Pembiayaan ditampilkan sebagai kesiapan saja. Keputusan tetap oleh komite/pengurus koperasi.
               </p>
             </div>
           </div>

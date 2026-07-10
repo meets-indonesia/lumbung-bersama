@@ -280,7 +280,7 @@ export async function runAgentProvider(input: AgentProviderInput): Promise<Agent
     return {
       configured: false,
       used: false,
-      mode: "rules-local-postgres",
+      mode: "rules-operational-data",
       providerLabel: "not-configured",
       model: null,
     };

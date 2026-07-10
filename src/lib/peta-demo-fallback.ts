@@ -243,7 +243,7 @@ export function getDemoDrilldown({
     })),
     query: { code, q, commodity, sector, limit },
     note:
-      "Mode demo lokal aktif karena DATABASE_URL belum dikonfigurasi. Data ini hanya sample MVP untuk QA UI; gunakan Postgres/import resmi untuk klaim operasional.",
+      "Mode demo lokal aktif karena database aplikasi belum dikonfigurasi. Data ini hanya sample MVP untuk QA UI; gunakan import resmi untuk klaim operasional.",
   });
 }
 
@@ -274,7 +274,7 @@ export function getDemoAreaSearch({
     count: rows.length,
     query: { q, level, parentCode, limit },
     areas: rows,
-    note: "Mode demo lokal aktif karena DATABASE_URL belum dikonfigurasi.",
+    note: "Mode demo lokal aktif karena data operasional belum tersambung.",
   });
 }
 
@@ -323,6 +323,6 @@ export function getDemoCommoditySearch({
     query: { q, areaCode, provinceCode, level, limit },
     profiles: rows,
     note:
-      "Mode demo lokal aktif karena DATABASE_URL belum dikonfigurasi. Data ini untuk QA UI dan presentasi sample, bukan klaim produksi area.",
+      "Mode demo lokal aktif karena data operasional belum tersambung. Data ini untuk QA UI dan presentasi sample, bukan klaim produksi area.",
   });
 }

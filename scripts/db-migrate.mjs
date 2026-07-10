@@ -11,7 +11,7 @@ const schemaPath = path.join(root, "db", "schema.sql");
 await loadLocalEnv(root);
 
 if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL belum diisi. Contoh: postgresql://user:password@localhost:5432/lumbung_bersama");
+  console.error("DATABASE_URL belum diisi. Contoh: gunakan connection string database aplikasi.");
   process.exit(1);
 }
 
@@ -24,7 +24,7 @@ await client.connect();
 try {
   const schema = await readFile(schemaPath, "utf8");
   await client.query(schema);
-  console.log("Postgres schema siap.");
+  console.log("Schema database aplikasi siap.");
 } finally {
   await client.end();
 }

@@ -30,8 +30,6 @@ import {
   Search,
   Send,
   Settings,
-  ShieldCheck,
-  Store,
   Sun,
   Warehouse,
   X,
@@ -49,40 +47,28 @@ import { StatusBadge } from "./StatusBadge";
 
 const navGroups = [
   {
-    label: "MVP utama",
+    label: "Alur MVP",
     items: [
       { label: "Ringkasan", view: "overview", icon: LayoutDashboard },
       { label: "Peta Potensi", view: "peta-unggulan", icon: MapPinned },
-      { label: "Rekomendasi", view: "agents", icon: Bot },
-    ],
-  },
-  {
-    label: "Data dan verifikasi",
-    items: [
-      { label: "Lumbung Data", view: "lumbung-data", icon: Database },
-      { label: "WA Intake", view: "wa", icon: MessageCircle },
-    ],
-  },
-  {
-    label: "Eksekusi",
-    items: [
-      { label: "Buyer Matching", view: "pasar-mitra", icon: Building2 },
-      { label: "Stok Readiness", view: "stok-logistik", icon: Warehouse },
+      { label: "Rekomendasi Produk", view: "lumbung-data", icon: Database },
+      { label: "Buyer Awal", view: "pasar-mitra", icon: Building2 },
+      { label: "Kesiapan Stok", view: "stok-logistik", icon: Warehouse },
       { label: "Laporan Aksi", view: "laporan", icon: FileText },
     ],
   },
   {
-    label: "Pendukung",
+    label: "Intake & kesiapan",
     items: [
-      { label: "Gerai Readiness", view: "gerai-pintar", icon: Store },
-      { label: "Financing Readiness", view: "simpan-pinjam", icon: ShieldCheck },
-      { label: "Integrasi", view: "integrasi", icon: Settings },
+      { label: "WA Agent", view: "wa", icon: MessageCircle },
+      { label: "AI Agent", view: "agents", icon: Bot },
+      { label: "Kesiapan Sistem", view: "integrasi", icon: Settings },
     ],
   },
 ];
 
-const TOUR_STORAGE_KEY = "lumbung-bersama-dashboard-tour-v2";
-const WELCOME_STORAGE_KEY = "lumbung-bersama-dashboard-welcome-v1";
+const TOUR_STORAGE_KEY = "lumbung-bersama-dashboard-tour-v3";
+const WELCOME_STORAGE_KEY = "lumbung-bersama-dashboard-welcome-v2";
 
 type TourStep = {
   id: string;
@@ -96,7 +82,7 @@ const dashboardTourSteps: TourStep[] = [
   {
     id: "sidebar",
     title: "Navigasi kerja",
-    body: "Sidebar sekarang mengikuti flow MVP: peta, rekomendasi, buyer, readiness stok, dan laporan aksi.",
+    body: "Sidebar sekarang mengikuti flow MVP: peta, rekomendasi, buyer, kesiapan stok, dan laporan aksi.",
     selector: "[data-tour='sidebar']",
   },
   {
@@ -107,22 +93,22 @@ const dashboardTourSteps: TourStep[] = [
   },
   {
     id: "queue",
-    title: "Antrian verifikasi",
+    title: "Antrean verifikasi",
     body: "Data warga dari WhatsApp masuk sebagai draft pendukung. Operator bisa tanya ulang, setujui, atau membuka modul tujuan.",
     selector: "[data-tour='work-queue']",
     view: "overview",
   },
   {
     id: "lumbung-data",
-    title: "Lumbung Data",
-    body: "Ini meja verifikasi. Data awal dan baseline nasional tidak menjadi klaim operasional sebelum operator memberi bukti dan pengurus menyetujui.",
+    title: "Rekomendasi produk",
+    body: "Langkah ini membaca bukti, peluang, dan catatan verifikasi sebelum produk dipilih untuk buyer atau stok.",
     selector: "[data-tour='lumbung-data']",
     view: "lumbung-data",
   },
   {
     id: "peta",
     title: "Peta Unggulan",
-    body: "Peta adalah layar utama demo dan dibuka sebagai halaman penuh agar operator bisa drill-down wilayah, komoditas, dan sumber.",
+    body: "Peta dibuka sebagai halaman penuh agar operator bisa drill-down wilayah, komoditas, dan sumber.",
     selector: "[data-testid='dashboard-nav-peta-unggulan']",
   },
   {
@@ -135,13 +121,6 @@ const dashboardTourSteps: TourStep[] = [
 
 const demoFlowSteps = [
   {
-    id: "dashboard",
-    label: "Dashboard",
-    actionLabel: "Dashboard",
-    targetView: "overview",
-    detail: "Manager melihat evidence, role, queue, dan command center.",
-  },
-  {
     id: "peta",
     label: "Peta",
     actionLabel: "Buka peta",
@@ -149,25 +128,32 @@ const demoFlowSteps = [
     detail: "Pilih wilayah atau komoditas tanpa klaim coverage nasional penuh.",
   },
   {
-    id: "score",
-    label: "Score",
-    actionLabel: "Score",
+    id: "recommendation",
+    label: "Rekomendasi",
+    actionLabel: "Rekomendasi",
     targetView: "lumbung-data",
-    detail: "Tampilkan score explainable dan caveat data.",
+    detail: "Lihat produk/komoditas yang diprioritaskan, alasan skor, dan catatan verifikasi data.",
   },
   {
     id: "buyer",
     label: "Buyer",
     actionLabel: "Buyer",
     targetView: "pasar-mitra",
-    detail: "Gunakan archetype buyer, bukan buyer palsu.",
+    detail: "Cocokkan kebutuhan pembeli dengan kesiapan koperasi.",
+  },
+  {
+    id: "stok",
+    label: "Stok",
+    actionLabel: "Stok",
+    targetView: "stok-logistik",
+    detail: "Cek kesiapan stok, riwayat, dan bukti sebelum aksi buyer.",
   },
   {
     id: "laporan",
     label: "Laporan",
     actionLabel: "Laporan",
     href: "/laporan",
-    detail: "Tutup demo dengan CSV/report tanpa PII.",
+    detail: "Tutup alur dengan keputusan dan daftar aksi berikutnya.",
   },
 ] as const;
 
@@ -175,80 +161,80 @@ const simkopdesRoleAccessMatrix = [
   {
     role: "Pengurus",
     surfaces: "/dashboard, /laporan",
-    workflow: "Kebijakan, lock laporan, keputusan pembiayaan dan outreach.",
-    review: "Final approval required",
+    workflow: "Kebijakan, penguncian laporan, keputusan pembiayaan, dan kontak buyer.",
+    review: "Persetujuan akhir",
   },
   {
     role: "Manager Koperasi",
     surfaces: "/dashboard, /peta-unggulan, /laporan",
-    workflow: "Memantau transaksi, gudang, pengiriman, opportunity, dan buyer.",
-    review: "Owns command center",
+    workflow: "Memantau transaksi, gudang, pengiriman, peluang, dan buyer.",
+    review: "Ruang kendali",
   },
   {
     role: "Staff/Admin Gudang",
-    surfaces: "Stok readiness",
+    surfaces: "Kesiapan stok",
     workflow: "Produk, barang masuk/keluar, inventaris, lokasi penyimpanan.",
     review: "Validasi stok dan bukti",
   },
   {
     role: "Staff/Admin Logistik",
     surfaces: "Logistik",
-    workflow: "Pickup, pilih kurir, tahap persiapan pengiriman, proof-of-delivery.",
+    workflow: "Pickup, pilih kurir, tahap persiapan pengiriman, bukti pengiriman.",
     review: "Validasi pengiriman",
   },
   {
     role: "Kasir",
-    surfaces: "POS signal",
-    workflow: "Transaksi aggregate, pickup/delivery, subsidi bila tersedia.",
-    review: "No customer detail",
+    surfaces: "Sinyal POS",
+    workflow: "Transaksi agregat, pickup/pengiriman, subsidi bila tersedia.",
+    review: "Tanpa detail pelanggan",
   },
   {
     role: "Kurir",
-    surfaces: "Fulfillment",
-    workflow: "Mulai pengiriman, tandai tiba, bukti foto bila governed.",
-    review: "No public recipient data",
+    surfaces: "Pemenuhan",
+    workflow: "Mulai pengiriman, tandai tiba, bukti foto bila sudah diatur.",
+    review: "Tanpa data penerima publik",
   },
   {
     role: "Juri/Viewer",
     surfaces: "/dashboard, /peta-unggulan, /laporan",
-    workflow: "Melihat flow sample/aggregate/no PII.",
-    review: "Read-only",
+    workflow: "Melihat alur sampel/agregat tanpa PII.",
+    review: "Baca saja",
   },
 ] as const;
 
 const approvalWorkflowSteps = [
   {
-    label: "Recommended",
-    detail: "AI atau rules membuat rekomendasi awal dengan source, confidence, dan caveat.",
+    label: "Direkomendasikan",
+    detail: "AI atau aturan lokal membuat rekomendasi awal dengan sumber, keyakinan, dan catatan batas.",
   },
   {
-    label: "Needs verification",
+    label: "Perlu verifikasi",
     detail: "Operator memeriksa stok, dokumen, harga, buyer requirement, dan bukti.",
   },
   {
-    label: "Approved",
+    label: "Disetujui",
     detail: "Pengurus atau manager menyetujui tindak lanjut; bukan keputusan otomatis AI.",
   },
 ] as const;
 
 const simkopdesReadinessChecklist = [
   "Produk punya satuan dan kategori jelas",
-  "Potensi desa terhubung ke source opportunity score",
+  "Potensi desa terhubung ke sumber skor peluang",
   "Pemasok lokal/UMKM/petani dicatat sebagai sumber, bukan data pribadi publik",
-  "Barang masuk dan barang keluar punya alasan dan evidence_ref",
+  "Barang masuk dan barang keluar punya alasan dan referensi bukti",
   "Inventaris tidak negatif, bukan label generik, dan tidak masih draft",
   "Harga beli/jual atau market input operator tersedia sebelum negosiasi",
-  "Dokumentasi foto/status verifikasi tersedia tanpa raw media publik",
-  "Gudang, lokasi penyimpanan, kurir, dan proof-of-delivery menjadi readiness stage",
+  "Dokumentasi foto/status verifikasi tersedia tanpa media mentah publik",
+  "Gudang, lokasi penyimpanan, kurir, dan bukti kirim menjadi tahap kesiapan",
 ] as const;
 
 const memberSavingsAlignment = [
   "Simpanan Pokok",
   "Simpanan Wajib",
   "Simpanan Sukarela",
-  "Periode tagihan dan status lunas aggregate",
-  "Bukti bayar dan export Excel sebagai roadmap governed",
-  "Penarikan simpanan mengikuti aturan koperasi dan approval pengurus",
+  "Periode tagihan dan status lunas agregat",
+  "Bukti bayar dan export Excel sebagai roadmap terkendali",
+  "Penarikan simpanan mengikuti aturan koperasi dan persetujuan pengurus",
 ] as const;
 
 const analystGuardrails = [
@@ -263,6 +249,18 @@ function dashboardViewForFeature(slug: string) {
   if (slug === "agen-ai") return "agents";
   if (slug === "lapor-siap") return "laporan";
   return slug;
+}
+
+function isDashboardView(view: string) {
+  if (view === "peta-unggulan") return false;
+  if (["gerai-pintar", "simpan-pinjam"].includes(view)) return true;
+  return navGroups.some((group) => group.items.some((item) => item.view === view)) || Boolean(featureDetails[view]);
+}
+
+function initialDashboardView() {
+  if (typeof window === "undefined") return "overview";
+  const requestedView = new URLSearchParams(window.location.search).get("view");
+  return requestedView && isDashboardView(requestedView) ? requestedView : "overview";
 }
 
 function formatRupiah(value: string | number) {
@@ -286,18 +284,6 @@ function formatPercentRatio(value: number | null | undefined) {
   return `${Math.round(value * 100)}%`;
 }
 
-function roleLabelForUser(role: string, title: string) {
-  const normalized = `${role} ${title}`.toLowerCase();
-  if (normalized.includes("juri") || normalized.includes("viewer")) return "Juri/Viewer";
-  if (normalized.includes("manager")) return "Manager Koperasi";
-  if (normalized.includes("gudang")) return "Staff/Admin Gudang";
-  if (normalized.includes("logistik")) return "Staff/Admin Logistik";
-  if (normalized.includes("kasir")) return "Kasir";
-  if (normalized.includes("kurir")) return "Kurir";
-  if (normalized.includes("pengurus") || normalized.includes("admin")) return "Pengurus";
-  return title || role || "Viewer";
-}
-
 function downloadTextFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -309,7 +295,65 @@ function downloadTextFile(filename: string, content: string, type = "text/plain;
 }
 
 function buyerEvidenceLabel(match: BuyerMatch) {
-  return match.sourceLabel ?? "Buyer archetype; bukan named buyer atau komitmen permintaan live.";
+  return match.sourceLabel ?? "Tipe kebutuhan buyer; bukan buyer bernama atau komitmen permintaan live.";
+}
+
+function publicSetupMessage(message: unknown, fallback: string) {
+  const raw = typeof message === "string" ? message.trim() : "";
+  if (!raw) return fallback;
+  if (
+    /DATABASE_URL|HACKATHON_SHARED_DATABASE_URL|DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD|POSTGRES|Postgres|postgres|env\b|environment|shared[-_\s]?db|db-read|database|setup[-_\s]?required|operator-ready|credential|secret|schema|seed/i.test(
+      raw,
+    )
+  ) {
+    return fallback;
+  }
+  return raw.replace(/shared[-_\s]?db/gi, "sumber eksplorasi").replace(/Shared DB/g, "Sumber eksplorasi");
+}
+
+function publicStatusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw) return "Belum dicek";
+  if (/configured|implemented|ready|available|application/i.test(raw)) return "Aktif";
+  if (/loading/i.test(raw)) return "Memuat";
+  if (/env|setup|activation|static|not-configured/i.test(raw)) return "Perlu aktivasi";
+  if (/source-discovery|discovery/i.test(raw)) return "Discovery";
+  if (/planned|connector/i.test(raw)) return "Direncanakan";
+  if (/manual|reference/i.test(raw)) return "Referensi";
+  return raw.replace(/[-_]/g, " ");
+}
+
+function publicReadinessLabel(value: unknown) {
+  const raw = typeof value === "string" ? value : "";
+  if (/ready|operator-ready|configured|available/i.test(raw)) return "Siap dipakai";
+  if (/loading/i.test(raw)) return "Memuat";
+  if (/query|error|failed/i.test(raw)) return "Perlu dicek";
+  if (/setup|missing|not-configured|auth-required|required/i.test(raw)) return "Perlu aktivasi";
+  return publicStatusLabel(raw);
+}
+
+function publicEvidenceLabel(value: unknown, fallback = "Sumber eksplorasi terbatas") {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return fallback;
+  if (/hackathon|shared[-_\s]?db|db-read|read[-_\s]?only|schema|database|postgres|env\b|endpoint|api\//i.test(raw)) {
+    return fallback;
+  }
+  return publicSetupMessage(raw, fallback)
+    .replace(/read[-_\s]?only/gi, "agregat terbatas")
+    .replace(/aggregate/gi, "agregat")
+    .replace(/sample/gi, "sampel");
+}
+
+function publicTableGroupLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "Kelompok data";
+  return raw
+    .replace(/^anak_sarengklek_/i, "")
+    .replace(/_/g, " ")
+    .replace(/\bdb\b/gi, "data")
+    .replace(/\bhackathon\b/gi, "eksplorasi")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function toCsv(rows: Array<Array<string | number | boolean | null | undefined>>) {
@@ -462,7 +506,7 @@ type ReportPeriod = {
 };
 
 type DashboardData = {
-  source: "postgres";
+  source: "application-db";
   cooperative: CooperativeInfo | null;
   metrics: MetricItem[];
   queue: QueueItem[];
@@ -835,6 +879,27 @@ type HealthPayload = {
     status: string;
     fallback: string;
   }>;
+  whatsapp?: {
+    setup?: {
+      cloudApi?: {
+        send: string;
+        webhook: string;
+        message: string;
+      };
+      personalBridge?: {
+        status: string;
+        command: string;
+        message: string;
+        activationRequired: boolean;
+        capabilities?: {
+          qrPairing: boolean;
+          mediaDownload: boolean;
+          pdfTextExtraction: boolean;
+          imageOcr: boolean;
+        };
+      };
+    };
+  };
   message?: string;
 };
 
@@ -857,7 +922,7 @@ type ConfirmConfig = {
 
 export function DashboardClient({ initialUser }: { initialUser: DashboardUser }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState(initialDashboardView);
   const [query, setQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -887,7 +952,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "scope" | "error">("loading");
   const [dataError, setDataError] = useState("");
   const [panelMessage, setPanelMessage] = useState(
-    "Memuat data Postgres.",
+    "Memuat data operasional.",
   );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
@@ -1000,6 +1065,13 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
         return;
       }
       if (!response.ok) {
+        const fallbackMessage =
+          response.status === 503
+            ? "Data operasional aplikasi belum aktif di server ini."
+            : response.status === 409 && payload.error === "COOPERATIVE_SCOPE_REQUIRED"
+              ? "Akun login belum terhubung ke workspace koperasi."
+              : "Dashboard belum berhasil memuat data operasional.";
+        const safeMessage = publicSetupMessage(payload.message ?? payload.error, fallbackMessage);
         setDashboardData(null);
         setDataStatus(
           response.status === 503
@@ -1008,14 +1080,14 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
               ? "scope"
               : "error",
         );
-        setDataError(payload.message ?? payload.error ?? "Data dashboard belum tersedia.");
-        setPanelMessage(payload.message ?? (response.status === 503 ? "Postgres belum siap." : "Dashboard belum siap."));
+        setDataError(safeMessage);
+        setPanelMessage(safeMessage);
         return;
       }
       setDashboardData(payload as DashboardData);
       setDataStatus("ready");
       setDataError("");
-      setPanelMessage("Data Postgres berhasil dimuat.");
+      setPanelMessage("Data operasional berhasil dimuat.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal memuat data dashboard.";
       setDashboardData(null);
@@ -1053,13 +1125,17 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       const readyCount = Object.keys(payloadByKey).length;
       if (readyCount === 0 && failed.length) {
         const firstFailed = failed[0];
+        const safeMessage = publicSetupMessage(
+          firstFailed.payload?.message ?? firstFailed.payload?.error,
+          "Sumber eksplorasi belum aktif di server ini.",
+        );
         setHackathonSummary(null);
         setHackathonDataQuality(null);
         setHackathonOpportunityScores(null);
         setHackathonBuyerMatching(null);
         setHackathonFinancingReadiness(null);
         setHackathonStatus(firstFailed.response.status === 503 ? "unavailable" : "error");
-        setHackathonError(firstFailed.payload?.message ?? firstFailed.payload?.error ?? "Shared DB hackathon belum tersedia.");
+        setHackathonError(safeMessage);
         return;
       }
       setHackathonSummary((payloadByKey.summary as HackathonMvpSummary | undefined) ?? null);
@@ -1072,7 +1148,10 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       setHackathonStatus(failed.length ? "partial" : "ready");
       setHackathonError(
         failed.length
-          ? `${readyCount}/5 endpoint evidence berhasil. ${failed[0]?.payload?.message ?? failed[0]?.payload?.error ?? "Sebagian endpoint belum tersedia."}`
+        ? `Sebagian sumber bukti berhasil dibaca. ${publicSetupMessage(
+              failed[0]?.payload?.message ?? failed[0]?.payload?.error,
+              "Sebagian sumber belum tersedia.",
+            )}`
           : "",
       );
     } catch (error) {
@@ -1082,7 +1161,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       setHackathonBuyerMatching(null);
       setHackathonFinancingReadiness(null);
       setHackathonStatus("error");
-      setHackathonError(error instanceof Error ? error.message : "Gagal memuat shared DB hackathon.");
+      setHackathonError(publicSetupMessage(error instanceof Error ? error.message : "", "Gagal memuat sumber eksplorasi."));
     }
   }
 
@@ -1100,7 +1179,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       if (!response.ok) {
         setSignalSpine(null);
         setSignalSpineStatus(response.status === 404 || response.status === 503 ? "unavailable" : "error");
-        setSignalSpineError(payload?.message ?? payload?.error ?? "Signal spine endpoint belum tersedia.");
+        setSignalSpineError(payload?.message ?? payload?.error ?? "Signal spine belum tersedia.");
         return;
       }
       setSignalSpine(payload ?? {});
@@ -1154,14 +1233,15 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     setProfileSaving(false);
 
     if (!response.ok) {
-      setProfileMessage(payload.message ?? payload.error ?? "Profil gagal disimpan.");
-      showToast("Profil gagal disimpan", payload.message ?? payload.error ?? "Periksa kembali isian profil.", "error");
+      const profileError = publicSetupMessage(payload.message ?? payload.error, "Periksa kembali isian profil.");
+      setProfileMessage(profileError);
+      showToast("Profil gagal disimpan", profileError, "error");
       return;
     }
 
     setUser(payload.user as DashboardUser);
     setProfileMessage("Profil tersimpan.");
-    announce("Profil operator diperbarui di Postgres.", "success");
+    announce("Profil operator diperbarui di data operasional.", "success");
   }
 
   async function performLogout() {
@@ -1202,11 +1282,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   }, []);
 
   const cooperative = dashboardData?.cooperative ?? {
-    id: "setup-required",
-    name: "Postgres belum tersambung",
-    village: "Isi DATABASE_URL",
-    district: "Jalankan db:setup",
-    regency: "Setup",
+    id: "pending-activation",
+    name: "Data operasional belum tersambung",
+    village: "Menunggu aktivasi server",
+    district: "Cek aktivasi aplikasi",
+    regency: "Data awal",
     province: "Indonesia",
   };
   const metrics = dashboardData?.metrics ?? EMPTY_METRICS;
@@ -1236,7 +1316,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   function approveDraft(id: string) {
     requestConfirm({
       title: `Setujui ${id}?`,
-      message: "Catatan akan ditandai sudah disetujui dan tersimpan di Postgres.",
+      message: "Catatan akan ditandai sudah disetujui dan masuk ke riwayat operasional.",
       confirmLabel: "Setujui",
       onConfirm: async () => {
         const response = await fetch(`/api/operator-queue/${encodeURIComponent(id)}`, {
@@ -1246,11 +1326,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          announce(payload.message ?? payload.error ?? `${id} gagal disetujui.`, "error");
+          announce(publicSetupMessage(payload.message ?? payload.error, `${id} gagal disetujui.`), "error");
           return;
         }
         await loadDashboard();
-        announce(`${id} disetujui dan tersimpan di Postgres.`, "success");
+        announce(`${id} disetujui dan masuk ke riwayat operasional.`, "success");
       },
     });
   }
@@ -1258,7 +1338,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   function askFarmer(id: string) {
     requestConfirm({
       title: `Buat follow-up untuk ${id}?`,
-      message: "Sistem akan menambahkan catatan tindak lanjut WA. Pengiriman live tetap mengikuti env WhatsApp.",
+      message: "Sistem akan menambahkan catatan tindak lanjut WA. Pengiriman live tetap menunggu aktivasi kanal WhatsApp.",
       confirmLabel: "Buat follow-up",
       onConfirm: async () => {
         const response = await fetch(`/api/operator-queue/${encodeURIComponent(id)}`, {
@@ -1268,11 +1348,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          announce(payload.message ?? payload.error ?? `${id} gagal dibuat follow-up.`, "error");
+          announce(publicSetupMessage(payload.message ?? payload.error, `${id} gagal dibuat follow-up.`), "error");
           return;
         }
         await loadDashboard();
-        announce(`${id}: follow-up tersimpan di Postgres. Pengiriman live menunggu env WhatsApp.`, "success");
+        announce(`${id}: follow-up tersimpan di riwayat operasional. Pengiriman live menunggu aktivasi kanal WhatsApp.`, "success");
       },
     });
   }
@@ -1284,7 +1364,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       return;
     }
     setActiveView(dashboardViewForFeature(matchedFeature?.slug ?? "lumbung-data"));
-    announce(`${moduleTitle} dibuka di dashboard.`, "info");
   }
 
   const isDark = theme === "dark";
@@ -1307,15 +1386,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     activeView === "overview"
       ? "Ringkasan Operator"
       : activeNavItem?.label ?? featureDetails[activeView]?.title ?? "Ruang Kerja";
-  const headerEvidenceCount = [
-    hackathonSummary,
-    hackathonDataQuality,
-    hackathonOpportunityScores,
-    hackathonBuyerMatching,
-    hackathonFinancingReadiness,
-  ].filter(Boolean).length;
-  const roleBadgeLabel = roleLabelForUser(user.role, user.title);
-
   return (
     <main className={`lb-dashboard-type h-[100dvh] overflow-hidden ${shellClass}`}>
       <GuidedDemoDock
@@ -1355,11 +1425,13 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             }`}
           >
             <div className={`lb-sidebar-brand flex min-w-0 items-center gap-3 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
-              <img
-                alt="Lumbung Bersama"
-                src={stitchAssets.dashboardLogo}
-                className={`${sidebarCollapsed ? "h-12" : "h-16 lg:h-20"} w-auto object-contain drop-shadow-[0_18px_34px_rgba(215,154,43,0.2)]`}
-              />
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[10px] bg-[#F8F0DE] p-2 shadow-[0_18px_34px_rgba(215,154,43,0.16)]">
+                <img
+                  alt="Lumbung Bersama"
+                  src={stitchAssets.dashboardLogo}
+                  className="h-full w-full object-contain"
+                />
+              </span>
               <div className={`lb-sidebar-copy min-w-0 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
                 <p className="truncate text-sm font-black text-[#FFF8EA]">Lumbung Bersama</p>
                 <p className="mt-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#D79A2B]">Ringkasan Operator</p>
@@ -1393,7 +1465,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
           </div>
 
           <div className={`lb-sidebar-info mx-4 mt-5 rounded-[8px] border border-[#26323B] bg-[#0B1013] p-3 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#D79A2B]">Authenticated</p>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#D79A2B]">Login aktif</p>
             <p className="mt-2 truncate text-sm font-semibold">{cooperative.name}</p>
             <p className={`mt-1 text-xs font-normal leading-5 ${mutedClass}`}>
               {cooperative.village}, {cooperative.district}
@@ -1424,7 +1496,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                             return;
                           }
                           setActiveView(item.view);
-                          announce(`${item.label} dibuka di dashboard.`, "info");
                           setMobileSidebarOpen(false);
                         }}
                         title={item.label}
@@ -1462,7 +1533,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 : "border-[#D9CFC0] bg-[#F5F0E7]/92"
             }`}
           >
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
               <div className="flex min-w-0 items-start gap-3">
                 <button
                   type="button"
@@ -1473,61 +1544,52 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 >
                   <Menu size={18} strokeWidth={2.2} aria-hidden="true" />
                 </button>
-                <div className="flex min-w-0 flex-wrap items-center gap-4">
+                <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,max-content)_auto_minmax(0,1fr)] sm:items-center">
                   <div className="min-w-0">
-                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Authenticated command center</p>
+                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Ruang kerja operator</p>
                     <h1 className="mt-1 truncate text-lg font-black tracking-normal text-[#FFF8EA] sm:text-xl">
                       {activeViewLabel}
                     </h1>
                   </div>
                   <span className="hidden h-6 w-px bg-[#1F2933] sm:block" aria-hidden="true" />
-                  <div className="flex items-center gap-3 text-xs font-bold">
-                    <span className="border-b-2 border-[#D79A2B] pb-1 text-[#D79A2B]">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
+                    <span className="min-w-0 border-b-2 border-[#D79A2B] pb-1 text-[#D79A2B]">
                       {cooperative.village}
                     </span>
-                    <span className={mutedClass}>{cooperative.province}</span>
-                  </div>
-                  <div className="hidden items-center gap-2 xl:flex">
-                    <span className="rounded-[4px] border border-[#D79A2B]/45 bg-[#42302E] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#FFE5E2]">
-                      role: {roleBadgeLabel}
-                    </span>
-                    <span className="rounded-[4px] border border-[#26323B] bg-[#101820] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
-                      /api/dashboard: {dataStatus}
-                    </span>
-                    <span className="rounded-[4px] border border-[#26323B] bg-[#101820] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
-                      hackathon: {headerEvidenceCount}/5
-                    </span>
+                    <span className={`min-w-0 truncate ${mutedClass}`}>{cooperative.province}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
                 <label
                   htmlFor="dashboard-search"
                   data-tour="global-search"
-                  className={`flex min-w-0 items-center gap-2 rounded-[12px] border px-3 py-2.5 md:w-[320px] ${innerClass}`}
+                  className={`hidden min-w-0 items-center gap-2 rounded-[12px] border px-3 py-2.5 md:flex md:w-[260px] 2xl:w-[340px] ${innerClass}`}
                 >
                   <Search size={17} strokeWidth={2.1} className={mutedClass} aria-hidden="true" />
                   <input
                     id="dashboard-search"
-                    aria-label="Cari queue, warga, atau modul"
+                    aria-label="Cari antrean, warga, atau modul"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Cari queue, warga, modul"
+                    placeholder="Cari antrean, warga, modul"
                     className="min-w-0 flex-1 bg-transparent text-sm font-normal outline-none placeholder:text-current/45"
                   />
                 </label>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex shrink-0 flex-nowrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={openTour}
+                    onClick={() => {
+                      setActiveView("lumbung-data");
+                    }}
                     className="inline-flex items-center gap-2 rounded-[4px] bg-[#C92A2A] px-3 py-2 text-xs font-black text-[#FFE5E2] focus-visible:lb-focus"
                     aria-label="Buka verifikasi data"
                     title="Verifikasi data"
                   >
                     <CheckCircle2 size={16} strokeWidth={2.2} aria-hidden="true" />
-                    <span className="hidden sm:inline">Verifikasi Data</span>
+                    <span className="hidden sm:inline">Meja Verifikasi</span>
                   </button>
                   <button
                     type="button"
@@ -1619,7 +1681,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                         setNotificationsOpen(false);
                       }}
                       data-tour="operator-profile"
-                      className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#D79A2B] bg-[#42302E] focus-visible:lb-focus"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#D79A2B] bg-[#42302E] focus-visible:lb-focus"
                       aria-label={`${user.fullName}, buka menu profil`}
                       aria-expanded={profileOpen}
                       aria-haspopup="menu"
@@ -1716,15 +1778,15 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 panelClass={panelClass}
                 innerClass={innerClass}
                 mutedClass={mutedClass}
-                kind={dataStatus === "scope" ? "scope" : dataStatus === "setup" ? "database" : "error"}
+                kind={dataStatus === "scope" ? "scope" : dataStatus === "setup" ? "operational-data" : "error"}
                 message={dataError}
                 onRetry={loadDashboard}
               />
             ) : dataStatus === "loading" ? (
               <section className={`rounded-[16px] border p-5 ${panelClass}`}>
-                <p className="text-xl font-black">Memuat data Postgres</p>
+                <p className="text-xl font-black">Memuat data operasional</p>
                 <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
-                  Dashboard membaca data dari `/api/dashboard`.
+                  Dashboard sedang menyiapkan ringkasan koperasi, antrean kerja, stok, buyer, dan laporan.
                 </p>
               </section>
             ) : activeView === "overview" ? (
@@ -1902,7 +1964,7 @@ function ManagedTablePanel<T>({
   filters = [],
   filterLabel = "Filter",
   emptyTitle = "Belum ada data.",
-  emptyBody = "Endpoint belum mengirim baris untuk tabel ini.",
+  emptyBody = "Data untuk tabel ini belum tersedia.",
   pageSize = 6,
   tableMinWidth = 760,
   className = "",
@@ -2073,6 +2135,106 @@ function ManagedTablePanel<T>({
   );
 }
 
+type MiniChartDatum = {
+  label: string;
+  value: number;
+  note?: string;
+  color?: string;
+};
+
+function MiniBarChart({
+  title,
+  data,
+  mutedClass,
+  innerClass,
+  valueFormatter = formatInteger,
+}: {
+  title: string;
+  data: MiniChartDatum[];
+  mutedClass: string;
+  innerClass: string;
+  valueFormatter?: (value: number) => string;
+}) {
+  const max = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <section className={`rounded-[14px] border p-4 ${innerClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-black">{title}</h3>
+        <BarChart3 size={16} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
+      </div>
+      <div className="mt-4 space-y-3">
+        {data.length ? (
+          data.map((item) => {
+            const pct = Math.max(4, Math.round((item.value / max) * 100));
+            return (
+              <div key={item.label} className="grid gap-1.5">
+                <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                  <span className="min-w-0 truncate">{item.label}</span>
+                  <span className="font-mono">{valueFormatter(item.value)}</span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-black/10">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{ width: `${pct}%`, backgroundColor: item.color ?? "#D79A2B" }}
+                  />
+                </div>
+                {item.note ? <p className={`text-[11px] font-semibold ${mutedClass}`}>{item.note}</p> : null}
+              </div>
+            );
+          })
+        ) : (
+          <p className={`text-sm font-semibold ${mutedClass}`}>Grafik belum tersedia.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RingMetric({
+  label,
+  value,
+  max,
+  note,
+  mutedClass,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  note: string;
+  mutedClass: string;
+}) {
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const ratio = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
+
+  return (
+    <div className="flex items-center gap-3">
+      <svg viewBox="0 0 88 88" className="h-20 w-20 shrink-0" aria-hidden="true">
+        <circle cx="44" cy="44" r={radius} fill="none" stroke="rgba(215,154,43,0.18)" strokeWidth="9" />
+        <circle
+          cx="44"
+          cy="44"
+          r={radius}
+          fill="none"
+          stroke="#D79A2B"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference * ratio} ${circumference}`}
+          transform="rotate(-90 44 44)"
+        />
+        <text x="44" y="48" textAnchor="middle" className="fill-current font-mono text-[15px] font-black">
+          {formatInteger(value)}
+        </text>
+      </svg>
+      <div className="min-w-0">
+        <p className="text-sm font-black">{label}</p>
+        <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{note}</p>
+      </div>
+    </div>
+  );
+}
+
 function signalSpineText(
   item: SignalSpineItem | null | undefined,
   keys: Array<keyof SignalSpineItem>,
@@ -2080,9 +2242,9 @@ function signalSpineText(
 ) {
   for (const key of keys) {
     const value = item?.[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim()) return publicSetupMessage(value, "Sumber eksplorasi terbatas");
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
-    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "boolean") return value ? "Ya" : "Tidak";
   }
   return fallback;
 }
@@ -2144,82 +2306,82 @@ function SignalSpineCompactPanel({
   const cooperativeHealthGate = signalSpine?.cooperativeHealthGate ?? null;
   const boundarySentence =
     signalSpine?.boundarySentence ??
-    "Boundary: aggregate demo evidence only; no personal fields, no named buyer, and no live connector claim.";
+    "Batas alur: hanya bukti agregat, tanpa data pribadi, tanpa buyer bernama, dan tanpa klaim koneksi live.";
   const statusLabel =
     signalSpineStatus === "ready"
-      ? "Ready"
+      ? "Siap"
       : signalSpineStatus === "loading"
-        ? "Checking"
+        ? "Memuat"
         : signalSpineStatus === "unavailable"
-          ? "Setup"
-          : "Error";
+          ? "Perlu aktivasi"
+          : "Perlu cek";
   const statusCopy =
     signalSpineStatus === "loading"
-      ? "Memuat /api/hackathon/signal-spine tanpa memblokir panel evidence lain."
+      ? "Memuat sumber bukti tanpa memblokir panel bukti lain."
       : signalSpineStatus === "unavailable"
-        ? signalSpineError || "Endpoint signal spine belum tersedia atau env masih gated."
-        : signalSpineStatus === "error"
-          ? signalSpineError || "Endpoint signal spine gagal dimuat."
-          : boundarySentence;
+        ? publicSetupMessage(signalSpineError, "Guardrail keputusan belum aktif di server ini.")
+      : signalSpineStatus === "error"
+          ? publicSetupMessage(signalSpineError, "Guardrail keputusan gagal dimuat.")
+          : publicSetupMessage(boundarySentence, "Batas alur: hanya bukti agregat, tanpa data pribadi, tanpa buyer bernama, dan tanpa klaim koneksi live.");
   const summaryCards = [
     {
-      label: "Signal families",
+      label: "Kelompok sinyal",
       value: formatInteger(signalFamilies.length),
-      note: signalSpineListSummary(signalFamilies, "Menunggu payload family aggregate."),
+      note: signalSpineListSummary(signalFamilies, "Menunggu ringkasan kelompok sinyal."),
     },
     {
-      label: "Provenance ledger",
+      label: "Jejak sumber",
       value: formatInteger(provenanceLedger.length),
-      note: signalSpineListSummary(provenanceLedger, "Sumber evidence belum dikirim endpoint."),
+      note: signalSpineListSummary(provenanceLedger, "Sumber bukti belum tersedia."),
     },
     {
-      label: "Readiness gate",
-      value: ready ? signalSpineStatusText(readinessGate, "Ready") : statusLabel,
-      note: signalSpineNote(readinessGate, "Gate hanya menandai readiness, bukan approval otomatis."),
+      label: "Gerbang kesiapan",
+      value: ready ? signalSpineStatusText(readinessGate, "Siap") : statusLabel,
+      note: signalSpineNote(readinessGate, "Gerbang hanya menandai kesiapan, bukan persetujuan otomatis."),
     },
     {
-      label: "Offer pack draft",
-      value: signalSpineStatusText(offerPackDraft, ready ? "Draft gated" : statusLabel),
+      label: "Draft paket penawaran",
+      value: signalSpineStatusText(offerPackDraft, ready ? "Draft ditahan" : statusLabel),
       note: "Draft tetap butuh review operator; tidak menampilkan buyer bernama.",
     },
     {
-      label: "Connector scorecard",
+      label: "Kartu koneksi",
       value: formatInteger(connectorScorecard.length),
-      note: "Readiness-only; tidak mengklaim integrasi live.",
+      note: "Hanya kesiapan; tidak mengklaim integrasi live.",
     },
     {
-      label: "Demo fixture",
-      value: signalSpine?.demoFixture ? "Available" : ready ? "Missing" : statusLabel,
-      note: "Fixture sample tidak ditampilkan sebagai aktor nyata.",
+      label: "Contoh alur",
+      value: signalSpine?.demoFixture ? "Tersedia" : ready ? "Belum ada" : statusLabel,
+      note: "Sampel alur tidak ditampilkan sebagai aktor nyata.",
     },
   ];
   const gateRows = [
     {
-      label: "Working capital",
-      value: signalSpineStatusText(workingCapitalScenario, ready ? "Scenario pending" : statusLabel),
-      note: signalSpineNote(workingCapitalScenario, "Scenario aggregate; bukan keputusan pembiayaan."),
+      label: "Modal kerja",
+      value: signalSpineStatusText(workingCapitalScenario, ready ? "Skenario menunggu" : statusLabel),
+      note: signalSpineNote(workingCapitalScenario, "Skenario agregat; bukan keputusan pembiayaan."),
     },
     {
-      label: "Cooperative health",
-      value: signalSpineStatusText(cooperativeHealthGate, ready ? "Gate pending" : statusLabel),
+      label: "Kesehatan koperasi",
+      value: signalSpineStatusText(cooperativeHealthGate, ready ? "Gate menunggu" : statusLabel),
       note: signalSpineNote(cooperativeHealthGate, "Health gate adalah early warning, bukan audit final."),
     },
     {
-      label: "Role matrix",
-      value: `${formatInteger(rolePermissionMatrix.length)} roles`,
-      note: signalSpineListSummary(rolePermissionMatrix, "Role permission matrix belum tersedia."),
+      label: "Matriks akses",
+      value: `${formatInteger(rolePermissionMatrix.length)} peran`,
+      note: signalSpineListSummary(rolePermissionMatrix, "Matriks akses belum tersedia."),
     },
   ];
   const queueRows = [
     ...managerActionQueue.slice(0, 2).map((item, index) => ({
-      label: signalSpineLabel(item, `Manager action ${index + 1}`),
+      label: signalSpineLabel(item, `Aksi manager ${index + 1}`),
       value: signalSpineStatusText(item, "Review"),
-      note: signalSpineNote(item, "Masuk queue manager untuk review manusia."),
+      note: signalSpineNote(item, "Masuk antrean manager untuk review manusia."),
     })),
     ...remediationPlanner.slice(0, 2).map((item, index) => ({
-      label: signalSpineLabel(item, `Remediation ${index + 1}`),
-      value: signalSpineStatusText(item, "Plan"),
-      note: signalSpineNote(item, "Perbaikan data sebelum klaim evidence."),
+      label: signalSpineLabel(item, `Perbaikan ${index + 1}`),
+      value: signalSpineStatusText(item, "Rencana"),
+      note: signalSpineNote(item, "Perbaikan data sebelum klaim bukti."),
     })),
   ];
   const containerClass = embedded
@@ -2230,8 +2392,8 @@ function SignalSpineCompactPanel({
     <section className={containerClass}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Signal spine backlog 29-46</p>
-          <h2 className="mt-2 text-xl font-black">Readiness, provenance, and manager actions.</h2>
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Guardrail keputusan</p>
+          <h2 className="mt-2 text-xl font-black">Kesiapan, jejak sumber, dan aksi manager.</h2>
           <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>{statusCopy}</p>
         </div>
         <StatusBadge tone={signalSpineBadgeTone(signalSpineStatus)}>{statusLabel}</StatusBadge>
@@ -2261,9 +2423,9 @@ function SignalSpineCompactPanel({
         </div>
         <div className={`rounded-[12px] border p-3 ${innerClass}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-black">Manager queue and remediation planner</p>
+            <p className="text-sm font-black">Antrean manager dan rencana perbaikan</p>
             <span className="font-mono text-xs font-black text-[#D79A2B]">
-              {formatInteger(managerActionQueue.length)} actions / {formatInteger(remediationPlanner.length)} plans
+              {formatInteger(managerActionQueue.length)} aksi / {formatInteger(remediationPlanner.length)} rencana
             </span>
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -2278,8 +2440,8 @@ function SignalSpineCompactPanel({
             ) : (
               <p className={`md:col-span-2 text-sm font-semibold leading-6 ${mutedClass}`}>
                 {ready
-                  ? "Endpoint belum mengirim managerActionQueue atau remediationPlanner."
-                  : "Queue akan muncul setelah endpoint signal spine tersedia."}
+                  ? "Antrean aksi belum tersedia di ringkasan bukti."
+                  : "Antrean akan muncul setelah guardrail keputusan aktif."}
               </p>
             )}
           </div>
@@ -2311,7 +2473,7 @@ function DashboardOnboardingTour({
     height: number;
     panelTop: number;
     panelLeft: number;
-    line: { x1: number; y1: number; x2: number; y2: number } | null;
+    connector: { d: string; targetX: number; targetY: number; panelX: number; panelY: number } | null;
   } | null>(null);
 
   const step = steps[index];
@@ -2329,7 +2491,7 @@ function DashboardOnboardingTour({
           height: 0,
           panelTop: Math.max(24, window.innerHeight / 2 - 150),
           panelLeft: Math.max(16, window.innerWidth / 2 - 190),
-          line: null,
+          connector: null,
         });
         return;
       }
@@ -2354,10 +2516,16 @@ function DashboardOnboardingTour({
               Math.max(16, rect.top + rect.height / 2 - 132),
               Math.max(16, window.innerHeight - 290),
             );
-        const x1 = rect.left + rect.width / 2;
-        const y1 = rect.top + rect.height / 2;
-        const x2 = panelLeft + panelWidth / 2;
-        const y2 = panelTop + 28;
+        const targetOnRight = panelLeft > rect.left;
+        const targetX = targetOnRight ? rect.right + margin : rect.left - margin;
+        const targetY = Math.min(Math.max(panelTop + 34, rect.top + 16), rect.bottom - 16);
+        const panelX = targetOnRight ? panelLeft : panelLeft + panelWidth;
+        const panelY = panelTop + 38;
+        const bend = Math.max(36, Math.min(88, Math.abs(panelX - targetX) * 0.38));
+        const controlA = targetOnRight ? targetX + bend : targetX - bend;
+        const controlB = targetOnRight ? panelX - bend : panelX + bend;
+        const midY = targetY + (panelY - targetY) * 0.42;
+        const d = `M ${targetX} ${targetY} C ${controlA} ${targetY}, ${controlA} ${midY}, ${targetX + (panelX - targetX) / 2} ${midY} S ${controlB} ${panelY}, ${panelX} ${panelY}`;
 
         setGeometry({
           top: Math.max(4, rect.top - margin),
@@ -2366,7 +2534,7 @@ function DashboardOnboardingTour({
           height: rect.height + margin * 2,
           panelTop,
           panelLeft,
-          line: mobile ? null : { x1, y1, x2, y2 },
+          connector: mobile ? null : { d, targetX, targetY, panelX, panelY },
         });
       }, 280);
     }
@@ -2398,18 +2566,19 @@ function DashboardOnboardingTour({
           }}
         />
       ) : null}
-      {geometry.line ? (
+      {geometry.connector ? (
         <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
-          <line
-            x1={geometry.line.x1}
-            y1={geometry.line.y1}
-            x2={geometry.line.x2}
-            y2={geometry.line.y2}
+          <path
+            d={geometry.connector.d}
+            fill="none"
             stroke="#D79A2B"
-            strokeWidth="2"
-            strokeDasharray="6 6"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeDasharray="7 7"
             opacity="0.85"
           />
+          <circle cx={geometry.connector.targetX} cy={geometry.connector.targetY} r="4.5" fill="#D79A2B" />
+          <circle cx={geometry.connector.panelX} cy={geometry.connector.panelY} r="4.5" fill="#D79A2B" />
         </svg>
       ) : null}
       <section
@@ -2587,46 +2756,48 @@ function SetupRequiredView({
   kind,
   message,
   onRetry,
-}: ViewClassProps & { kind: "database" | "scope" | "error"; message: string; onRetry: () => void }) {
+}: ViewClassProps & { kind: "operational-data" | "scope" | "error"; message: string; onRetry: () => void }) {
   const isScope = kind === "scope";
-  const isDatabase = kind === "database";
+  const isOperationalData = kind === "operational-data";
 
   return (
     <section className={`rounded-[16px] border p-5 ${panelClass}`}>
       <p className="text-sm font-black text-[#D79A2B]">
-        {isDatabase ? "Postgres diperlukan" : isScope ? "Workspace koperasi diperlukan" : "Dashboard belum siap"}
+        {isOperationalData ? "Data operasional belum aktif" : isScope ? "Workspace koperasi diperlukan" : "Dashboard belum siap"}
       </p>
       <h2 className="mt-2 text-2xl font-black">
-        {isDatabase
-          ? "Dashboard menunggu database produksi lokal."
+        {isOperationalData
+          ? "Dashboard menunggu data operasional aplikasi."
           : isScope
-            ? "User login belum tersambung ke cooperative_id."
+            ? "Akun login belum tersambung ke workspace koperasi."
             : "Dashboard belum berhasil memuat data operasional."}
       </h2>
       <p className={`mt-3 max-w-3xl text-sm font-semibold leading-6 ${mutedClass}`}>
-        {message ||
-          (isDatabase
-            ? "Isi DATABASE_URL, jalankan migrasi, lalu muat ulang dashboard."
+        {publicSetupMessage(
+          message,
+          (isOperationalData
+            ? "Hubungi operator teknis untuk mengaktifkan data operasional, lalu muat ulang dashboard."
             : isScope
-              ? "Logout lalu login ulang agar sesi lama diperbarui, atau cek data users.cooperative_id untuk akun demo."
-              : "Cek koneksi API dashboard lalu muat ulang.")}
+              ? "Logout lalu login ulang agar sesi lama diperbarui, atau minta operator teknis menghubungkan akun operator ke koperasi."
+              : "Cek koneksi API dashboard lalu muat ulang."),
+        )}
       </p>
       <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-        <p className="font-black">{isScope ? "Langkah cepat scope" : "Langkah cepat"}</p>
+        <p className="font-black">{isScope ? "Langkah cepat workspace" : "Langkah cepat"}</p>
         <ol className={`mt-3 list-decimal space-y-2 pl-5 text-sm font-semibold leading-6 ${mutedClass}`}>
           {isScope ? (
             <>
-              <li>Tekan logout di kanan atas atau buka `/login` untuk membuat sesi baru.</li>
-              <li>Pastikan akun demo adalah admin yang dikonfigurasi di environment server.</li>
-              <li>Jalankan `npm run db:setup` bila cooperative seed belum ada.</li>
-              <li>Dashboard akan self-heal akun admin demo lama ke koperasi default saat seed tersedia.</li>
+              <li>Tekan logout di kanan atas, lalu masuk kembali dari halaman login.</li>
+              <li>Pastikan akun operator terdaftar sebagai operator koperasi.</li>
+              <li>Minta operator teknis mengaktifkan data awal jika workspace belum muncul.</li>
+              <li>Setelah workspace aktif, dashboard akan menampilkan antrean, stok, kesiapan buyer, dan laporan.</li>
             </>
           ) : (
             <>
-              <li>Jalankan Postgres lokal atau gunakan Neon/Supabase.</li>
-              <li>Isi `DATABASE_URL` di `.env.local` root repo.</li>
-              <li>Jalankan `npm run db:setup` dari root repo.</li>
-              <li>Restart `npm run dev` lalu buka dashboard lagi.</li>
+              <li>Pastikan layanan data operasional aplikasi aktif.</li>
+              <li>Aktifkan struktur data dan data awal dari server aplikasi.</li>
+              <li>Pastikan akun operator terhubung ke koperasi yang sama.</li>
+              <li>Muat ulang dashboard setelah aktivasi selesai.</li>
             </>
           )}
         </ol>
@@ -2636,7 +2807,7 @@ function SetupRequiredView({
         onClick={onRetry}
         className="mt-5 inline-flex rounded-[12px] bg-[#C92A2A] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
       >
-        {isScope ? "Cek ulang scope" : "Cek ulang koneksi"}
+        {isScope ? "Cek ulang workspace" : "Cek ulang data"}
       </button>
     </section>
   );
@@ -2659,7 +2830,7 @@ function GuidedDemoDock({
       aria-label="Fixed MVP flow indicator"
     >
       <span className="whitespace-nowrap rounded-[8px] bg-[#C92A2A] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#FFF8EA]">
-        Flow MVP
+        Alur MVP
       </span>
       <div className="flex min-w-0 items-center gap-1">
         {demoFlowSteps.map((step, index) => (
@@ -2696,10 +2867,10 @@ function DashboardWelcomePanel({
   onOpenView: (view: string) => void;
 }) {
   const highlights = [
-    ["MVP flow", "Dashboard, peta, score, buyer, finance, dan laporan tetap berurutan untuk demo."],
-    ["Data safety", "Sample/aggregate only; tidak menampilkan PII atau buyer bernama sebagai fakta."],
-    ["Human review", "AI membuat rekomendasi, operator dan pengurus mengunci keputusan."],
-    ["Evidence tables", "Queue, stok, buyer, finance, ledger, dan media evidence bisa dicari, difilter, dan dipaginasi."],
+    ["Alur MVP", "Peta Potensi -> Rekomendasi Produk -> Buyer Awal -> Stok/Kesiapan -> Laporan Aksi."],
+    ["Data aman", "Hanya sampel dan agregat; tidak menampilkan data pribadi atau buyer bernama sebagai fakta."],
+    ["Review manusia", "AI membantu rekomendasi, operator dan pengurus mengunci keputusan."],
+    ["Tabel kerja", "Antrean, stok, buyer, pembiayaan, ledger, dan bukti media bisa dicari, difilter, dan dipaginasi."],
   ];
 
   return (
@@ -2707,15 +2878,15 @@ function DashboardWelcomePanel({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">
-            Welcome onboarding
+            Onboarding kerja
           </p>
           <h2 className="mt-2 text-2xl font-black">Mulai dari alur MVP, bukan angka palsu.</h2>
           <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
-            Panel ini menjaga demo pertama tetap pada jalur operasional: verifikasi data, readiness stok, buyer archetype, pembiayaan komite, dan laporan aksi.
+            Panel ini menjaga alur pertama tetap jelas: mulai dari peta potensi, pilih rekomendasi produk, cocokkan tipe buyer, cek stok/kesiapan, lalu tutup dengan laporan aksi.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={systemStatus === "Postgres Operational" ? "success" : "warning"}>{systemStatus}</StatusBadge>
+          <StatusBadge tone={systemStatus === "Data operasional siap" ? "success" : "warning"}>{systemStatus}</StatusBadge>
           <button
             type="button"
             onClick={onDismiss}
@@ -2845,31 +3016,23 @@ function OverviewView({
   const visibleMetrics = metrics.slice(0, 4);
   const systemStatus =
     prefixedDbStatus?.status === "ready"
-      ? "Postgres Operational"
+      ? "Data operasional siap"
       : prefixedDbStatus
-        ? "Setup Required"
-        : "Postgres Checking";
-  const systemReady = systemStatus === "Postgres Operational";
+        ? "Perlu aktivasi"
+        : "Cek data operasional";
+  const systemReady = systemStatus === "Data operasional siap";
   const topCommodity = commodityHighlights[0];
   const secondCommodity = commodityHighlights[1];
   const recentBuyer = buyers[0];
   const recentReport = reports[0];
   const systemFeed = [
     recentBuyer
-      ? `Matching readiness: ${buyerEvidenceLabel(recentBuyer)}`
-      : "Buyer matching menunggu requirement terverifikasi.",
+      ? `Kesiapan kecocokan: ${buyerEvidenceLabel(recentBuyer)}`
+      : "Kecocokan buyer menunggu syarat terverifikasi.",
     recentReport
       ? `Laporan aksi: ${recentReport.title}`
       : "Laporan aksi belum difinalkan.",
   ];
-  const hackathonPayloads = [
-    hackathonSummary,
-    hackathonDataQuality,
-    hackathonOpportunityScores,
-    hackathonBuyerMatching,
-    hackathonFinancingReadiness,
-  ];
-  const hackathonReadyCount = hackathonPayloads.filter(Boolean).length;
   const qualityIssueCount =
     hackathonDataQuality?.checks.reduce(
       (sum, check) =>
@@ -2896,74 +3059,77 @@ function OverviewView({
     : 0;
   const dashboardSharedDbStatus =
     hackathonSharedDb?.status === "ready"
-      ? `${formatInteger(dashboardSharedDbRowCount)} aggregate rows`
+      ? `${formatInteger(dashboardSharedDbRowCount)} ringkasan`
       : hackathonSharedDb?.status === "setup-required"
-        ? "env missing"
+        ? "perlu aktivasi"
         : hackathonSharedDb?.status === "query-error"
           ? dashboardSharedDbRowCount > 0
-            ? `${formatInteger(dashboardSharedDbRowCount)} partial rows`
-            : "query check"
-          : "auth gated";
+            ? `${formatInteger(dashboardSharedDbRowCount)} ringkasan parsial`
+            : "perlu cek"
+          : "butuh login";
   const evidenceCards = [
     {
-      label: "/api/dashboard",
-      value: `${formatInteger(filteredQueue.length)} queue`,
-      detail: `${formatInteger(stockLedger.length)} ledger, ${formatInteger(mediaEvidence.length)} media evidence, ${formatInteger(buyerRequirements.length)} buyer requirements`,
-      source: prefixedDbStatus ? `${readyPrefixedTables}/${prefixedDbStatus.tables.length} prefixed tables ready` : "prefixed table status belum tersedia",
+      label: "Data operasional",
+      value: `${formatInteger(filteredQueue.length)} antrean`,
+      detail: `${formatInteger(stockLedger.length)} catatan stok, ${formatInteger(mediaEvidence.length)} bukti media, ${formatInteger(buyerRequirements.length)} kebutuhan buyer`,
+      source: prefixedDbStatus ? `${readyPrefixedTables}/${prefixedDbStatus.tables.length} tabel data tim siap` : "status tabel data tim belum tersedia",
       toneClass: "text-[#88D982]",
     },
     {
-      label: "/api/dashboard shared-db",
+      label: "Agregat eksplorasi",
       value: dashboardSharedDbStatus,
       detail:
         hackathonSharedDb?.status === "ready"
           ? `${formatInteger(hackathonSharedDb.tables.productRows.length)} produk, ${formatInteger(hackathonSharedDb.tables.areaRows.length)} area, ${formatInteger(hackathonSharedDb.tables.financingRows.length)} pembiayaan, ${formatInteger(hackathonSharedDb.tables.transactionRows.length)} transaksi`
-          : hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB aggregate belum tersedia.",
-      source: `prefix ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`,
+          : publicSetupMessage(
+              hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message,
+              "Agregat eksplorasi belum aktif di server ini.",
+            ),
+      source: `ID tim ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`,
       toneClass: hackathonSharedDb?.status === "ready" ? "text-[#88D982]" : "text-[#D79A2B]",
     },
     {
-      label: "/api/hackathon/*",
+      label: "Bukti eksplorasi",
       value:
         hackathonStatus === "ready"
-          ? `${hackathonReadyCount}/5 endpoints`
-          : hackathonStatus === "partial"
-            ? `${hackathonReadyCount}/5 endpoints`
+          ? "Lengkap"
+        : hackathonStatus === "partial"
+            ? "Sebagian siap"
             : hackathonStatus === "loading"
-            ? "loading"
-            : "blocked",
+            ? "Memuat"
+            : "Perlu cek",
       detail:
         hackathonStatus === "ready" || hackathonStatus === "partial"
-          ? `${formatInteger(hackathonSummary?.coverage?.totalVillages ?? 0)} wilayah sample, ${formatInteger(hackathonSummary?.coverage?.commodityAreas ?? 0)} area komoditas`
-          : hackathonError || "Tidak ada fallback angka demo.",
-      source: "read-only aggregate evidence",
+          ? `${formatInteger(hackathonSummary?.coverage?.totalVillages ?? 0)} wilayah sampel, ${formatInteger(hackathonSummary?.coverage?.commodityAreas ?? 0)} area komoditas`
+          : hackathonError || "Tidak ada angka rekaan.",
+      source: "agregat terbatas",
       toneClass: hackathonStatus === "ready" ? "text-[#88D982]" : "text-[#D79A2B]",
     },
     {
-      label: "Data-quality gate",
-      value: `${formatInteger(qualityIssueCount)} warnings`,
+      label: "Kualitas data",
+      value: `${formatInteger(qualityIssueCount)} catatan`,
       detail: hackathonDataQuality
-        ? `${formatInteger(hackathonDataQuality.checks.length)} table checks dari endpoint data-quality`
-        : "Data-quality belum mengirim payload.",
-      source: "missing key, completeness, quality risk",
+        ? `${formatInteger(hackathonDataQuality.checks.length)} kelompok data dicek`
+        : "Kualitas data belum mengirim ringkasan.",
+      source: "kunci hilang, kelengkapan, risiko kualitas",
       toneClass: qualityIssueCount > 0 ? "text-[#D79A2B]" : "text-[#88D982]",
     },
     {
-      label: "Financing readiness",
+      label: "Kesiapan pembiayaan",
       value: financingTotals
-        ? `${formatPercentRatio(financingTotals.verificationRate)} verified`
+        ? `${formatPercentRatio(financingTotals.verificationRate)} terverifikasi`
         : "n/a",
       detail: financingTotals
-        ? `${formatInteger(financingTotals.totalRequests)} aggregate requests, ${formatRupiah(financingTotals.totalAmount)} total amount`
-        : "Endpoint readiness belum mengirim aggregate.",
-      source: "readiness only; bukan approval",
+        ? `${formatInteger(financingTotals.totalRequests)} pengajuan agregat, ${formatRupiah(financingTotals.totalAmount)} total nilai`
+        : "Kesiapan pembiayaan belum mengirim agregat.",
+      source: "kesiapan saja; bukan persetujuan",
       toneClass: "text-[#80CFFF]",
     },
   ];
   const commandFacts = [
-    ["Top opportunity", topOpportunityLabel, topOpportunityArea ? `Score ${topOpportunityArea.score}` : "Menunggu endpoint opportunity-scores"],
-    ["Buyer archetype", `${formatInteger(hackathonBuyerMatching?.matches.length ?? 0)} matches`, "Bukan named buyer atau PII"],
-    ["Evidence media", `${formatInteger(mediaEvidence.length)} metadata`, "Label redacted dari /api/dashboard"],
+    ["Peluang utama", topOpportunityLabel, topOpportunityArea ? `Skor ${topOpportunityArea.score}` : "Menunggu skor peluang"],
+    ["Tipe buyer", `${formatInteger(hackathonBuyerMatching?.matches.length ?? 0)} kandidat`, "Bukan buyer bernama atau PII"],
+    ["Bukti media", `${formatInteger(mediaEvidence.length)} metadata`, "Label sudah disaring dari data operasional"],
   ];
   const pendingQueueCount = filteredQueue.filter((item) => item.status !== "Sudah Disetujui").length;
   const approvedQueueCount = filteredQueue.length - pendingQueueCount;
@@ -2974,119 +3140,119 @@ function OverviewView({
   const topProvinceOpportunity = hackathonSummary?.provinceOpportunities[0] ?? null;
   const managerCommandRows = [
     {
-      label: "Sales/POS signal",
-      value: topProvinceOpportunity ? formatInteger(topProvinceOpportunity.transactions) : "Env gated",
-      note: "Aggregate transaction signal only; no customer detail.",
-      action: "Use as local demand signal, not national demand claim.",
+      label: "Sinyal penjualan",
+      value: topProvinceOpportunity ? formatInteger(topProvinceOpportunity.transactions) : "Perlu aktivasi",
+      note: "Sinyal transaksi agregat saja; tidak ada detail pelanggan.",
+      action: "Pakai sebagai sinyal permintaan lokal, bukan klaim permintaan nasional.",
     },
     {
-      label: "Inventory readiness",
-      value: `${formatInteger(criticalStockCount)} gaps`,
-      note: "Negative, limited, draft, generic, or missing grade data needs verification.",
-      action: "Assign admin gudang to validate stock and unit.",
+      label: "Kesiapan stok",
+      value: `${formatInteger(criticalStockCount)} celah`,
+      note: "Stok negatif, terbatas, draft, generik, atau belum punya grade perlu verifikasi.",
+      action: "Tugaskan admin gudang memvalidasi stok dan satuan.",
     },
     {
-      label: "Delivery readiness",
-      value: `${formatInteger(stockLedger.length)} ledger rows`,
-      note: "Pickup, courier, and proof-of-delivery stay workflow stages.",
-      action: "Confirm warehouse location and courier before buyer outreach.",
+      label: "Kesiapan distribusi",
+      value: `${formatInteger(stockLedger.length)} catatan`,
+      note: "Pickup, kurir, dan bukti pengiriman tetap menjadi tahapan kerja.",
+      action: "Pastikan gudang dan kurir sebelum kontak buyer.",
     },
     {
-      label: "Buyer outreach",
-      value: `${formatInteger(buyerNeedsReviewCount)} need review`,
-      note: "All matches are buyer archetypes until verified buyer data exists.",
-      action: "Approve script only after grade, volume, packaging, and price check.",
+      label: "Aksi buyer",
+      value: `${formatInteger(buyerNeedsReviewCount)} perlu review`,
+      note: "Semua match tetap berupa tipe buyer sampai data buyer terverifikasi tersedia.",
+      action: "Setujui script setelah grade, volume, kemasan, dan harga dicek.",
     },
     {
-      label: "Financing health",
-      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} verified` : "Env gated",
-      note: "Aggregate readiness only, never automatic approval.",
-      action: "Send incomplete cases to pengurus or committee review.",
+      label: "Kesiapan pembiayaan",
+      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} terverifikasi` : "Perlu aktivasi",
+      note: "Hanya kesiapan agregat, tidak pernah menjadi persetujuan otomatis.",
+      action: "Kirim kasus tidak lengkap ke pengurus atau komite.",
     },
     {
-      label: "Data quality alerts",
-      value: `${formatInteger(qualityIssueCount)} warnings`,
-      note: "Bad data becomes needs verification, not confident recommendation.",
-      action: "Ask operator for missing source, document, or field.",
+      label: "Catatan kualitas data",
+      value: `${formatInteger(qualityIssueCount)} catatan`,
+      note: "Data lemah menjadi perlu verifikasi, bukan rekomendasi percaya diri.",
+      action: "Minta operator melengkapi sumber, dokumen, atau field.",
     },
   ];
   const simkopdesChecklistRows = simkopdesReadinessChecklist.map((item, index) => {
     const status =
       index === 0
         ? stocks.length > 0
-          ? `${formatInteger(stocks.length)} stock rows`
+          ? `${formatInteger(stocks.length)} catatan stok`
           : "Checklist"
         : index === 1
           ? topOpportunityArea
-            ? "Linked"
-            : "Needs source"
+            ? "Terhubung"
+            : "Butuh sumber"
           : index === 3
             ? stockLedger.length > 0
               ? `${formatInteger(stockLedger.length)} ledger`
-              : "Workflow"
+              : "Alur kerja"
             : index === 6
               ? mediaEvidence.length > 0
-                ? `${formatInteger(mediaEvidence.length)} evidence`
-                : "Needs proof"
+                ? `${formatInteger(mediaEvidence.length)} bukti`
+                : "Butuh bukti"
               : "Review";
     return { item, status };
   });
   const approvalCounts = [
-    { label: "Recommended", value: formatInteger(buyers.length + (hackathonBuyerMatching?.matches.length ?? 0)) },
-    { label: "Needs verification", value: formatInteger(pendingQueueCount + buyerNeedsReviewCount + criticalStockCount) },
-    { label: "Approved", value: formatInteger(approvedQueueCount + buyers.filter((item) => item.status.toLowerCase().includes("setuju")).length) },
+    { label: "Direkomendasikan", value: formatInteger(buyers.length + (hackathonBuyerMatching?.matches.length ?? 0)) },
+    { label: "Perlu verifikasi", value: formatInteger(pendingQueueCount + buyerNeedsReviewCount + criticalStockCount) },
+    { label: "Disetujui", value: formatInteger(approvedQueueCount + buyers.filter((item) => item.status.toLowerCase().includes("setuju")).length) },
   ];
   const analystRows = [
     {
-      label: "Health score koperasi",
-      value: financingTotals ? (financingTotals.verificationRate && financingTotals.verificationRate > 0.25 ? "Sehat terbatas" : "Perlu perhatian") : "Needs verification",
+      label: "Kesehatan koperasi",
+      value: financingTotals ? (financingTotals.verificationRate && financingTotals.verificationRate > 0.25 ? "Sehat terbatas" : "Perlu perhatian") : "Perlu verifikasi",
       note: financingTotals
-        ? `${formatInteger(financingTotals.totalRequests)} aggregate financing requests; ${formatInteger(financingTotals.verifiedRequests)} verified.`
-        : "Shared financing endpoint belum tersedia.",
+        ? `${formatInteger(financingTotals.totalRequests)} pengajuan agregat; ${formatInteger(financingTotals.verifiedRequests)} terverifikasi.`
+        : "Kesiapan pembiayaan belum tersedia.",
     },
     {
-      label: "Cashflow proxy",
-      value: topProvinceOpportunity ? `${formatInteger(topProvinceOpportunity.transactions)} POS signals` : "Source required",
-      note: "POS sample helps demand/cashflow reading, not audited financial truth.",
+      label: "Sinyal arus kas",
+      value: topProvinceOpportunity ? `${formatInteger(topProvinceOpportunity.transactions)} sinyal transaksi` : "Butuh sumber",
+      note: "Sampel transaksi membantu membaca permintaan dan arus kas, bukan kebenaran audit keuangan.",
     },
     {
-      label: "Member savings alignment",
-      value: `${formatInteger(memberSavingsAlignment.length)} mapped fields`,
-      note: "Savings status is roadmap/aggregate alignment until governed member data exists.",
+      label: "Kesesuaian simpanan anggota",
+      value: `${formatInteger(memberSavingsAlignment.length)} field dipetakan`,
+      note: "Status simpanan masih roadmap/agregat sampai data anggota governed tersedia.",
     },
   ];
   const borrowerRiskRows = [
     {
-      label: "Duplicate or inconsistent request",
-      status: finance.length > 1 ? "Check queue" : "Monitor",
-      note: "Use risk flag and missing evidence, never label a borrower as fraud.",
+      label: "Pengajuan ganda atau tidak konsisten",
+      status: finance.length > 1 ? "Cek antrean" : "Monitor",
+      note: "Gunakan flag risiko dan bukti kurang, jangan menuduh peminjam sebagai fraud.",
     },
     {
-      label: "Amount vs stock/business scale",
-      status: criticalStockCount > 0 ? "Needs verification" : "Ready for review",
-      note: "Compare request purpose with inventory and repayment plan before committee.",
+      label: "Nilai vs skala stok/usaha",
+      status: criticalStockCount > 0 ? "Perlu verifikasi" : "Siap direview",
+      note: "Bandingkan tujuan pengajuan dengan inventaris dan rencana bayar sebelum komite.",
     },
     {
-      label: "Document completeness",
-      status: qualityIssueCount > 0 ? "Missing evidence" : "Checklist ready",
-      note: "Committee must review documents before any status change.",
+      label: "Kelengkapan dokumen",
+      status: qualityIssueCount > 0 ? "Bukti kurang" : "Checklist siap",
+      note: "Komite harus review dokumen sebelum status berubah.",
     },
   ];
   const negotiationRows = [
     {
-      label: "Market reference price",
-      value: "Source required",
-      note: "Use official/curated price source or operator input; do not invent real-time price.",
+      label: "Harga referensi pasar",
+      value: "Butuh sumber",
+      note: "Gunakan sumber harga resmi/kurasi atau input operator; jangan mengarang harga real-time.",
     },
     {
-      label: "Offer/floor/target price",
-      value: buyerRequirements.length > 0 ? "Draft after requirement review" : "Waiting requirement",
-      note: "Calculate after grade, packaging, logistics, and margin minimum are known.",
+      label: "Harga penawaran/minimum/target",
+      value: buyerRequirements.length > 0 ? "Draft setelah requirement direview" : "Menunggu requirement",
+      note: "Hitung setelah grade, kemasan, logistik, dan margin minimum diketahui.",
     },
     {
-      label: "Outreach script",
-      value: buyers.length > 0 ? "Human approval required" : "No buyer archetype",
-      note: "Script can be copied, but cannot be sent without operator/pengurus approval.",
+      label: "Draft pesan buyer",
+      value: buyers.length > 0 ? "Butuh persetujuan manusia" : "Belum ada tipe buyer",
+      note: "Draft bisa disiapkan, tetapi belum boleh dikirim tanpa persetujuan operator/pengurus.",
     },
   ];
   const overviewQueueFilters = useMemo(
@@ -3186,7 +3352,7 @@ function OverviewView({
           <h2 className="mt-1 text-2xl font-black text-[#FFF8EA]">Ringkasan Operator</h2>
         </div>
         <div className="text-left lg:text-right">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#CFC3B2]/55">System Status</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#CFC3B2]/55">Status sistem</p>
           <p className={`mt-1 flex items-center gap-2 text-xs font-black ${systemReady ? "text-[#88D982]" : "text-[#D79A2B]"} lg:justify-end`}>
             <span className={`h-2 w-2 rounded-full ${systemReady ? "bg-[#88D982] shadow-[0_0_8px_#88d982]" : "bg-[#D79A2B]"}`} />
             {systemStatus}
@@ -3205,7 +3371,6 @@ function OverviewView({
           onOpenView={(view) => {
             onDismissWelcome();
             setActiveView(view);
-            setPanelMessage("Meja data dibuka dari welcome onboarding.", "info");
           }}
         />
       ) : null}
@@ -3223,7 +3388,7 @@ function OverviewView({
               <div className="mb-3 flex items-start justify-between gap-3">
                 <Icon size={19} strokeWidth={2.2} style={{ color: tone }} aria-hidden="true" />
                 <span className="rounded-[3px] bg-[#1F2933] px-2 py-1 text-[10px] font-black text-[#CFC3B2]">
-                  {kpiLabels[index] ?? "Metric"}
+                  {kpiLabels[index] ?? "Metrik"}
                 </span>
               </div>
               <h3 className="text-xs font-black text-[#CFC3B2]">{metric.label}</h3>
@@ -3242,13 +3407,13 @@ function OverviewView({
       <section className={`mt-5 rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Guided MVP Flow</p>
-            <h2 className="mt-2 text-xl font-black">Presenter path: dashboard to report.</h2>
-            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
-              Banner ini menjaga flow kerja tetap mengikuti MVP dan caveat: sample/aggregate/no PII, buyer archetype, dan human approval sebelum aksi bisnis.
-            </p>
-          </div>
-          <StatusBadge tone="service">MVP flow fixed</StatusBadge>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Alur MVP terpandu</p>
+              <h2 className="mt-2 text-xl font-black">Ikuti urutan dari peta sampai laporan aksi.</h2>
+              <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+              Banner ini menjaga alur kerja tetap mengikuti MVP: sampel/agregat tanpa PII, tipe buyer, dan persetujuan manusia sebelum aksi bisnis.
+              </p>
+            </div>
+          <StatusBadge tone="service">Urutan alur siap</StatusBadge>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-5">
           {demoFlowSteps.map((step, index) => (
@@ -3261,7 +3426,6 @@ function OverviewView({
                   return;
                 }
                 setActiveView(step.targetView);
-                setPanelMessage(`${step.label} dibuka dari guided flow.`, "info");
               }}
               className={`rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${innerClass}`}
               title={step.detail}
@@ -3281,11 +3445,11 @@ function OverviewView({
         <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Evidence board</p>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Papan bukti</p>
               <h2 className="mt-1 text-lg font-black text-[#FFF8EA]">Sumber data yang sedang dibaca</h2>
             </div>
             <span className="w-fit rounded-[4px] border border-[#26323B] bg-[#0B1013] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
-              no dummy buyer/PII
+              tanpa PII
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -3303,7 +3467,7 @@ function OverviewView({
         </article>
 
         <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
-          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Operator brief</p>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Brief operator</p>
           <div className="mt-4 space-y-3">
             {commandFacts.map(([label, value, note]) => (
               <div key={label} className="grid grid-cols-[120px_1fr] gap-3 border-b border-[#26323B] pb-3 last:border-b-0 last:pb-0">
@@ -3332,19 +3496,19 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Role & access matrix</p>
-              <h2 className="mt-2 text-xl font-black">SIMKOPDES role alignment.</h2>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Akses tim koperasi</p>
+              <h2 className="mt-2 text-xl font-black">Pembagian kerja dan review manusia.</h2>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-                Workflow mengikuti peran operasional koperasi. Connector resmi SIMKOPDES belum diaktifkan di demo ini.
+                Alur kerja mengikuti peran operasional koperasi. Konektor resmi SIMKOPDES belum diaktifkan pada presentasi ini.
               </p>
             </div>
-            <StatusBadge tone="warning">No employee PII</StatusBadge>
+            <StatusBadge tone="warning">Tanpa PII pegawai</StatusBadge>
           </div>
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-current/10">
-                  {["Role", "Surface", "Workflow", "Review"].map((heading) => (
+                  {["Peran", "Area kerja", "Alur kerja", "Review"].map((heading) => (
                     <th key={heading} className={`px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] ${mutedClass}`}>
                       {heading}
                     </th>
@@ -3368,10 +3532,10 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Manager Command Center</p>
-              <h2 className="mt-2 text-xl font-black">Aksi manager, bukan analytics pasif.</h2>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Ruang kendali manager</p>
+              <h2 className="mt-2 text-xl font-black">Aksi manager, bukan analisis pasif.</h2>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-                Small cooperative mode: satu manager bisa memantau beberapa fungsi, tetapi action tetap role-aware saat tim tumbuh.
+                Untuk presentasi, satu manager bisa memantau beberapa fungsi. Saat tim tumbuh, persetujuan tetap mengikuti pembagian kerja koperasi.
               </p>
             </div>
             <StatusBadge tone="service">Manager mode</StatusBadge>
@@ -3398,16 +3562,16 @@ function OverviewView({
             innerClass="border-[#1F2933] bg-[#111A20] text-[#F8F4EA]"
             mutedClass="text-[#CFC3B2]"
             title="Antrian Kerja Operator"
-            description="Cari, filter, dan paginasi queue dari /api/dashboard. Tampilan ini memakai ID/source, bukan data pribadi warga."
-            sourceLabel="Last update: dari API dashboard - keputusan tetap human-reviewed"
+            description="Cari, filter, dan paginasi antrean operasional. Tampilan ini memakai ID/sumber, bukan data pribadi warga."
+            sourceLabel="Sumber: data operasional dashboard - keputusan tetap direview manusia"
             rows={filteredQueue}
             columns={overviewQueueColumns}
             rowKey={(item) => item.id}
             getSearchText={(item) => [item.id, item.source, item.module, item.summary, item.status].join(" ")}
             filters={overviewQueueFilters}
             filterLabel="Status/modul"
-            emptyTitle="Belum ada queue operator."
-            emptyBody="Queue akan muncul setelah pesan warga atau input operator tersimpan."
+            emptyTitle="Belum ada antrean operator."
+            emptyBody="Antrean akan muncul setelah pesan warga atau input operator tersimpan."
             pageSize={5}
             tableMinWidth={840}
             className="min-h-[310px]"
@@ -3419,13 +3583,13 @@ function OverviewView({
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-black text-[#D79A2B]">
                 <BarChart3 size={16} strokeWidth={2.2} aria-hidden="true" />
-                Opportunity Highlight
+                Sorotan peluang
               </h2>
               <button
                 type="button"
                 onClick={async () => {
                   await reload();
-                  setPanelMessage("Intel operasional disegarkan dari /api/dashboard.", "success");
+                  setPanelMessage("Intel operasional disegarkan.", "success");
                 }}
                 className="rounded-[4px] border border-[#1F2933] p-2 text-[#CFC3B2] focus-visible:lb-focus"
                 aria-label="Segarkan intel operasional"
@@ -3461,24 +3625,24 @@ function OverviewView({
                 <div className="border-l-4 border-[#88D982] bg-[#111A20] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-black text-[#FFF8EA]">Prefixed app DB</p>
+                      <p className="font-black text-[#FFF8EA]">Tabel data tim</p>
                       <p className="mt-2 font-mono text-xs font-semibold text-[#D79A2B]">
                         {prefixedDbStatus.prefix}
                       </p>
                     </div>
                     <StatusBadge tone={prefixedDbStatus.status === "ready" ? "success" : "warning"}>
-                      {prefixedDbStatus.status === "ready" ? "Ready" : "Setup"}
+                      {prefixedDbStatus.status === "ready" ? "Siap" : "Perlu aktivasi"}
                     </StatusBadge>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-5 text-[#CFC3B2]">
-                    {prefixedDbStatus.message}
+                    {publicSetupMessage(prefixedDbStatus.message, "Status tabel data tim perlu dicek di server.")}
                   </p>
                   <div className="mt-3 grid gap-2">
                     {prefixedDbStatus.tables.slice(0, 3).map((table) => (
                       <div key={table.tableName} className="flex items-center justify-between gap-3 text-xs font-bold">
                         <span className="truncate">{table.tableName}</span>
                         <span className={table.status === "ready" ? "text-[#2F7D32]" : "text-[#C92A2A]"}>
-                          {table.status === "ready" ? `${table.rows} rows` : table.errorCode ?? "setup-required"}
+                          {table.status === "ready" ? `${table.rows} catatan` : "perlu aktivasi"}
                         </span>
                       </div>
                     ))}
@@ -3516,13 +3680,13 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">SIMKOPDES alignment</p>
-              <h2 className="mt-2 text-xl font-black">Warehouse, product, POS, logistics, and savings readiness.</h2>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Kesiapan SIMKOPDES</p>
+              <h2 className="mt-2 text-xl font-black">Gudang, produk, transaksi, logistik, dan simpanan.</h2>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-                Checklist ini menjawab apakah komoditas siap dipasarkan, bukan mengklaim stok live atau integrasi production.
+                Checklist ini menjawab apakah komoditas siap dipasarkan, bukan mengklaim stok live atau integrasi produksi.
               </p>
             </div>
-            <StatusBadge tone="review">Operational checklist</StatusBadge>
+            <StatusBadge tone="review">Checklist operasional</StatusBadge>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {simkopdesChecklistRows.map((row) => (
@@ -3538,7 +3702,7 @@ function OverviewView({
             ))}
           </div>
           <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-            <p className="text-sm font-black text-[#D79A2B]">Member savings and cooperative finance</p>
+            <p className="text-sm font-black text-[#D79A2B]">Simpanan anggota dan pembiayaan koperasi</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {memberSavingsAlignment.map((item) => (
                 <span key={item} className="rounded-[8px] border border-current/10 px-2.5 py-1.5 text-xs font-black">
@@ -3547,7 +3711,7 @@ function OverviewView({
               ))}
             </div>
             <p className={`mt-3 text-xs font-semibold leading-5 ${mutedClass}`}>
-              Simpanan anggota dipakai sebagai alignment kesehatan koperasi secara aggregate. Demo tidak mengubah status simpanan atau pinjaman tanpa approval pengurus.
+              Simpanan anggota dipakai sebagai konteks kesehatan koperasi secara agregat. Sistem tidak mengubah status simpanan atau pinjaman tanpa persetujuan pengurus.
             </p>
           </div>
         </article>
@@ -3555,13 +3719,13 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Human-in-the-loop workflow</p>
-              <h2 className="mt-2 text-xl font-black">Recommended to approved.</h2>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Review manusia</p>
+              <h2 className="mt-2 text-xl font-black">Dari rekomendasi ke persetujuan.</h2>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-                Semua aksi AI, WA, buyer outreach, finance review, dan negotiation script masuk queue atau membutuhkan role review.
+                Semua aksi AI, WA, kontak buyer, review pembiayaan, dan draft negosiasi masuk antrean atau membutuhkan review pengurus.
               </p>
             </div>
-            <StatusBadge tone="risk">No auto approval</StatusBadge>
+            <StatusBadge tone="risk">Tanpa persetujuan otomatis</StatusBadge>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {approvalWorkflowSteps.map((step, index) => (
@@ -3651,14 +3815,14 @@ function OverviewView({
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex items-center gap-2">
             <Building2 size={20} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
-            <h2 className="text-xl font-black">Buyer dan readiness</h2>
+            <h2 className="text-xl font-black">Buyer dan kesiapan</h2>
           </div>
           <div className="mt-4 space-y-3">
             {buyers.slice(0, 2).map((match) => (
               <div key={match.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
                 <p className="font-black">{match.buyer}</p>
                 <p className="mt-2 font-mono text-xs font-black text-[#D79A2B]">
-                  Match {match.matchScore}% - {match.status}
+                  Kecocokan {match.matchScore}% - {match.status}
                 </p>
                 <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(match)}</p>
               </div>
@@ -3666,12 +3830,12 @@ function OverviewView({
             {finance.slice(0, 1).map((request) => (
               <div key={request.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
                 <p className="font-black">Pengajuan produktif {request.id} - {formatRupiah(request.amount)}</p>
-                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>Financing readiness: {request.purpose}</p>
+                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>Kesiapan pembiayaan: {request.purpose}</p>
               </div>
             ))}
             {buyerRequirements.slice(0, 1).map((requirement) => (
               <div key={requirement.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
-                <p className="text-xs font-black uppercase text-[#D79A2B]">Requirement table</p>
+                <p className="text-xs font-black uppercase text-[#D79A2B]">Tabel kebutuhan</p>
                 <p className="mt-2 font-black">{requirement.productName}</p>
                 <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
                   {formatInteger(requirement.requiredQuantity)} {requirement.unitLabel} - {requirement.verificationStatus}
@@ -3715,7 +3879,7 @@ function OverviewView({
           <div>
             <h2 className="text-xl font-black">Modul operasional</h2>
             <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
-              Core MVP muncul lebih dulu. Klik modul untuk membuka workspace internal.
+              Core MVP muncul lebih dulu. Klik modul untuk membuka ruang kerja internal.
             </p>
           </div>
           <button
@@ -3740,7 +3904,6 @@ function OverviewView({
                   return;
                 }
                 setActiveView(dashboardViewForFeature(featureModule.slug));
-                setPanelMessage(`${featureModule.title} dibuka sebagai workspace internal.`, "info");
               }}
               className={`rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${
                 isDark
@@ -3751,12 +3914,12 @@ function OverviewView({
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-lg font-black">{featureModule.title}</h3>
                 <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
-                  {featureModule.status}
+                  {publicStatusLabel(featureModule.status)}
                 </span>
               </div>
               <p className={`mt-3 text-sm font-semibold leading-6 ${mutedClass}`}>{featureModule.short}</p>
               <p className={`mt-4 text-xs font-bold ${isDark ? "text-[#FFF8EA]" : "text-[#7A4E2D]"}`}>
-                Pemilik: {featureModule.owner}
+                Penanggung jawab: {featureModule.owner}
               </p>
             </button>
           ))}
@@ -3807,10 +3970,9 @@ function LumbungDataView({
   openModule: (moduleTitle: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState(filteredQueue[0]?.id ?? "");
+  const [dataTab, setDataTab] = useState<"flow" | "evidence" | "opportunity" | "shared" | "queue">("flow");
   const selected = filteredQueue.find((item) => item.id === selectedId) ?? filteredQueue[0];
   const completed = filteredQueue.filter((item) => item.status === "Sudah Disetujui").length;
-  const sharedCoverage = hackathonSummary?.coverage ?? null;
-  const headlineMetrics = hackathonSummary?.headlineEvidence?.metrics ?? [];
   const rowClass = isDark
     ? "border-white/10 bg-white/5"
     : "border-[#E7DED1] bg-[#FFFCF5]";
@@ -3820,34 +3982,19 @@ function LumbungDataView({
   const dangerRowClass = isDark
     ? "border-[#C92A2A]/35 bg-[#C92A2A]/10"
     : "border-[#F0B4B4] bg-[#FFE3E3]";
-  const softLabelClass = isDark ? "text-[#FFF8EA]" : "text-[#172027]";
-  const sharedMetrics = sharedCoverage
-    ? [
-        ["Wilayah referensi", sharedCoverage.totalVillages, "desa/kelurahan sample"],
-        ["Area komoditas", sharedCoverage.commodityAreas, "kode wilayah dengan komoditas"],
-        ["Profil koperasi", sharedCoverage.cooperatives, "koperasi dalam sample"],
-        ["Koperasi berstok", sharedCoverage.cooperativesWithStock, "punya catatan inventaris"],
-      ]
-    : [];
-  const visibleSharedMetrics = headlineMetrics.length
-    ? headlineMetrics.slice(0, 4).map((item) => [
-        item.label,
-        item.amountIdr ? `Rp${formatInteger(item.amountIdr)}` : item.value,
-        `${formatInteger(item.value)} ${item.unit}`,
-      ] as const)
-    : sharedMetrics;
   const sourceLabel =
     hackathonSummary?.source ??
     hackathonDataQuality?.source ??
     hackathonOpportunityScores?.source ??
     hackathonBuyerMatching?.source ??
     hackathonFinancingReadiness?.source ??
-    "shared-db-env-gated";
+    "sumber eksplorasi belum aktif";
+  const publicEvidenceSourceLabel = publicEvidenceLabel(sourceLabel);
   const tablePrefix =
     hackathonSummary?.tablePrefix ??
     hackathonDataQuality?.tablePrefix ??
     hackathonFinancingReadiness?.tablePrefix ??
-    "shared";
+    "anak_sarengklek";
   const readyEndpointCount = [
     hackathonSummary,
     hackathonDataQuality,
@@ -3857,24 +4004,24 @@ function LumbungDataView({
   ].filter(Boolean).length;
   const endpointStatus =
     hackathonStatus === "ready"
-      ? `${readyEndpointCount}/5 siap`
+      ? "Lengkap"
       : hackathonStatus === "partial"
-        ? `${readyEndpointCount}/5 partial`
-      : hackathonStatus === "loading"
-        ? "Memuat 5 endpoint"
+        ? "Sebagian siap"
+        : hackathonStatus === "loading"
+          ? "Memuat bukti"
         : hackathonStatus === "unavailable"
-          ? "Missing env"
-          : "Error endpoint";
+          ? "Perlu aktivasi"
+          : "Perlu dicek";
   const gateState =
     hackathonStatus === "ready"
-      ? "Configured"
+      ? "Siap"
       : hackathonStatus === "partial"
-        ? "Partial"
+        ? "Sebagian"
       : hackathonStatus === "loading"
-        ? "Checking"
-        : hackathonStatus === "unavailable"
-          ? "Missing"
-          : "Error";
+        ? "Memuat"
+      : hackathonStatus === "unavailable"
+          ? "Perlu aktivasi"
+          : "Perlu dicek";
   const gateTone: "success" | "risk" | "warning" =
     hackathonStatus === "ready"
       ? "success"
@@ -3883,54 +4030,54 @@ function LumbungDataView({
         : "warning";
   const endpointCards = [
     {
-      label: "MVP summary",
-      path: "/api/hackathon/mvp-summary",
+      label: "Ringkasan MVP",
+      id: "mvp-summary",
       payloadReady: Boolean(hackathonSummary),
-      source: hackathonSummary?.source,
-      mode: hackathonSummary?.mode,
+      source: publicEvidenceLabel(hackathonSummary?.source),
+      mode: publicEvidenceLabel(hackathonSummary?.mode, "Agregat terbatas"),
       note: hackathonSummary
-        ? `${hackathonSummary.tableCounts.length} table counts, coverage, province opportunities`
-        : "Gate belum membuka payload.",
+        ? `${hackathonSummary.tableCounts.length} kelompok data, cakupan, dan peluang provinsi`
+        : "Ringkasan belum tersedia.",
     },
     {
-      label: "Data quality",
-      path: "/api/hackathon/data-quality",
+      label: "Kualitas data",
+      id: "data-quality",
       payloadReady: Boolean(hackathonDataQuality),
-      source: hackathonDataQuality?.source,
-      mode: hackathonDataQuality?.mode,
+      source: publicEvidenceLabel(hackathonDataQuality?.source),
+      mode: publicEvidenceLabel(hackathonDataQuality?.mode, "Agregat terbatas"),
       note: hackathonDataQuality
-        ? `${hackathonDataQuality.checks.length} table checks, aggregate warnings`
-        : "Gate belum membuka payload.",
+        ? `${hackathonDataQuality.checks.length} kelompok dicek, catatan agregat`
+        : "Ringkasan belum tersedia.",
     },
     {
-      label: "Opportunity scores",
-      path: "/api/hackathon/opportunity-scores",
+      label: "Skor peluang",
+      id: "opportunity-scores",
       payloadReady: Boolean(hackathonOpportunityScores),
-      source: hackathonOpportunityScores?.source,
-      mode: hackathonOpportunityScores?.mode,
+      source: publicEvidenceLabel(hackathonOpportunityScores?.source),
+      mode: publicEvidenceLabel(hackathonOpportunityScores?.mode, "Agregat terbatas"),
       note: hackathonOpportunityScores
-        ? `${hackathonOpportunityScores.topAreas.length} ranked areas`
-        : "Gate belum membuka payload.",
+        ? `${hackathonOpportunityScores.topAreas.length} area prioritas`
+        : "Ringkasan belum tersedia.",
     },
     {
-      label: "Buyer matching lite",
-      path: "/api/hackathon/buyer-matching",
+      label: "Kecocokan buyer awal",
+      id: "buyer-matching",
       payloadReady: Boolean(hackathonBuyerMatching),
-      source: hackathonBuyerMatching?.source,
-      mode: hackathonBuyerMatching?.mode,
+      source: publicEvidenceLabel(hackathonBuyerMatching?.source),
+      mode: publicEvidenceLabel(hackathonBuyerMatching?.mode, "Agregat terbatas"),
       note: hackathonBuyerMatching
-        ? `${hackathonBuyerMatching.matches.length} readiness matches`
-        : "Gate belum membuka payload.",
+        ? `${hackathonBuyerMatching.matches.length} kecocokan kesiapan`
+        : "Ringkasan belum tersedia.",
     },
     {
-      label: "Financing readiness",
-      path: "/api/hackathon/financing-readiness",
+      label: "Kesiapan pembiayaan",
+      id: "financing-readiness",
       payloadReady: Boolean(hackathonFinancingReadiness),
-      source: hackathonFinancingReadiness?.source,
-      mode: hackathonFinancingReadiness?.mode,
+      source: publicEvidenceLabel(hackathonFinancingReadiness?.source),
+      mode: publicEvidenceLabel(hackathonFinancingReadiness?.mode, "Agregat terbatas"),
       note: hackathonFinancingReadiness
-        ? `${hackathonFinancingReadiness.totals.totalRequests} aggregate requests, ${hackathonFinancingReadiness.totals.verifiedRequests} verified`
-        : "Gate belum membuka payload.",
+        ? `${hackathonFinancingReadiness.totals.totalRequests} pengajuan agregat, ${hackathonFinancingReadiness.totals.verifiedRequests} terverifikasi`
+        : "Ringkasan belum tersedia.",
     },
   ];
   const qualityRisks =
@@ -3942,8 +4089,8 @@ function LumbungDataView({
             label: `${check.table}.${item.field}`,
             value: item.missingRows,
             rateLabel:
-              item.completenessRate === null ? "rate n/a" : `${Math.round(item.completenessRate * 100)}% complete`,
-            note: "missing key reference",
+              item.completenessRate === null ? "rasio belum ada" : `${Math.round(item.completenessRate * 100)}% lengkap`,
+            note: "referensi kunci hilang",
             tone: "critical" as const,
           })),
         ...check.completeness
@@ -3952,8 +4099,8 @@ function LumbungDataView({
             label: `${check.table}.${item.field}`,
             value: item.missingRows,
             rateLabel:
-              item.completenessRate === null ? "rate n/a" : `${Math.round(item.completenessRate * 100)}% complete`,
-            note: "missing field before reporting",
+              item.completenessRate === null ? "rasio belum ada" : `${Math.round(item.completenessRate * 100)}% lengkap`,
+            note: "field hilang sebelum pelaporan",
             tone: "warning" as const,
           })),
         ...check.quality
@@ -3962,7 +4109,7 @@ function LumbungDataView({
             label: `${check.table}.${item.field}`,
             value: item.affectedRows,
             rateLabel:
-              item.affectedRate === null ? "rate n/a" : `${Math.round(item.affectedRate * 100)}% affected`,
+              item.affectedRate === null ? "rasio belum ada" : `${Math.round(item.affectedRate * 100)}% terdampak`,
             note: item.risk,
             tone: "warning" as const,
           })),
@@ -3988,31 +4135,31 @@ function LumbungDataView({
     return counts;
   }, {});
   const clusterLabel: Record<string, string> = {
-    pilot_ready: "Pilot ready",
-    qualified: "Qualified",
-    emerging: "Emerging",
-    early_stage: "Early stage",
+    pilot_ready: "Siap pilot",
+    qualified: "Layak",
+    emerging: "Mulai kuat",
+    early_stage: "Tahap awal",
   };
   const lumbungEvidenceCards = [
     {
-      label: "Endpoint ready",
+      label: "Bukti siap",
       value: endpointStatus,
-      note: `${sourceLabel} / prefix ${tablePrefix}`,
+      note: "Ringkasan agregat terbatas dan siap direview operator.",
     },
     {
-      label: "Quality warnings",
-      value: `${formatInteger(qualityRisks.length)} visible`,
-      note: hackathonDataQuality ? `${formatInteger(hackathonDataQuality.checks.length)} table checks` : "payload belum tersedia",
+      label: "Catatan kualitas",
+      value: `${formatInteger(qualityRisks.length)} terlihat`,
+      note: hackathonDataQuality ? `${formatInteger(hackathonDataQuality.checks.length)} kelompok dicek` : "ringkasan belum tersedia",
     },
     {
-      label: "Buyer readiness",
-      value: `${formatInteger(buyerReadiness.length)} matches`,
-      note: "archetype aggregate, bukan named buyer",
+      label: "Kesiapan buyer",
+      value: `${formatInteger(buyerReadiness.length)} kandidat`,
+      note: "tipe buyer agregat, bukan buyer bernama",
     },
     {
-      label: "Financing readiness",
-      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} verified` : "n/a",
-      note: "readiness only; bukan approval pembiayaan",
+      label: "Kesiapan pembiayaan",
+      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} terverifikasi` : "n/a",
+      note: "kesiapan saja; bukan persetujuan pembiayaan",
     },
   ];
   const lumbungQueueFilters = useMemo(
@@ -4085,16 +4232,75 @@ function LumbungDataView({
   ];
   const dashboardSharedDbStatusLabel =
     hackathonSharedDb?.status === "ready"
-      ? "ready"
+      ? "terhubung"
       : hackathonSharedDb?.status === "setup-required"
-        ? "missing env"
+        ? "perlu aktivasi"
         : hackathonSharedDb?.status === "query-error"
-          ? "query error"
-          : "auth required";
+          ? "perlu cek"
+          : "butuh login";
   const dashboardSharedProductRows = hackathonSharedDb?.tables.productRows ?? [];
   const dashboardSharedAreaRows = hackathonSharedDb?.tables.areaRows ?? [];
   const dashboardSharedFinancingRows = hackathonSharedDb?.tables.financingRows ?? [];
   const dashboardSharedTransactionRows = hackathonSharedDb?.tables.transactionRows ?? [];
+  const endpointChartData = endpointCards.map((endpoint) => ({
+    label: endpoint.label.replace(" lite", ""),
+    value: endpoint.payloadReady ? 1 : 0,
+    note: endpoint.payloadReady ? "ringkasan siap" : hackathonStatus === "loading" ? "memuat" : "perlu cek",
+    color: endpoint.payloadReady ? "#2F7D32" : "#D79A2B",
+  }));
+  const qualityChartData = qualityTableSummaries.slice(0, 5).map((item) => ({
+    label: item.table,
+    value: item.missingKeys + item.missingFields + item.qualityRows,
+    note: `${formatInteger(item.rows)} baris dicek`,
+    color: item.missingKeys > 0 ? "#C92A2A" : "#D79A2B",
+  }));
+  const opportunityChartData = topOpportunityAreas.map((item) => ({
+    label:
+      [item.area.village, item.area.regency, item.area.province].filter(Boolean).join(", ") ||
+      "Area belum lengkap",
+    value: item.score,
+    note: `${formatInteger(item.rawSignals.products)} produk / ${formatInteger(item.rawSignals.stockItems)} stok`,
+    color: "#1D5D8F",
+  }));
+  const financingChartData = financingStatusSummary.slice(0, 5).map((item) => ({
+    label: item.status,
+    value: item.requests,
+    note: formatRupiah(item.amount),
+    color: item.statusKey.includes("verified") ? "#2F7D32" : "#D79A2B",
+  }));
+  const sharedDbChartData = [
+    {
+      label: "Produk",
+      value: dashboardSharedProductRows.reduce((sum, item) => sum + Number(item.rows ?? 0), 0),
+      note: `${formatInteger(dashboardSharedProductRows.length)} kategori`,
+      color: "#2F7D32",
+    },
+    {
+      label: "Wilayah",
+      value: dashboardSharedAreaRows.reduce((sum, item) => sum + Number(item.villages ?? 0), 0),
+      note: `${formatInteger(dashboardSharedAreaRows.length)} provinsi`,
+      color: "#1D5D8F",
+    },
+    {
+      label: "Pembiayaan",
+      value: dashboardSharedFinancingRows.reduce((sum, item) => sum + Number(item.requests ?? 0), 0),
+      note: "kesiapan saja",
+      color: "#D79A2B",
+    },
+    {
+      label: "Transaksi",
+      value: dashboardSharedTransactionRows.reduce((sum, item) => sum + Number(item.transactions ?? 0), 0),
+      note: "sinyal permintaan",
+      color: "#C92A2A",
+    },
+  ];
+  const lumbungDataTabs = [
+    { id: "flow" as const, label: "Alur", meta: "5 langkah" },
+    { id: "evidence" as const, label: "Bukti data", meta: endpointStatus },
+    { id: "opportunity" as const, label: "Peluang", meta: `${formatInteger(topOpportunityAreas.length)} area` },
+    { id: "shared" as const, label: "Sumber agregat", meta: dashboardSharedDbStatusLabel },
+    { id: "queue" as const, label: "Verifikasi", meta: `${formatInteger(completed)}/${formatInteger(filteredQueue.length)}` },
+  ];
   const sharedProductColumns: ManagedTableColumn<HackathonDashboardProductRow>[] = [
     {
       key: "category",
@@ -4108,7 +4314,7 @@ function LumbungDataView({
     },
     {
       key: "rows",
-      heading: "Rows",
+      heading: "Baris",
       render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.rows)}</span>,
     },
     {
@@ -4118,17 +4324,17 @@ function LumbungDataView({
     },
     {
       key: "stock",
-      heading: "Stok aggregate",
+      heading: "Stok agregat",
       render: (item) => (
         <div>
           <p className="font-mono text-sm font-black">{formatInteger(item.stockTotal)}</p>
-          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatInteger(item.inventoryRows)} inventory rows</p>
+          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatInteger(item.inventoryRows)} catatan inventaris</p>
         </div>
       ),
     },
     {
       key: "generic",
-      heading: "Generic label",
+      heading: "Label generik",
       render: (item) => (
         <span className={item.genericLabels > 0 ? "font-mono text-sm font-black text-[#C92A2A]" : "font-mono text-sm font-black text-[#2F7D32]"}>
           {formatInteger(item.genericLabels)}
@@ -4161,7 +4367,7 @@ function LumbungDataView({
       heading: "Komoditas",
       render: (item) => (
         <p className="font-mono text-xs font-black">
-          {formatInteger(item.commodityRows)} rows / {formatInteger(item.commodities)} refs
+          {formatInteger(item.commodityRows)} baris / {formatInteger(item.commodities)} referensi
         </p>
       ),
     },
@@ -4189,17 +4395,17 @@ function LumbungDataView({
     },
     {
       key: "requests",
-      heading: "Requests",
+      heading: "Pengajuan",
       render: (item) => <span className="font-mono text-sm font-black">{formatInteger(item.requests)}</span>,
     },
     {
       key: "amount",
-      heading: "Amount",
+      heading: "Nilai",
       render: (item) => <span className="font-mono text-sm font-black">{formatRupiah(item.amount)}</span>,
     },
     {
       key: "caveat",
-      heading: "Caveat",
+      heading: "Catatan",
       render: (item) => <p className={`max-w-[320px] text-xs font-semibold leading-5 ${mutedClass}`}>{item.caveat}</p>,
     },
   ];
@@ -4221,7 +4427,7 @@ function LumbungDataView({
     },
     {
       key: "amount",
-      heading: "Amount",
+      heading: "Nilai",
       render: (item) => <span className="font-mono text-sm font-black">{formatRupiah(item.amount)}</span>,
     },
     {
@@ -4232,225 +4438,267 @@ function LumbungDataView({
   ];
 
   return (
-    <section data-tour="lumbung-data" className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-      <article className={`xl:col-span-2 rounded-[16px] border p-5 ${panelClass}`}>
+    <section data-tour="lumbung-data" className="grid gap-5">
+      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-[#D79A2B]">Alur pakai Lumbung Data</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-normal">Dari pesan warga menjadi data koperasi yang sah.</h2>
+            <p className="text-sm font-semibold text-[#D79A2B]">Lumbung Data</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-normal">Meja kerja bukti, peluang, dan verifikasi.</h2>
             <p className={`mt-2 max-w-4xl text-sm font-normal leading-6 ${mutedClass}`}>
-              Master nasional dipakai sebagai referensi wilayah dan komoditas. Data operasional baru dianggap sah setelah ada catatan warga/operator, bukti minimum, dan approval pengurus.
+              Buka tab dari kiri ke kanan: alur data, bukti eksplorasi, peluang bisnis, sumber agregat, lalu verifikasi. Semua angka berasal dari layanan aplikasi, tanpa fallback metrik palsu.
             </p>
           </div>
-          <StatusBadge tone="service">Human reviewed</StatusBadge>
+          <StatusBadge tone="service">Review manusia</StatusBadge>
         </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-5">
-          {[
-            ["01", "WA masuk", "Text, voice note, foto, atau assisted input dari operator."],
-            ["02", "Draft queue", "AI/aturan lokal mengisi field tanpa menghapus kalimat asli warga."],
-            ["03", "Verifikasi", "Operator cek bukti, tanya ulang, dan koreksi satuan lokal."],
-            ["04", "Kunci modul", "Data dikirim ke stok, pasar, pembiayaan, peta, atau laporan."],
-            ["05", "Audit", "Keputusan dan ekspor menyimpan alasan agar bisa ditelusuri."],
-          ].map(([step, title, body]) => (
-            <div key={step} className={`rounded-[14px] border p-4 ${innerClass}`}>
-              <p className="font-mono text-xs font-semibold text-[#D79A2B]">{step}</p>
-              <p className="mt-2 text-sm font-semibold">{title}</p>
-              <p className={`mt-2 text-xs font-normal leading-5 ${mutedClass}`}>{body}</p>
-            </div>
+        <div className="mt-5 grid gap-2 md:grid-cols-5">
+          {lumbungDataTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setDataTab(tab.id)}
+              className={`rounded-[12px] border px-3 py-3 text-left transition focus-visible:lb-focus ${
+                dataTab === tab.id
+                  ? "border-[#D79A2B] bg-[#D79A2B]/15"
+                  : isDark
+                    ? "border-white/10 bg-white/5 hover:border-[#D79A2B]/60"
+                    : "border-[#E7DED1] bg-[#FFFCF5] hover:border-[#D79A2B]/60"
+              }`}
+            >
+              <span className="block text-sm font-black">{tab.label}</span>
+              <span className={`mt-1 block text-xs font-semibold ${mutedClass}`}>{tab.meta}</span>
+            </button>
           ))}
         </div>
       </article>
 
-      <article className={`xl:col-span-2 rounded-[4px] border p-5 ${isDark ? "border-[#26323B] bg-[#101820] text-[#F8F4EA]" : panelClass}`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Shared DB hackathon</p>
-            <h2 className="mt-2 text-2xl font-black">Evidence panel eksplorasi MVP</h2>
-            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
-              {hackathonSummary?.schemaScope?.description ??
-                "Shared DB dipakai sebagai bahan eksplorasi terbatas. Data ini memperkaya pola dan prioritas MVP, bukan klaim referensi utama SIMKOPDES atau data operasional resmi."}
-            </p>
+      {dataTab === "flow" ? (
+        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <p className="text-sm font-semibold text-[#D79A2B]">Alur pakai Lumbung Data</p>
+              <h3 className="mt-2 text-2xl font-semibold tracking-normal">Dari pesan warga menjadi data koperasi yang sah.</h3>
+              <p className={`mt-2 max-w-4xl text-sm font-normal leading-6 ${mutedClass}`}>
+                Master nasional dipakai sebagai referensi wilayah dan komoditas. Data operasional baru dianggap sah setelah ada catatan warga/operator, bukti minimum, dan persetujuan pengurus.
+              </p>
+              <div className="mt-5 grid gap-3 md:grid-cols-5 xl:grid-cols-5">
+                {[
+                  ["01", "WA masuk", "Teks, voice note, foto, atau input dibantu operator."],
+                  ["02", "Draft antrean", "AI/aturan lokal mengisi field tanpa menghapus kalimat asli warga."],
+                  ["03", "Verifikasi", "Operator cek bukti, tanya ulang, dan koreksi satuan lokal."],
+                  ["04", "Kunci modul", "Data dikirim ke stok, pasar, pembiayaan, peta, atau laporan."],
+                  ["05", "Audit", "Keputusan dan ekspor menyimpan alasan agar bisa ditelusuri."],
+                ].map(([step, title, body]) => (
+                  <div key={step} className={`rounded-[14px] border p-4 ${innerClass}`}>
+                    <p className="font-mono text-xs font-semibold text-[#D79A2B]">{step}</p>
+                    <p className="mt-2 text-sm font-semibold">{title}</p>
+                    <p className={`mt-2 text-xs font-normal leading-5 ${mutedClass}`}>{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <RingMetric
+                label="Sumber bukti"
+                value={readyEndpointCount}
+                max={5}
+                note="Ringkasan bukti yang siap dibaca dashboard."
+                mutedClass={mutedClass}
+              />
+              <div className="mt-5 grid gap-3">
+                {lumbungEvidenceCards.map((card) => (
+                  <div key={card.label} className={`rounded-[4px] border-l-4 border-[#D79A2B] p-3 ${rowClass}`}>
+                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#D79A2B]">{card.label}</p>
+                    <p className="mt-2 text-lg font-black">{card.value}</p>
+                    <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{card.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={gateTone}>{gateState}</StatusBadge>
-            <button
-              type="button"
-              onClick={() => void reloadHackathon()}
-              className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-current/15 px-4 py-2 text-xs font-extrabold focus-visible:lb-focus"
-            >
-              <RefreshCcw size={15} strokeWidth={2.2} aria-hidden="true" />
-              Refresh
-            </button>
-          </div>
-        </div>
+        </article>
+      ) : null}
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-[0.85fr_1.15fr_1fr]">
-          <div className={`rounded-[14px] border p-4 ${gateTone === "risk" ? dangerRowClass : gateTone === "warning" ? alertRowClass : rowClass}`}>
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Gate state</p>
-            <p className="mt-2 text-2xl font-black">{gateState}</p>
-            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
-              {hackathonStatus === "ready"
-                ? "Shared DB env reachable; semua endpoint dibaca sebagai agregat read-only."
+      {dataTab === "evidence" ? (
+        <article className={`rounded-[4px] border p-5 ${isDark ? "border-[#26323B] bg-[#101820] text-[#F8F4EA]" : panelClass}`}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Bukti eksplorasi</p>
+              <h2 className="mt-2 text-2xl font-black">Panel bukti eksplorasi MVP</h2>
+              <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+                {publicSetupMessage(
+                  hackathonSummary?.schemaScope?.description,
+                   "Sumber eksplorasi dipakai sebagai bahan terbatas untuk membaca pola dan prioritas MVP, bukan klaim referensi utama SIMKOPDES atau data operasional resmi.",
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone={gateTone}>{gateState}</StatusBadge>
+              <button
+                type="button"
+                onClick={() => void reloadHackathon()}
+                className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-current/15 px-4 py-2 text-xs font-extrabold focus-visible:lb-focus"
+              >
+                <RefreshCcw size={15} strokeWidth={2.2} aria-hidden="true" />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-[0.85fr_1.15fr_1fr]">
+            <div className={`rounded-[14px] border p-4 ${gateTone === "risk" ? dangerRowClass : gateTone === "warning" ? alertRowClass : rowClass}`}>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Status bukti</p>
+              <p className="mt-2 text-2xl font-black">{gateState}</p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+                {hackathonStatus === "ready"
+                  ? "Sumber eksplorasi terhubung; semua ringkasan dibaca sebagai agregat terbatas."
                 : hackathonStatus === "partial"
-                  ? hackathonError || "Sebagian endpoint evidence berhasil dan tetap ditampilkan tanpa fallback angka demo."
-                : hackathonStatus === "loading"
-                  ? "Menunggu response dari lima endpoint evidence."
-                  : hackathonStatus === "unavailable"
-                    ? "Env shared DB belum lengkap atau sengaja dimatikan."
-                    : hackathonError || "Endpoint shared DB gagal merespons."}
-            </p>
-          </div>
-          <div className={`rounded-[14px] border p-4 ${rowClass}`}>
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Shared DB scope</p>
-            <p className="mt-2 text-lg font-black">{sourceLabel}</p>
-            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
-              Prefix: {tablePrefix}. {hackathonSummary?.schemaScope?.notPrimaryReference ? "Bukan referensi utama SIMKOPDES." : "Scope terbatas untuk demo evidence."}
-            </p>
-          </div>
-          <div className={`rounded-[14px] border p-4 ${rowClass}`}>
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Endpoint evidence</p>
-            <p className="mt-2 text-2xl font-black">{endpointStatus}</p>
-            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
-              Summary, data-quality, opportunity-score, buyer-matching-lite, dan financing-readiness dikonsumsi terpisah.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-2 md:grid-cols-5">
-          {endpointCards.map((endpoint) => (
-            <div
-              key={endpoint.path}
-              className={`rounded-[12px] border px-3 py-3 ${endpoint.payloadReady ? rowClass : alertRowClass}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-black">{endpoint.label}</p>
-                <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
-                  endpoint.payloadReady ? "bg-[#E7F5E8] text-[#236327]" : "bg-[#FFF3D8] text-[#7A4E2D]"
-                }`}>
-                  {endpoint.payloadReady ? "payload" : hackathonStatus === "loading" ? "loading" : "not ready"}
-                </span>
-              </div>
-              <p className={`mt-2 break-all font-mono text-[11px] font-bold ${mutedClass}`}>{endpoint.path}</p>
-              <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>
-                Source: {endpoint.source ?? sourceLabel}
+                    ? hackathonError || "Sebagian bukti berhasil dan tetap ditampilkan tanpa fallback angka palsu."
+                    : hackathonStatus === "loading"
+                      ? "Menunggu respons dari lima sumber bukti."
+                      : hackathonStatus === "unavailable"
+                        ? "Sumber eksplorasi belum aktif di server ini."
+                        : hackathonError || "Bukti gagal merespons."}
               </p>
-              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{endpoint.mode ?? endpoint.note}</p>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {lumbungEvidenceCards.map((card) => (
-            <div key={card.label} className={`rounded-[4px] border-l-4 border-[#D79A2B] p-3 ${rowClass}`}>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#D79A2B]">{card.label}</p>
-              <p className="mt-2 text-lg font-black">{card.value}</p>
-              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{card.note}</p>
-            </div>
-          ))}
-        </div>
-
-        <SignalSpineCompactPanel
-          className="mt-5"
-          panelClass={panelClass}
-          innerClass={rowClass}
-          mutedClass={mutedClass}
-          signalSpine={signalSpine}
-          signalSpineStatus={signalSpineStatus}
-          signalSpineError={signalSpineError}
-          embedded
-        />
-
-        {hackathonSummary ? (
-          <>
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
-              {visibleSharedMetrics.map(([label, value, note]) => (
-                <div key={label} className={`rounded-[14px] border p-4 ${rowClass}`}>
-                  <p className="text-xs font-black text-[#D79A2B]">{label}</p>
-                  <p className="mt-2 text-3xl font-black">{typeof value === "number" ? formatInteger(value) : value}</p>
-                  <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{note}</p>
-                  <p className={`mt-2 text-[11px] font-black ${softLabelClass}`}>Source: /api/hackathon/mvp-summary</p>
-                </div>
-              ))}
-            </div>
-            {hackathonSummary.headlineEvidence?.caveat ? (
-              <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${alertRowClass}`}>
-                {hackathonSummary.headlineEvidence.caveat}
+            <div className={`rounded-[14px] border p-4 ${rowClass}`}>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Ruang lingkup eksplorasi</p>
+              <p className="mt-2 text-lg font-black">{publicEvidenceSourceLabel}</p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+                ID tim: {tablePrefix}. {hackathonSummary?.schemaScope?.notPrimaryReference ? "Bukan referensi utama SIMKOPDES." : "Ruang lingkup terbatas untuk bukti eksplorasi."}
               </p>
-            ) : null}
+            </div>
+            <div className={`rounded-[14px] border p-4 ${rowClass}`}>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Sumber bukti</p>
+              <p className="mt-2 text-2xl font-black">{endpointStatus}</p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+                 Ringkasan, kualitas data, skor peluang, kecocokan buyer, dan kesiapan pembiayaan dikonsumsi terpisah.
+              </p>
+            </div>
+          </div>
 
-            <div className="mt-5 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black">Tabel evidence</h3>
-                  <span className="text-xs font-black text-[#D79A2B]">Source: mvp-summary</span>
+          <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <MiniBarChart title="Bukti siap pakai" data={endpointChartData} mutedClass={mutedClass} innerClass={rowClass} />
+            <MiniBarChart title="Catatan kualitas data" data={qualityChartData} mutedClass={mutedClass} innerClass={rowClass} />
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-5">
+            {endpointCards.map((endpoint) => (
+              <div
+                key={endpoint.id}
+                className={`rounded-[12px] border px-3 py-3 ${endpoint.payloadReady ? rowClass : alertRowClass}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-black">{endpoint.label}</p>
+                  <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
+                    endpoint.payloadReady ? "bg-[#E7F5E8] text-[#236327]" : "bg-[#FFF3D8] text-[#7A4E2D]"
+                  }`}>
+                    {endpoint.payloadReady ? "siap" : hackathonStatus === "loading" ? "memuat" : "perlu cek"}
+                  </span>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {hackathonSummary.tableCounts.length > 0 ? (
-                    hackathonSummary.tableCounts.map((item) => (
-                      <div key={item.tableName} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
-                        <p className="text-xs font-black text-[#D79A2B]">{item.tableName}</p>
-                        <p className="mt-1 text-lg font-black">{formatInteger(item.total)}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${alertRowClass}`}>
-                      Endpoint mvp-summary tidak mengirim table count.
-                    </p>
-                  )}
-                </div>
+                <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>
+                  Sumber: {endpoint.source ?? publicEvidenceSourceLabel}
+                </p>
+                <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{endpoint.mode ?? endpoint.note}</p>
               </div>
+            ))}
+          </div>
 
-              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black">Data-quality warnings</h3>
-                  <span className="text-xs font-black text-[#D79A2B]">Source: data-quality</span>
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {qualityTableSummaries.map((item) => (
+          <SignalSpineCompactPanel
+            className="mt-5"
+            panelClass={panelClass}
+            innerClass={rowClass}
+            mutedClass={mutedClass}
+            signalSpine={signalSpine}
+            signalSpineStatus={signalSpineStatus}
+            signalSpineError={signalSpineError}
+            embedded
+          />
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Tabel bukti</h3>
+                <span className="text-xs font-black text-[#D79A2B]">Sumber: ringkasan MVP</span>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {hackathonSummary?.tableCounts.length ? (
+                  hackathonSummary.tableCounts.map((item) => (
+                    <div key={item.tableName} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                      <p className="text-xs font-black text-[#D79A2B]">{publicTableGroupLabel(item.tableName)}</p>
+                      <p className="mt-1 text-lg font-black">{formatInteger(item.total)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${alertRowClass}`}>
+                    Ringkasan MVP belum mengirim jumlah kelompok data.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Catatan kualitas data</h3>
+                <span className="text-xs font-black text-[#D79A2B]">Sumber: kualitas data</span>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {qualityTableSummaries.length ? (
+                  qualityTableSummaries.map((item) => (
                     <div key={item.table} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
-                      <p className="text-xs font-black text-[#D79A2B]">{item.table}</p>
-                      <p className="mt-1 text-sm font-black">{formatInteger(item.rows)} rows checked</p>
+                      <p className="text-xs font-black text-[#D79A2B]">{publicTableGroupLabel(item.table)}</p>
+                      <p className="mt-1 text-sm font-black">{formatInteger(item.rows)} baris dicek</p>
                       <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>
-                        Key {formatInteger(item.missingKeys)} - field {formatInteger(item.missingFields)} - quality {formatInteger(item.qualityRows)}
+                        Kunci {formatInteger(item.missingKeys)} - field {formatInteger(item.missingFields)} - kualitas {formatInteger(item.qualityRows)}
                       </p>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-4 space-y-2">
-                  {qualityRisks.length > 0 ? (
-                    qualityRisks.map((item) => (
-                      <div
-                        key={`${item.label}-${item.note}`}
-                        className={`grid gap-2 rounded-[10px] border px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center ${
-                          item.tone === "critical" ? dangerRowClass : alertRowClass
-                        }`}
-                      >
-                        <div>
-                          <p className="text-sm font-black">{item.label}</p>
-                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.note}</p>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <p className="font-mono text-sm font-black text-[#C92A2A]">{formatInteger(item.value)}</p>
-                          <p className={`text-[11px] font-bold ${mutedClass}`}>{item.rateLabel}</p>
-                        </div>
+                  ))
+                ) : (
+                  <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${alertRowClass}`}>
+                    Kualitas data belum mengirim ringkasan kelompok.
+                  </p>
+                )}
+              </div>
+              <div className="mt-4 space-y-2">
+                {qualityRisks.length > 0 ? (
+                  qualityRisks.map((item) => (
+                    <div
+                      key={`${item.label}-${item.note}`}
+                      className={`grid gap-2 rounded-[10px] border px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center ${
+                        item.tone === "critical" ? dangerRowClass : alertRowClass
+                      }`}
+                    >
+                      <div>
+                        <p className="text-sm font-black">{item.label}</p>
+                        <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.note}</p>
                       </div>
-                    ))
-                  ) : (
-                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                      Tidak ada warning agregat yang dilaporkan endpoint data-quality.
-                    </p>
-                  )}
-                </div>
+                      <div className="text-left sm:text-right">
+                        <p className="font-mono text-sm font-black text-[#C92A2A]">{formatInteger(item.value)}</p>
+                        <p className={`text-[11px] font-bold ${mutedClass}`}>{item.rateLabel}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                    Tidak ada warning agregat yang dilaporkan kualitas data.
+                  </p>
+                )}
               </div>
             </div>
+          </div>
+        </article>
+      ) : null}
 
-            <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black">Top opportunity areas</h3>
-                  <span className="text-xs font-black text-[#D79A2B]">Source: opportunity-scores</span>
-                </div>
-                <div className="mt-4 space-y-3">
+      {dataTab === "opportunity" ? (
+        <section className="grid gap-5">
+          <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Area peluang utama</h3>
+                <span className="text-xs font-black text-[#D79A2B]">Sumber: skor peluang</span>
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.72fr_1.28fr]">
+                <MiniBarChart title="Skor area prioritas" data={opportunityChartData} mutedClass={mutedClass} innerClass={rowClass} />
+                <div className="space-y-3">
                   {topOpportunityAreas.length > 0 ? (
                     topOpportunityAreas.map((item) => (
                       <div
@@ -4466,9 +4714,9 @@ function LumbungDataView({
                           </p>
                           <div className="mt-3 grid gap-2 sm:grid-cols-3">
                             {[
-                              ["Commodity", item.componentScores.commodityPotential],
-                              ["Coop", item.componentScores.cooperativeReadiness],
-                              ["Stock", item.componentScores.productStockReadiness],
+                              ["Komoditas", item.componentScores.commodityPotential],
+                              ["Koperasi", item.componentScores.cooperativeReadiness],
+                              ["Stok", item.componentScores.productStockReadiness],
                             ].map(([label, score]) => (
                               <div key={label} className={`rounded-[8px] border px-2 py-1.5 ${alertRowClass}`}>
                                 <p className="text-[11px] font-black text-[#7A4E2D]">{label}</p>
@@ -4478,359 +4726,359 @@ function LumbungDataView({
                           </div>
                         </div>
                         <div className="text-left md:text-right">
-                          <p className="text-xs font-black text-[#D79A2B]">Score</p>
+                          <p className="text-xs font-black text-[#D79A2B]">Skor</p>
                           <p className="font-mono text-2xl font-black">{item.score}</p>
                         </div>
                       </div>
                     ))
                   ) : (
                     <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                      Endpoint opportunity-scores belum mengirim area prioritas.
+                      Skor peluang belum mengirim area prioritas.
                     </p>
                   )}
                 </div>
               </div>
+            </div>
 
-              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black">Buyer matching lite</h3>
-                  <span className="text-xs font-black text-[#D79A2B]">Source: buyer-matching</span>
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {Object.entries(buyerClusterCounts).map(([cluster, count]) => (
-                    <div key={cluster} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
-                      <p className="text-xs font-black text-[#D79A2B]">{clusterLabel[cluster] ?? cluster}</p>
-                      <p className="mt-1 font-mono text-lg font-black">{formatInteger(count)}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 space-y-3">
-                  {buyerReadiness.length > 0 ? (
-                    buyerReadiness.map((item) => (
-                      <div key={`${item.rank}-${item.cooperativeRef}-${item.buyerArchetypeLabel}`} className={`rounded-[12px] border p-3 ${rowClass}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-black">{item.buyerArchetypeLabel}</p>
-                            <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.cooperativeName ?? item.cooperativeRef}</p>
-                          </div>
-                          <span className="font-mono text-sm font-black text-[#2F7D32]">{item.score}</span>
-                        </div>
-                        <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
-                          {[item.location.regency, item.location.province].filter(Boolean).join(", ") || "Lokasi belum lengkap"} - {clusterLabel[item.readinessCluster] ?? item.readinessCluster}
-                        </p>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
-                          <span>Produk {formatInteger(item.productSnapshot.productsTotal)}</span>
-                          <span>Stok {formatInteger(item.signals.stockItems)}</span>
-                          <span>Kemitraan {formatInteger(item.signals.partnershipRequests)}</span>
-                        </div>
-                        <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
-                          Archetype generik, bukan buyer bernama; perlu review operator sebelum outreach.
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                      Endpoint buyer-matching belum mengirim readiness match.
-                    </p>
-                  )}
-                </div>
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Kecocokan buyer awal</h3>
+                <span className="text-xs font-black text-[#D79A2B]">Sumber: kecocokan buyer</span>
               </div>
-
-              <div className={`lg:col-span-2 rounded-[14px] border p-4 ${innerClass}`}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-black">Financing readiness deal room</h3>
-                    <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
-                      Aggregate-only status Draft/Requested/Verified. Ini readiness, bukan approval pembiayaan.
-                    </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {Object.entries(buyerClusterCounts).map(([cluster, count]) => (
+                  <div key={cluster} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                    <p className="text-xs font-black text-[#D79A2B]">{clusterLabel[cluster] ?? cluster}</p>
+                    <p className="mt-1 font-mono text-lg font-black">{formatInteger(count)}</p>
                   </div>
-                  <span className="text-xs font-black text-[#D79A2B]">Source: financing-readiness</span>
-                </div>
-                {hackathonFinancingReadiness ? (
-                  <>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                      {financingStatusSummary.map((item) => (
-                        <div key={item.statusKey} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
-                          <p className="text-xs font-black text-[#D79A2B]">{item.status}</p>
-                          <p className="mt-1 font-mono text-lg font-black">{formatInteger(item.requests)}</p>
-                          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatRupiah(item.amount)}</p>
+                ))}
+              </div>
+              <div className="mt-4 space-y-3">
+                {buyerReadiness.length > 0 ? (
+                  buyerReadiness.map((item) => (
+                    <div key={`${item.rank}-${item.cooperativeRef}-${item.buyerArchetypeLabel}`} className={`rounded-[12px] border p-3 ${rowClass}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-black">{item.buyerArchetypeLabel}</p>
+                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.cooperativeName ?? item.cooperativeRef}</p>
                         </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 grid gap-3 lg:grid-cols-[0.85fr_1.15fr]">
-                      <div className={`rounded-[12px] border p-3 ${rowClass}`}>
-                        <p className="text-xs font-black uppercase text-[#D79A2B]">Channel summary</p>
-                        <div className="mt-3 space-y-2">
-                          {financingChannelSummary.length > 0 ? (
-                            financingChannelSummary.map((item) => (
-                              <div key={item.channel} className="flex items-center justify-between gap-3 text-xs font-bold">
-                                <span>{item.channel}</span>
-                                <span>{formatInteger(item.requests)} / {formatRupiah(item.amount)}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className={`text-xs font-semibold ${mutedClass}`}>Kanal pembiayaan belum terdeteksi.</p>
-                          )}
-                        </div>
-                        <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
-                          Confidence: {hackathonFinancingReadiness.confidence?.level ?? "limited"}. {hackathonFinancingReadiness.freshness?.caveat}
-                        </p>
+                        <span className="font-mono text-sm font-black text-[#2F7D32]">{item.score}</span>
                       </div>
-                      <div className="grid gap-2">
-                        {financingChecklist.map((item) => (
-                          <div key={item.id} className={`rounded-[12px] border p-3 ${rowClass}`}>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-black">{item.title}</p>
-                              <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
-                                {item.status}
-                              </span>
-                            </div>
-                            <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{item.nextAction}</p>
-                            <p className={`mt-2 text-[11px] font-bold leading-5 ${mutedClass}`}>{item.caveat}</p>
-                          </div>
-                        ))}
+                      <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
+                        {[item.location.regency, item.location.province].filter(Boolean).join(", ") || "Lokasi belum lengkap"} - {clusterLabel[item.readinessCluster] ?? item.readinessCluster}
+                      </p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                        <span>Produk {formatInteger(item.productSnapshot.productsTotal)}</span>
+                        <span>Stok {formatInteger(item.signals.stockItems)}</span>
+                        <span>Kemitraan {formatInteger(item.signals.partnershipRequests)}</span>
                       </div>
+                      <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
+                        Tipe kebutuhan generik, bukan buyer bernama; perlu review operator sebelum kontak buyer.
+                      </p>
                     </div>
-                  </>
+                  ))
                 ) : (
-                  <p className={`mt-4 rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
-                    Endpoint financing-readiness belum mengirim aggregate deal room.
+                  <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                    Kecocokan buyer belum mengirim ringkasan kesiapan.
                   </p>
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-black">Ruang kesiapan pembiayaan</h3>
+                <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+                  Status agregat draft, diajukan, dan terverifikasi. Ini kesiapan, bukan persetujuan pembiayaan.
+                </p>
+              </div>
+              <span className="text-xs font-black text-[#D79A2B]">Sumber: kesiapan pembiayaan</span>
+            </div>
+            {hackathonFinancingReadiness ? (
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.72fr_1.28fr]">
+                <MiniBarChart title="Status pembiayaan" data={financingChartData} mutedClass={mutedClass} innerClass={rowClass} />
+                <div className="grid gap-3">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {financingStatusSummary.map((item) => (
+                      <div key={item.statusKey} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                        <p className="text-xs font-black text-[#D79A2B]">{item.status}</p>
+                        <p className="mt-1 font-mono text-lg font-black">{formatInteger(item.requests)}</p>
+                        <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatRupiah(item.amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[0.85fr_1.15fr]">
+                    <div className={`rounded-[12px] border p-3 ${rowClass}`}>
+                      <p className="text-xs font-black uppercase text-[#D79A2B]">Ringkasan kanal</p>
+                      <div className="mt-3 space-y-2">
+                        {financingChannelSummary.length > 0 ? (
+                          financingChannelSummary.map((item) => (
+                            <div key={item.channel} className="flex items-center justify-between gap-3 text-xs font-bold">
+                              <span>{item.channel}</span>
+                              <span>{formatInteger(item.requests)} / {formatRupiah(item.amount)}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className={`text-xs font-semibold ${mutedClass}`}>Kanal pembiayaan belum terdeteksi.</p>
+                        )}
+                      </div>
+                      <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
+                         Keyakinan: {hackathonFinancingReadiness.confidence?.level ?? "terbatas"}. {publicSetupMessage(hackathonFinancingReadiness.freshness?.caveat, "Catatan sumber perlu dicek operator.")}
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      {financingChecklist.map((item) => (
+                        <div key={item.id} className={`rounded-[12px] border p-3 ${rowClass}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-black">{item.title}</p>
+                            <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
+                              {item.status}
+                            </span>
+                          </div>
+                          <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{item.nextAction}</p>
+                          <p className={`mt-2 text-[11px] font-bold leading-5 ${mutedClass}`}>{item.caveat}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className={`mt-4 rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                Kesiapan pembiayaan belum mengirim agregat.
+              </p>
+            )}
+          </div>
+
+          {hackathonSummary?.dataQualityFlags.length ? (
+            <div className="grid gap-3 md:grid-cols-2">
               {hackathonSummary.dataQualityFlags.slice(0, 4).map((flag) => (
                 <div key={flag} className={`rounded-[12px] border p-3 text-sm font-semibold leading-6 ${alertRowClass}`}>
                   {flag}
                 </div>
               ))}
             </div>
-          </>
-        ) : (
-          <div className={`mt-5 rounded-[14px] border p-4 text-sm font-semibold leading-6 ${hackathonStatus === "error" ? dangerRowClass : alertRowClass}`}>
-            <p className="font-black">
-              {hackathonStatus === "loading"
-                ? "Memuat lima endpoint hackathon."
-                : hackathonStatus === "partial"
-                  ? "Sebagian endpoint hackathon berhasil."
-                : hackathonStatus === "unavailable"
-                  ? "Shared DB missing atau belum configured."
-                  : "Shared DB evidence gagal dimuat."}
-            </p>
-            <p className={`mt-2 ${mutedClass}`}>
-              {hackathonStatus === "loading"
-                ? "Panel tidak menampilkan angka sampai endpoint mengembalikan payload."
-                : hackathonError || "Tidak ada fallback angka demo untuk evidence hackathon."}
-            </p>
-          </div>
-        )}
-      </article>
+          ) : null}
+        </section>
+      ) : null}
 
-      <div className="xl:col-span-2 grid gap-5">
-        <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">
-                Dashboard shared DB aggregate
-              </p>
-              <h2 className="mt-2 text-xl font-black">Produk, wilayah, pembiayaan, dan transaksi dari shared DB.</h2>
-              <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
-                Data di bawah datang dari payload `/api/dashboard.hackathonSharedDb`, dibaca server-side sebagai agregat read-only. Tidak ada NIK, telepon, alamat, raw dokumen, foto, atau buyer bernama yang dipilih.
-              </p>
+      {dataTab === "shared" ? (
+        <div className="grid gap-5">
+          <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">
+                  Agregat eksplorasi
+                </p>
+                <h2 className="mt-2 text-xl font-black">Produk, wilayah, pembiayaan, dan transaksi dari sumber eksplorasi.</h2>
+            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+              Data di bawah datang dari agregat eksplorasi yang dibaca server sebagai ringkasan. Tidak ada NIK, telepon, alamat, dokumen mentah, foto, atau buyer bernama yang dipilih.
+                </p>
+              </div>
+              <StatusBadge tone={hackathonSharedDb?.status === "ready" ? "success" : "warning"}>
+                {dashboardSharedDbStatusLabel}
+              </StatusBadge>
             </div>
-            <StatusBadge tone={hackathonSharedDb?.status === "ready" ? "success" : "warning"}>
-              {dashboardSharedDbStatusLabel}
-            </StatusBadge>
+            <div className="mt-5">
+              <MiniBarChart title="Ringkasan agregat" data={sharedDbChartData} mutedClass={mutedClass} innerClass={innerClass} />
+            </div>
+            {hackathonSharedDb?.schemaScope?.description ? (
+              <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${innerClass}`}>
+                {publicSetupMessage(
+                  hackathonSharedDb.schemaScope.description,
+                  "Sumber eksplorasi dipakai sebagai bahan terbatas, bukan referensi utama SIMKOPDES atau data operasional resmi.",
+                )}
+              </p>
+            ) : null}
+            {hackathonSharedDb?.error ? (
+              <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${dangerRowClass}`}>
+                Agregat eksplorasi perlu dicek di server. Dashboard utama tetap memakai data operasional milik tim.
+              </p>
+            ) : null}
+          </article>
+
+          <div className="grid gap-5 2xl:grid-cols-2">
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Kategori produk eksplorasi"
+              description="Produk mentah dikelompokkan menjadi kategori luas agar tidak menjadi klaim buyer/offtaker bernama."
+              sourceLabel={`Sumber: agregat produk eksplorasi - ID tim ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`}
+              rows={dashboardSharedProductRows}
+              columns={sharedProductColumns}
+              rowKey={(item) => item.productCategory}
+              getSearchText={(item) => [item.productCategory, item.rows, item.cooperatives, item.inventoryRows, item.source, item.caveat].join(" ")}
+              filters={createValueFilters(dashboardSharedProductRows, (item) => item.productCategory)}
+              filterLabel="Kategori"
+              emptyTitle="Agregat produk belum tersedia."
+              emptyBody={publicSetupMessage(hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message, "Agregat produk belum aktif di server ini.")}
+              pageSize={5}
+              tableMinWidth={860}
+            />
+
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Area dan komoditas eksplorasi"
+              description="Sinyal wilayah/provinsi dipakai untuk prioritas eksplorasi peta dan skor peluang."
+              sourceLabel="Sumber: agregat wilayah dan komoditas eksplorasi"
+              rows={dashboardSharedAreaRows}
+              columns={sharedAreaColumns}
+              rowKey={(item) => item.province}
+              getSearchText={(item) => [item.province, item.regencies, item.districts, item.villages, item.commodityRows, item.commodities, item.cooperatives, item.potentialValue].join(" ")}
+              filters={createValueFilters(dashboardSharedAreaRows, (item) => item.province)}
+              filterLabel="Provinsi"
+              emptyTitle="Agregat wilayah belum tersedia."
+              emptyBody={publicSetupMessage(hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message, "Agregat wilayah belum aktif di server ini.")}
+              pageSize={5}
+              tableMinWidth={880}
+            />
+
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Pembiayaan agregat"
+              description="Dipakai sebagai kesiapan dan guardrail analis bisnis, bukan persetujuan atau skor kredit otomatis."
+              sourceLabel="Sumber: agregat kesiapan pembiayaan"
+              rows={dashboardSharedFinancingRows}
+              columns={sharedFinancingColumns}
+              rowKey={(item) => `${item.status}-${item.channel}`}
+              getSearchText={(item) => [item.status, item.channel, item.requests, item.amount, item.source, item.caveat].join(" ")}
+              filters={[
+                ...createValueFilters(dashboardSharedFinancingRows, (item) => item.status).map((filter) => ({
+                  ...filter,
+                  value: `status:${filter.value}`,
+                  label: `Status: ${filter.label}`,
+                })),
+                ...createValueFilters(dashboardSharedFinancingRows, (item) => item.channel).map((filter) => ({
+                  ...filter,
+                  value: `channel:${filter.value}`,
+                  label: `Kanal: ${filter.label}`,
+                })),
+              ]}
+              filterLabel="Status/kanal"
+              emptyTitle="Agregat pembiayaan belum tersedia."
+              emptyBody={publicSetupMessage(hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message, "Agregat pembiayaan belum aktif di server ini.")}
+              pageSize={5}
+              tableMinWidth={860}
+            />
+
+            <ManagedTablePanel
+              panelClass={panelClass}
+              innerClass={innerClass}
+              mutedClass={mutedClass}
+              title="Transaksi agregat"
+              description="Dipakai sebagai proxy permintaan/arus kas sampel, bukan permintaan live atau data pelanggan."
+              sourceLabel="Sumber: agregat transaksi"
+              rows={dashboardSharedTransactionRows}
+              columns={sharedTransactionColumns}
+              rowKey={(item) => `${item.status}-${item.channel}`}
+              getSearchText={(item) => [item.status, item.channel, item.transactions, item.amount, item.cooperatives, item.source, item.caveat].join(" ")}
+              filters={[
+                ...createValueFilters(dashboardSharedTransactionRows, (item) => item.status).map((filter) => ({
+                  ...filter,
+                  value: `status:${filter.value}`,
+                  label: `Status: ${filter.label}`,
+                })),
+                ...createValueFilters(dashboardSharedTransactionRows, (item) => item.channel).map((filter) => ({
+                  ...filter,
+                  value: `channel:${filter.value}`,
+                  label: `Kanal: ${filter.label}`,
+                })),
+              ]}
+              filterLabel="Status/kanal"
+              emptyTitle="Agregat transaksi belum tersedia."
+              emptyBody={publicSetupMessage(hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message, "Agregat transaksi belum aktif di server ini.")}
+              pageSize={5}
+              tableMinWidth={860}
+            />
           </div>
-          {hackathonSharedDb?.schemaScope?.description ? (
-            <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${innerClass}`}>
-              {hackathonSharedDb.schemaScope.description}
-            </p>
-          ) : null}
-          {hackathonSharedDb?.error ? (
-            <p className={`mt-3 rounded-[12px] border px-3 py-2 text-xs font-semibold leading-5 ${dangerRowClass}`}>
-              {hackathonSharedDb.error.code}: aggregate query perlu dicek di server. Dashboard utama tetap memakai data app-owned Postgres.
-            </p>
-          ) : null}
-        </article>
+        </div>
+      ) : null}
 
-        <div className="grid gap-5 2xl:grid-cols-2">
+      {dataTab === "queue" ? (
+        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <ManagedTablePanel
             panelClass={panelClass}
             innerClass={innerClass}
             mutedClass={mutedClass}
-            title="Kategori produk shared DB"
-            description="Produk raw dikelompokkan menjadi kategori luas agar tidak menjadi klaim buyer/offtaker bernama."
-            sourceLabel={`Source: /api/dashboard.hackathonSharedDb.tables.productRows - ${hackathonSharedDb?.tablePrefix ?? "anak_sarengklek_"}`}
-            rows={dashboardSharedProductRows}
-            columns={sharedProductColumns}
-            rowKey={(item) => item.productCategory}
-            getSearchText={(item) => [item.productCategory, item.rows, item.cooperatives, item.inventoryRows, item.source, item.caveat].join(" ")}
-            filters={createValueFilters(dashboardSharedProductRows, (item) => item.productCategory)}
-            filterLabel="Kategori"
-            emptyTitle="Agregat produk belum tersedia."
-            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows produk."}
-            pageSize={5}
-            tableMinWidth={860}
-          />
-
-          <ManagedTablePanel
-            panelClass={panelClass}
-            innerClass={innerClass}
-            mutedClass={mutedClass}
-            title="Area dan komoditas shared DB"
-            description="Sinyal wilayah/provinsi dipakai untuk prioritas eksplorasi peta dan opportunity score."
-            sourceLabel="Source: referensi_wilayah + referensi_komoditas_desa aggregate"
-            rows={dashboardSharedAreaRows}
-            columns={sharedAreaColumns}
-            rowKey={(item) => item.province}
-            getSearchText={(item) => [item.province, item.regencies, item.districts, item.villages, item.commodityRows, item.commodities, item.cooperatives, item.potentialValue].join(" ")}
-            filters={createValueFilters(dashboardSharedAreaRows, (item) => item.province)}
-            filterLabel="Provinsi"
-            emptyTitle="Agregat wilayah belum tersedia."
-            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows wilayah."}
+            title="Meja verifikasi data warga"
+            description="Antrean dari WhatsApp, voice note, dan input operator dibaca sebagai catatan terstruktur sebelum masuk stok, pembiayaan, atau pasar."
+            sourceLabel={`${completed}/${filteredQueue.length} selesai - hanya ID dan sumber, tanpa PII terlihat`}
+            rows={filteredQueue}
+            columns={lumbungQueueColumns}
+            rowKey={(item) => item.id}
+            getSearchText={(item) => [item.id, item.source, item.module, item.summary, item.status].join(" ")}
+            filters={lumbungQueueFilters}
+            filterLabel="Status/modul"
+            emptyTitle="Belum ada antrean verifikasi."
+            emptyBody="Antrean akan muncul setelah input warga/operator masuk ke dashboard."
             pageSize={5}
             tableMinWidth={880}
+            rowClassName={(item) => (selected?.id === item.id ? "bg-[#D79A2B]/10" : "")}
           />
 
-          <ManagedTablePanel
-            panelClass={panelClass}
-            innerClass={innerClass}
-            mutedClass={mutedClass}
-            title="Pembiayaan aggregate"
-            description="Dipakai sebagai readiness dan business analyst guardrail, bukan approval atau credit scoring otomatis."
-            sourceLabel="Source: pengajuan_pembiayaan aggregate"
-            rows={dashboardSharedFinancingRows}
-            columns={sharedFinancingColumns}
-            rowKey={(item) => `${item.status}-${item.channel}`}
-            getSearchText={(item) => [item.status, item.channel, item.requests, item.amount, item.source, item.caveat].join(" ")}
-            filters={[
-              ...createValueFilters(dashboardSharedFinancingRows, (item) => item.status).map((filter) => ({
-                ...filter,
-                value: `status:${filter.value}`,
-                label: `Status: ${filter.label}`,
-              })),
-              ...createValueFilters(dashboardSharedFinancingRows, (item) => item.channel).map((filter) => ({
-                ...filter,
-                value: `channel:${filter.value}`,
-                label: `Kanal: ${filter.label}`,
-              })),
-            ]}
-            filterLabel="Status/kanal"
-            emptyTitle="Agregat pembiayaan belum tersedia."
-            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows pembiayaan."}
-            pageSize={5}
-            tableMinWidth={860}
-          />
-
-          <ManagedTablePanel
-            panelClass={panelClass}
-            innerClass={innerClass}
-            mutedClass={mutedClass}
-            title="Transaksi aggregate"
-            description="Dipakai sebagai demand/cashflow proxy sample, bukan live demand atau data pelanggan."
-            sourceLabel="Source: transaksi_penjualan aggregate"
-            rows={dashboardSharedTransactionRows}
-            columns={sharedTransactionColumns}
-            rowKey={(item) => `${item.status}-${item.channel}`}
-            getSearchText={(item) => [item.status, item.channel, item.transactions, item.amount, item.cooperatives, item.source, item.caveat].join(" ")}
-            filters={[
-              ...createValueFilters(dashboardSharedTransactionRows, (item) => item.status).map((filter) => ({
-                ...filter,
-                value: `status:${filter.value}`,
-                label: `Status: ${filter.label}`,
-              })),
-              ...createValueFilters(dashboardSharedTransactionRows, (item) => item.channel).map((filter) => ({
-                ...filter,
-                value: `channel:${filter.value}`,
-                label: `Kanal: ${filter.label}`,
-              })),
-            ]}
-            filterLabel="Status/kanal"
-            emptyTitle="Agregat transaksi belum tersedia."
-            emptyBody={hackathonSharedDb?.setup.message ?? hackathonSharedDb?.error?.message ?? "Shared DB belum mengirim rows transaksi."}
-            pageSize={5}
-            tableMinWidth={860}
-          />
-        </div>
-      </div>
-
-      <ManagedTablePanel
-        panelClass={panelClass}
-        innerClass={innerClass}
-        mutedClass={mutedClass}
-        title="Meja verifikasi data warga"
-        description="Queue dari WhatsApp, voice note, dan input operator dibaca sebagai catatan terstruktur sebelum masuk stok, pembiayaan, atau pasar."
-        sourceLabel={`${completed}/${filteredQueue.length} selesai - ID/source only, no visible PII`}
-        rows={filteredQueue}
-        columns={lumbungQueueColumns}
-        rowKey={(item) => item.id}
-        getSearchText={(item) => [item.id, item.source, item.module, item.summary, item.status].join(" ")}
-        filters={lumbungQueueFilters}
-        filterLabel="Status/modul"
-        emptyTitle="Belum ada queue verifikasi."
-        emptyBody="Queue akan muncul setelah input warga/operator masuk ke dashboard."
-        pageSize={5}
-        tableMinWidth={880}
-        rowClassName={(item) => (selected?.id === item.id ? "bg-[#D79A2B]/10" : "")}
-      />
-
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        {selected ? (
-          <>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-[#2F7D32]">Catatan terpilih</p>
-                <h3 className="mt-2 text-3xl font-black">{selected.id}</h3>
-              </div>
-              <span className={`rounded-[12px] border px-3 py-2 text-xs font-black ${innerClass}`}>
-                {selected.module}
-              </span>
-            </div>
-            <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-              <p className="text-sm font-black">Ringkasan masuk</p>
-              <p className={`mt-2 text-lg font-extrabold leading-7 ${mutedClass}`}>{selected.summary}</p>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {["Validasi warga", "Cek bukti", "Kunci modul"].map((step, index) => (
-                <div key={step} className={`rounded-[12px] border p-3 ${innerClass}`}>
-                  <p className="text-xs font-black text-[#D79A2B]">0{index + 1}</p>
-                  <p className="mt-2 text-sm font-black">{step}</p>
+          <article className={`rounded-[16px] border p-5 ${panelClass}`}>
+            {selected ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-[#2F7D32]">Catatan terpilih</p>
+                    <h3 className="mt-2 text-3xl font-black">{selected.id}</h3>
+                  </div>
+                  <span className={`rounded-[12px] border px-3 py-2 text-xs font-black ${innerClass}`}>
+                    {selected.module}
+                  </span>
                 </div>
-              ))}
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => askFarmer(selected.id)}
-                className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
-              >
-                Tanya warga
-              </button>
-              <button
-                type="button"
-                onClick={() => approveDraft(selected.id)}
-                className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Setujui data
-              </button>
-              <button
-                type="button"
-                onClick={() => openModule(selected.module)}
-                className="inline-flex justify-center rounded-[12px] bg-[#1D5D8F] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Buka modul
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
-            Pilih catatan dari daftar untuk melihat detail verifikasi.
-          </div>
-        )}
-      </article>
+                <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
+                  <p className="text-sm font-black">Ringkasan masuk</p>
+                  <p className={`mt-2 text-lg font-extrabold leading-7 ${mutedClass}`}>{selected.summary}</p>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {["Validasi warga", "Cek bukti", "Kunci modul"].map((step, index) => (
+                    <div key={step} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                      <p className="text-xs font-black text-[#D79A2B]">0{index + 1}</p>
+                      <p className="mt-2 text-sm font-black">{step}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => askFarmer(selected.id)}
+                    className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
+                  >
+                    Tanya warga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => approveDraft(selected.id)}
+                    className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+                  >
+                    Setujui data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openModule(selected.module)}
+                    className="inline-flex justify-center rounded-[12px] bg-[#1D5D8F] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+                  >
+                    Buka modul
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className={`rounded-[14px] border p-5 text-sm font-bold ${innerClass}`}>
+                Pilih catatan dari daftar untuk melihat detail verifikasi.
+              </div>
+            )}
+          </article>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -4858,11 +5106,11 @@ function GeraiPintarView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? `${item.name}: restock gagal.`, "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, `${item.name}: restock gagal.`), "error");
       return;
     }
     await reload();
-    setPanelMessage(`${item.name}: restock tersimpan di Postgres.`, "success");
+    setPanelMessage(`${item.name}: restock masuk ke rencana operasional.`, "success");
   }
 
   function exportSupplierOrder() {
@@ -4884,7 +5132,7 @@ function GeraiPintarView({
       toCsv(rows),
       "text/csv;charset=utf-8",
     );
-    setPanelMessage("Draft pesanan supplier diunduh dari data stok Postgres.", "success");
+    setPanelMessage("Draft pesanan supplier diunduh dari data stok operasional.", "success");
   }
 
   const geraiStockFilters: ManagedTableFilter<StockItem>[] = [
@@ -4950,7 +5198,7 @@ function GeraiPintarView({
           onClick={() =>
             requestConfirm({
               title: `Buat restock ${item.name}?`,
-              message: "Draft restock akan ditandai di Postgres untuk ditindaklanjuti petugas gerai.",
+              message: "Draft restock akan masuk ke rencana operasional untuk ditindaklanjuti petugas gerai.",
               confirmLabel: "Buat restock",
               onConfirm: () => requestRestock(item),
             })
@@ -4971,7 +5219,7 @@ function GeraiPintarView({
         mutedClass={mutedClass}
         title="Rak gerai dan batas restock"
         description="Operator gerai melihat stok harian, status batas minimum, dan membuat draft pembelian kolektif."
-        sourceLabel="Source: /api/dashboard stocks"
+            sourceLabel="Sumber: stok data operasional"
         rows={geraiItems}
         columns={geraiStockColumns}
         rowKey={(item) => item.id}
@@ -5059,7 +5307,7 @@ function StokLogistikView({
       toCsv(rows),
       "text/csv;charset=utf-8",
     );
-    setPanelMessage("Manifest logistik diunduh dari queue dan stok Postgres.", "success");
+    setPanelMessage("Manifest logistik diunduh dari antrean dan stok operasional.", "success");
   }
 
   const logisticsQueueFilters: ManagedTableFilter<QueueItem>[] = [
@@ -5166,12 +5414,12 @@ function StokLogistikView({
     ...createValueFilters(stockLedger, (item) => item.movementType).map((filter) => ({
       ...filter,
       value: `move:${filter.value}`,
-      label: `Movement: ${filter.label}`,
+      label: `Pergerakan: ${filter.label}`,
     })),
     ...createValueFilters(stockLedger, (item) => item.readinessStatus).map((filter) => ({
       ...filter,
       value: `readiness:${filter.value}`,
-      label: `Readiness: ${filter.label}`,
+      label: `Kesiapan: ${filter.label}`,
     })),
   ];
   const ledgerColumns: ManagedTableColumn<StockLedgerEntry>[] = [
@@ -5187,22 +5435,22 @@ function StokLogistikView({
     },
     {
       key: "movement",
-      heading: "Movement",
+      heading: "Pergerakan",
       render: (entry) => <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">{entry.movementType}</span>,
     },
     {
       key: "quantity",
-      heading: "Qty",
+      heading: "Jumlah",
       render: (entry) => <span className="font-mono text-xs font-black">{formatInteger(entry.quantity)} {entry.unitLabel}</span>,
     },
     {
       key: "readiness",
-      heading: "Readiness",
+      heading: "Kesiapan",
       render: (entry) => <span className="text-sm font-black text-[#D79A2B]">{entry.readinessStatus}</span>,
     },
     {
       key: "evidence",
-      heading: "Evidence",
+      heading: "Bukti",
       render: (entry) => <span className={`text-xs font-semibold ${mutedClass}`}>{entry.evidenceRef}</span>,
     },
   ];
@@ -5215,13 +5463,13 @@ function StokLogistikView({
     ...createValueFilters(mediaEvidence, (item) => item.mediaType).map((filter) => ({
       ...filter,
       value: `type:${filter.value}`,
-      label: `Type: ${filter.label}`,
+      label: `Tipe: ${filter.label}`,
     })),
   ];
   const mediaColumns: ManagedTableColumn<MediaEvidence>[] = [
     {
       key: "label",
-      heading: "Evidence",
+      heading: "Bukti",
       render: (item) => (
         <div>
           <p className="font-black">{item.redactedLabel}</p>
@@ -5231,7 +5479,7 @@ function StokLogistikView({
     },
     {
       key: "record",
-      heading: "Record",
+      heading: "Catatan",
       render: (item) => (
         <div>
           <p className="font-mono text-xs font-black">{item.relatedRecordId}</p>
@@ -5259,15 +5507,15 @@ function StokLogistikView({
         mutedClass={mutedClass}
         title="Pickup dan gudang"
         description="Modul ini memisahkan permintaan pickup dari stok gudang agar operator tahu barang mana yang bergerak hari ini."
-        sourceLabel="Queue memakai record ID/source, bukan data pribadi warga."
+        sourceLabel="Antrean memakai ID/sumber record, bukan data pribadi warga."
         rows={logisticsQueue}
         columns={logisticsQueueColumns}
         rowKey={(item) => item.id}
         getSearchText={(item) => [item.id, item.source, item.summary, item.status, item.module].join(" ")}
         filters={logisticsQueueFilters}
         filterLabel="Pickup/status"
-        emptyTitle="Belum ada queue logistik."
-        emptyBody="Permintaan pickup akan muncul setelah queue Stok dan Logistik tersedia."
+        emptyTitle="Belum ada antrean logistik."
+        emptyBody="Permintaan pickup akan muncul setelah antrean Stok dan Logistik tersedia."
         pageSize={5}
         tableMinWidth={860}
       />
@@ -5279,7 +5527,7 @@ function StokLogistikView({
           mutedClass={mutedClass}
           title="Stok gudang"
           description="Kapasitas gudang mini ditampilkan sebagai tabel stok operasional, bukan peta dekoratif."
-          sourceLabel="Source: /api/dashboard stocks"
+          sourceLabel="Sumber: stok data operasional"
           rows={warehouseItems}
           columns={warehouseColumns}
           rowKey={(item) => item.id}
@@ -5296,9 +5544,9 @@ function StokLogistikView({
           panelClass={panelClass}
           innerClass={innerClass}
           mutedClass={mutedClass}
-          title="Stock ledger"
-          description="Barang masuk/keluar ditelusuri dengan quantity, readiness, dan evidence_ref."
-          sourceLabel="Source: /api/dashboard stockLedger"
+          title="Riwayat stok"
+          description="Barang masuk/keluar ditelusuri dengan jumlah, kesiapan, dan referensi bukti."
+          sourceLabel="Sumber: ledger stok operasional"
           rows={stockLedger}
           columns={ledgerColumns}
           rowKey={(entry) => entry.id}
@@ -5306,9 +5554,9 @@ function StokLogistikView({
             [entry.id, entry.stockName, entry.movementType, entry.quantity, entry.unitLabel, entry.reason, entry.evidenceRef, entry.readinessStatus].join(" ")
           }
           filters={ledgerFilters}
-          filterLabel="Movement/readiness"
-          emptyTitle="Belum ada ledger stok."
-          emptyBody="Ledger akan muncul setelah tabel prefixed mengirim movement stok."
+          filterLabel="Pergerakan/kesiapan"
+          emptyTitle="Belum ada riwayat stok."
+          emptyBody="Riwayat akan muncul setelah tabel data tim mengirim pergerakan stok."
           pageSize={5}
           tableMinWidth={840}
         />
@@ -5317,9 +5565,9 @@ function StokLogistikView({
           panelClass={panelClass}
           innerClass={innerClass}
           mutedClass={mutedClass}
-          title="Media evidence metadata"
-          description="Tabel hanya menampilkan label redacted dan metadata, bukan raw media publik."
-          sourceLabel="Source: /api/dashboard mediaEvidence"
+          title="Metadata bukti media"
+          description="Tabel hanya menampilkan label tersaring dan metadata, bukan media mentah publik."
+          sourceLabel="Sumber: metadata bukti operasional"
           rows={mediaEvidence}
           columns={mediaColumns}
           rowKey={(item) => item.id}
@@ -5327,9 +5575,9 @@ function StokLogistikView({
             [item.id, item.relatedRecordType, item.relatedRecordId, item.mediaType, item.redactedLabel, item.caption, item.verificationStatus, item.sourceLabel].join(" ")
           }
           filters={mediaFilters}
-          filterLabel="Status/type"
-          emptyTitle="Belum ada media evidence."
-          emptyBody="Metadata bukti akan muncul setelah evidence_ref ditautkan."
+          filterLabel="Status/tipe"
+          emptyTitle="Belum ada bukti media."
+          emptyBody="Metadata bukti akan muncul setelah referensi bukti ditautkan."
           pageSize={5}
           tableMinWidth={820}
         />
@@ -5378,30 +5626,30 @@ function PasarMitraView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? `${buyer.buyer}: readiness gagal diperbarui.`, "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, `${buyer.buyer}: kesiapan gagal diperbarui.`), "error");
       return;
     }
     await reload();
-    setPanelMessage(`${buyer.buyer}: readiness tersimpan di Postgres.`, "success");
+    setPanelMessage(`${buyer.buyer}: kesiapan tersimpan di catatan operasional.`, "success");
   }
 
   async function createBuyerScript(buyer: BuyerMatch) {
     const script = [
       `Halo calon mitra, kami dari koperasi ingin memvalidasi minat untuk kebutuhan ${buyer.need}.`,
       `Konteks match: ${buyer.reason}`,
-      "Catatan: draft ini berbasis archetype buyer. Nama counterparty, grade/kualitas, dan jadwal pengiriman harus diverifikasi pengurus sebelum ada komitmen transaksi.",
+      "Catatan: draft ini berbasis tipe kebutuhan buyer. Nama pihak mitra, grade/kualitas, dan jadwal pengiriman harus diverifikasi pengurus sebelum ada komitmen transaksi.",
     ].join("\n");
 
     try {
       await navigator.clipboard.writeText(script);
-      setPanelMessage(`${buyer.buyer}: draft outreach disalin ke clipboard.`, "success");
+      setPanelMessage(`${buyer.buyer}: draft kontak buyer disalin ke clipboard.`, "success");
     } catch {
       downloadTextFile(
         `lumbung-bersama-script-buyer-${buyer.id}.txt`,
         script,
         "text/plain;charset=utf-8",
       );
-      setPanelMessage(`${buyer.buyer}: clipboard tidak tersedia, draft outreach diunduh sebagai TXT.`, "warning");
+      setPanelMessage(`${buyer.buyer}: clipboard tidak tersedia, draft kontak buyer diunduh sebagai TXT.`, "warning");
     }
   }
 
@@ -5425,7 +5673,7 @@ function PasarMitraView({
   const buyerColumns: ManagedTableColumn<BuyerMatch>[] = [
     {
       key: "buyer",
-      heading: "Archetype",
+      heading: "Tipe buyer",
       render: (buyer) => (
         <div>
           <p className="font-black">{buyer.buyer}</p>
@@ -5435,12 +5683,12 @@ function PasarMitraView({
     },
     {
       key: "need",
-      heading: "Need",
+      heading: "Kebutuhan",
       render: (buyer) => <span className="text-sm font-semibold">{buyer.need}</span>,
     },
     {
       key: "score",
-      heading: "Score",
+      heading: "Skor",
       render: (buyer) => <span className="font-mono text-sm font-black text-[#2F7D32]">{buyer.matchScore}%</span>,
     },
     {
@@ -5450,7 +5698,7 @@ function PasarMitraView({
     },
     {
       key: "evidence",
-      heading: "Evidence",
+      heading: "Bukti",
       render: (buyer) => <p className={`max-w-[320px] text-xs font-semibold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(buyer)}</p>,
     },
     {
@@ -5496,7 +5744,7 @@ function PasarMitraView({
     },
     {
       key: "archetype",
-      heading: "Archetype",
+      heading: "Tipe buyer",
       render: (requirement) => <span className="text-sm font-semibold">{requirement.buyerArchetype}</span>,
     },
     {
@@ -5527,17 +5775,17 @@ function PasarMitraView({
           panelClass={panelClass}
           innerClass={innerClass}
           mutedClass={mutedClass}
-          title="Matching buyer yang bisa diaudit"
-          description="Sistem memberi alasan match dan status risiko memakai archetype. Nama counterparty dan kontak buyer tetap harus diverifikasi pengurus agar tidak ada janji penjualan palsu."
-          sourceLabel="Buyer archetype only - no named buyer claim"
+          title="Kecocokan buyer yang bisa diaudit"
+          description="Sistem memberi alasan kecocokan dan status risiko memakai tipe kebutuhan buyer. Nama pihak mitra dan kontak buyer tetap harus diverifikasi pengurus agar tidak ada janji penjualan palsu."
+          sourceLabel="Hanya tipe kebutuhan buyer - tanpa klaim buyer bernama"
           rows={buyers}
           columns={buyerColumns}
           rowKey={(buyer) => buyer.id}
           getSearchText={(buyer) => [buyer.id, buyer.buyer, buyer.need, buyer.status, buyer.reason, buyerEvidenceLabel(buyer)].join(" ")}
           filters={buyerFilters}
           filterLabel="Status"
-          emptyTitle="Belum ada match buyer."
-          emptyBody="Match akan muncul setelah requirement dan stok punya readiness yang cukup."
+          emptyTitle="Belum ada kecocokan buyer."
+          emptyBody="Kecocokan akan muncul setelah syarat buyer dan stok punya kesiapan yang cukup."
           pageSize={5}
           tableMinWidth={980}
           rowClassName={(buyer) => (selected?.id === buyer.id ? "bg-[#D79A2B]/10" : "")}
@@ -5547,9 +5795,9 @@ function PasarMitraView({
           panelClass={panelClass}
           innerClass={innerClass}
           mutedClass={mutedClass}
-          title="Buyer requirements"
-          description="Requirement operasional ditampilkan sebagai kebutuhan archetype, bukan buyer bernama atau komitmen permintaan live."
-          sourceLabel="Source: /api/dashboard buyerRequirements"
+          title="Syarat buyer"
+          description="Syarat operasional ditampilkan sebagai tipe kebutuhan buyer, bukan buyer bernama atau komitmen permintaan live."
+          sourceLabel="Sumber: requirement buyer operasional"
           rows={buyerRequirements}
           columns={requirementColumns}
           rowKey={(requirement) => requirement.id}
@@ -5569,8 +5817,8 @@ function PasarMitraView({
           }
           filters={requirementFilters}
           filterLabel="Status/unit"
-          emptyTitle="Belum ada requirement buyer."
-          emptyBody="Requirement akan muncul setelah kebutuhan buyer archetype tersimpan."
+          emptyTitle="Belum ada syarat buyer."
+          emptyBody="Syarat akan muncul setelah tipe kebutuhan buyer tersimpan."
           pageSize={5}
           tableMinWidth={920}
         />
@@ -5579,17 +5827,17 @@ function PasarMitraView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         {selected ? (
           <>
-            <p className="text-sm font-black text-[#D79A2B]">Detail readiness archetype</p>
+            <p className="text-sm font-black text-[#D79A2B]">Detail kesiapan tipe buyer</p>
             <h3 className="mt-2 text-3xl font-black">{selected.buyer}</h3>
             <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-              <p className="text-sm font-black">Alasan match</p>
+                <p className="text-sm font-black">Alasan kecocokan</p>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{selected.reason}</p>
               <p className="mt-4 text-sm font-black">Status: {selected.status}</p>
               <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(selected)}</p>
             </div>
             {selectedRequirement ? (
               <div className={`mt-4 rounded-[14px] border p-4 ${innerClass}`}>
-                <p className="text-sm font-black">Requirement operasional</p>
+                <p className="text-sm font-black">Syarat operasional</p>
                 <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
                   {formatInteger(selectedRequirement.requiredQuantity)} {selectedRequirement.unitLabel} - {selectedRequirement.qualitySpec}
                 </p>
@@ -5614,22 +5862,22 @@ function PasarMitraView({
                 type="button"
                 onClick={() =>
                   requestConfirm({
-                    title: `Setujui readiness ${selected.buyer}?`,
-                    message: "Status match akan ditandai siap review pengurus. Ini bukan komitmen penjualan dan bukan bukti buyer bernama.",
-                    confirmLabel: "Setujui readiness",
+                    title: `Setujui kesiapan ${selected.buyer}?`,
+                    message: "Status kecocokan akan ditandai siap review pengurus. Ini bukan komitmen penjualan dan bukan bukti buyer bernama.",
+                    confirmLabel: "Setujui kesiapan",
                     onConfirm: () => approveBuyer(selected),
                   })
                 }
                 className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
               >
-                Setujui readiness
+                Setujui kesiapan
               </button>
               <button
                 type="button"
                 onClick={() => createBuyerScript(selected)}
                 className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
               >
-                Buat draft outreach
+                Buat draft kontak buyer
               </button>
             </div>
           </>
@@ -5659,11 +5907,11 @@ function SimpanPinjamView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? `${request.id}: review gagal.`, "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, `${request.id}: review gagal.`), "error");
       return;
     }
     await reload();
-    setPanelMessage(`${request.id}: paket komite tersimpan di Postgres.`, "success");
+    setPanelMessage(`${request.id}: paket komite tersimpan di catatan operasional.`, "success");
   }
 
   function exportCommitteeAgenda() {
@@ -5674,7 +5922,7 @@ function SimpanPinjamView({
       "2. Review pengajuan produktif anggota.",
       ...finance.map(
         (request, index) =>
-          `${index + 3}. ${request.id} - ${formatRupiah(request.amount)} - ${request.purpose} - Risk flag: ${request.risk}.`,
+          `${index + 3}. ${request.id} - ${formatRupiah(request.amount)} - ${request.purpose} - Catatan risiko: ${request.risk}.`,
       ),
       `${finance.length + 3}. Tetapkan keputusan manual, tenor, jaminan bila perlu, dan catatan follow-up.`,
       `${finance.length + 4}. Simpan bukti rapat dan tanda tangan pengurus.`,
@@ -5686,7 +5934,7 @@ function SimpanPinjamView({
       agenda,
       "text/plain;charset=utf-8",
     );
-    setPanelMessage("Agenda rapat komite diunduh sebagai TXT dari pengajuan Postgres.", "success");
+    setPanelMessage("Agenda rapat komite diunduh sebagai TXT dari pengajuan operasional.", "success");
   }
 
   const financeFilters = [
@@ -5698,7 +5946,7 @@ function SimpanPinjamView({
     ...createValueFilters(finance, (request) => request.risk).map((filter) => ({
       ...filter,
       value: `risk:${filter.value}`,
-      label: `Risk: ${filter.label}`,
+      label: `Risiko: ${filter.label}`,
     })),
   ];
   const financeColumns: ManagedTableColumn<FinanceRequest>[] = [
@@ -5714,12 +5962,12 @@ function SimpanPinjamView({
     },
     {
       key: "amount",
-      heading: "Amount",
+      heading: "Nilai",
       render: (request) => <span className="font-mono text-xs font-black text-[#D79A2B]">{formatRupiah(request.amount)}</span>,
     },
     {
       key: "risk",
-      heading: "Risk",
+      heading: "Risiko",
       render: (request) => <span className="text-sm font-black text-[#C92A2A]">{request.risk}</span>,
     },
     {
@@ -5733,7 +5981,7 @@ function SimpanPinjamView({
     },
     {
       key: "reviewed",
-      heading: "Reviewed",
+      heading: "Direview",
       render: (request) => <span className={`text-xs font-semibold ${mutedClass}`}>{request.reviewedAt ?? "Belum review"}</span>,
     },
     {
@@ -5747,7 +5995,7 @@ function SimpanPinjamView({
           onClick={() =>
             requestConfirm({
               title: `Siapkan paket ${request.id}?`,
-              message: "Pengajuan akan ditandai siap review komite. Ini bukan approval pinjaman otomatis.",
+              message: "Pengajuan akan ditandai siap review komite. Ini bukan persetujuan pinjaman otomatis.",
               confirmLabel: "Siapkan paket",
               onConfirm: () => reviewFinance(request),
             })
@@ -5768,15 +6016,15 @@ function SimpanPinjamView({
         mutedClass={mutedClass}
         title="Pembiayaan aman berbasis komite"
         description="Agent hanya menyiapkan catatan risiko. Keputusan, tenor, dan persetujuan tetap di komite koperasi."
-        sourceLabel="Readiness only - no automatic loan approval"
+        sourceLabel="Hanya kesiapan - tidak ada persetujuan pinjaman otomatis"
         rows={finance}
         columns={financeColumns}
         rowKey={(request) => request.id}
         getSearchText={(request) => [request.id, request.purpose, request.amount, request.risk, request.status, request.reviewedAt ?? ""].join(" ")}
         filters={financeFilters}
-        filterLabel="Status/risk"
+        filterLabel="Status/risiko"
         emptyTitle="Belum ada pengajuan pembiayaan."
-        emptyBody="Pengajuan produktif akan muncul setelah finance request tersimpan."
+        emptyBody="Pengajuan produktif akan muncul setelah catatan pembiayaan tersimpan."
         pageSize={6}
         tableMinWidth={980}
       />
@@ -5784,7 +6032,7 @@ function SimpanPinjamView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h3 className="text-xl font-black">Checklist anti-pembiayaan asal setuju</h3>
         <div className="mt-5 space-y-3">
-          {["Tujuan produktif jelas", "Kemampuan bayar diverifikasi", "Tidak ada approval otomatis", "Audit trail komite tersimpan"].map((item) => (
+          {["Tujuan produktif jelas", "Kemampuan bayar diverifikasi", "Tidak ada persetujuan otomatis", "Audit trail komite tersimpan"].map((item) => (
             <div key={item} className={`flex items-center gap-3 rounded-[12px] border p-3 ${innerClass}`}>
               <CheckCircle2 size={18} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
               <span className="text-sm font-extrabold">{item}</span>
@@ -5820,7 +6068,7 @@ function WhatsAppView({
   const [conversation, setConversation] = useState([
     {
       from: "bot",
-      text: "Silakan pilih intent atau tulis pesan warga. Respons akan dicatat ke Postgres.",
+      text: "Silakan pilih intent atau tulis pesan warga. Respons akan dicatat ke meja verifikasi.",
     },
   ]);
   const selectedIntent = waIntents.find((intent) => intent.id === selectedIntentId) ?? waIntents[0];
@@ -5848,7 +6096,7 @@ function WhatsAppView({
     const payload = await response.json().catch(() => ({}));
     setWaLoading("");
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? "Pesan gagal diproses.", "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Pesan gagal diproses."), "error");
       return;
     }
     const saved = payload.message as { botReply: string; module: string; intent: string };
@@ -5857,7 +6105,7 @@ function WhatsAppView({
       { from: "warga", text: trimmed },
       { from: "bot", text: `${saved.botReply} Modul: ${saved.module}.` },
     ]);
-    setPanelMessage(`Pesan WA tersimpan di Postgres sebagai ${saved.intent}.`, "success");
+    setPanelMessage(`Pesan WA masuk ke meja verifikasi sebagai ${saved.intent}.`, "success");
     setMessage("");
   }
 
@@ -5878,7 +6126,7 @@ function WhatsAppView({
     setWaLoading("");
 
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? "Pengiriman WhatsApp live gagal.", "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Pengiriman WhatsApp live gagal."), "error");
       return;
     }
 
@@ -5886,7 +6134,7 @@ function WhatsAppView({
       ...current,
       { from: "bot", text: `Pesan outbound terkirim ke ${recipient}: ${trimmed}` },
     ]);
-    setPanelMessage("Pesan outbound dikirim lewat WhatsApp Graph API dan dicatat di Postgres.", "success");
+    setPanelMessage("Pesan outbound dikirim lewat kanal WhatsApp resmi dan dicatat di meja verifikasi.", "success");
     setMessage("");
   }
 
@@ -5895,7 +6143,7 @@ function WhatsAppView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h2 className="text-2xl font-black">WA Center</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Pesan warga, voice-to-data, dan routing modul. Kirim WhatsApp live membutuhkan env WhatsApp Business.
+          Pesan warga, voice-to-data, dan routing modul. Kirim WhatsApp live membutuhkan aktivasi kanal resmi.
         </p>
         <div className="mt-5 space-y-2">
           {waIntents.map((intent) => (
@@ -5975,7 +6223,7 @@ function WhatsAppView({
               onClick={() =>
                 requestConfirm({
                   title: "Kirim WhatsApp live?",
-                  message: "Pesan akan dikirim ke nomor tujuan melalui WhatsApp Graph API bila env produksi sudah aktif.",
+                  message: "Pesan akan dikirim ke nomor tujuan melalui kanal WhatsApp resmi bila aktivasi produksi sudah aktif.",
                   confirmLabel: "Kirim live",
                   onConfirm: sendOutbound,
                 })
@@ -6022,7 +6270,7 @@ function AgentsView({
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message ?? payload.error ?? `Agent API gagal (${response.status})`);
+        throw new Error(publicSetupMessage(payload.message ?? payload.error, `Agent API gagal (${response.status})`));
       }
       const resultPayload = payload as AgentRunResult;
       setResult(resultPayload);
@@ -6042,7 +6290,7 @@ function AgentsView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h2 className="text-2xl font-black">Agent Center</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Jalankan agent satu per satu terhadap record Postgres. Output selalu butuh approval manusia sebelum data dikunci.
+          Jalankan agent satu per satu terhadap record operasional. Output selalu butuh persetujuan manusia sebelum data dikunci.
         </p>
         <label htmlFor="agent-record" className={`mt-5 block text-sm font-black ${mutedClass}`}>
           Record ID
@@ -6172,11 +6420,11 @@ function ReportsView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? `${section.title}: gagal diperbarui.`, "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, `${section.title}: gagal diperbarui.`), "error");
       return;
     }
     await reload();
-    setPanelMessage(`${section.title}: status laporan tersimpan di Postgres.`, "success");
+    setPanelMessage(`${section.title}: status laporan tersimpan di catatan operasional.`, "success");
   }
 
   async function toggleLock() {
@@ -6187,11 +6435,11 @@ function ReportsView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? "Lock laporan gagal diperbarui.", "error");
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Lock laporan gagal diperbarui."), "error");
       return;
     }
     await reload();
-    setPanelMessage(!locked ? "Laporan dikunci di Postgres." : "Lock laporan dibuka kembali.", "success");
+    setPanelMessage(!locked ? "Laporan dikunci untuk periode ini." : "Lock laporan dibuka kembali.", "success");
   }
 
   function exportReportCsv() {
@@ -6210,7 +6458,7 @@ function ReportsView({
           <div>
             <h2 className="text-2xl font-black">Laporan operasional</h2>
             <p className={`mt-2 max-w-3xl text-sm font-semibold leading-6 ${mutedClass}`}>
-              Pilih section, lock periode, lalu export. State laporan tersimpan di Postgres.
+              Pilih section, lock periode, lalu export. Status laporan tersimpan di catatan operasional.
             </p>
           </div>
           <StatusBadge tone={locked ? "success" : "warning"}>{locked ? "Terkunci" : "Draft"}</StatusBadge>
@@ -6297,27 +6545,28 @@ function IntegrationView({
     setError("");
     try {
       const response = await fetch("/api/health");
-      if (!response.ok) throw new Error(`Health API gagal (${response.status})`);
+      if (!response.ok) throw new Error(`Cek koneksi gagal (${response.status})`);
       const payload = (await response.json()) as HealthPayload;
       setHealth(payload);
       const configured = payload.integrations?.filter((item) => item.configured).length ?? 0;
       const total = payload.integrations?.length ?? 0;
-      setPanelMessage(`Health check selesai: ${configured}/${total} integrasi configured, mode ${payload.mode ?? "setup-required"}.`, "success");
+      setPanelMessage(`Cek koneksi selesai: ${configured}/${total} integrasi aktif.`, "success");
     } catch (healthError) {
-      const message = healthError instanceof Error ? healthError.message : "Health API tidak merespons.";
+      const message = healthError instanceof Error ? healthError.message : "Cek koneksi tidak merespons.";
       setError(message);
       setPanelMessage(message, "error");
     } finally {
       setChecking(false);
     }
   }
+  const healthModeLabel = health?.mode ? publicReadinessLabel(health.mode) : "Belum dicek";
 
   return (
     <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">Readiness integrasi</h2>
+        <h2 className="text-2xl font-black">Kesiapan integrasi</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Semua koneksi eksternal env-gated. Kalau env belum ada, dashboard wajib menjelaskan statusnya dan tidak mengklaim live.
+          Semua koneksi eksternal harus diberi status jelas. Jika konfigurasi belum aktif, dashboard tidak mengklaim koneksi live.
         </p>
         <button
           type="button"
@@ -6331,17 +6580,13 @@ function IntegrationView({
           ) : (
             <RefreshCcw size={17} strokeWidth={2.2} aria-hidden="true" />
           )}
-          Cek API health
+          Cek koneksi
         </button>
         <div className={`mt-5 rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass}`}>
-          <p className="font-black">Panduan setup env</p>
-          <p className={`mt-2 ${mutedClass}`}>Buka dokumen checkpoint:</p>
-          <code className="mt-2 block rounded-[10px] bg-black/10 px-3 py-2 text-xs">
-            docs/15-feature-audit-and-production-setup.md
-          </code>
-          <code className="mt-2 block rounded-[10px] bg-black/10 px-3 py-2 text-xs">
-            app/.env.example
-          </code>
+          <p className="font-black">Panduan aktivasi produksi</p>
+          <p className={`mt-2 ${mutedClass}`}>
+            Saat digunakan, tampilkan status integrasi di sini. Detail akses dan konfigurasi server dikelola operator teknis di luar UI juri.
+          </p>
         </div>
         {error ? (
           <div className="mt-5 rounded-[14px] border border-[#C92A2A] bg-[#FFE3E3] p-4 text-sm font-bold text-[#9B1C1C]">
@@ -6353,13 +6598,13 @@ function IntegrationView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-xl font-black">Matrix env</h3>
+            <h3 className="text-xl font-black">Matrix koneksi</h3>
             <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
               {health?.checkedAt ? `Terakhir dicek: ${new Date(health.checkedAt).toLocaleString("id-ID")}` : "Belum dicek dari dashboard."}
             </p>
           </div>
-          <StatusBadge tone={health?.mode === "postgres-ready" ? "success" : "warning"}>
-            {health?.mode ?? "setup-required"}
+          <StatusBadge tone={health?.mode === "operator-ready" ? "success" : "warning"}>
+            {healthModeLabel}
           </StatusBadge>
         </div>
 
@@ -6377,16 +6622,38 @@ function IntegrationView({
                 <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
                   item.configured ? "bg-[#E7F5E8] text-[#236327]" : "bg-[#FFF3D8] text-[#7A4E2D]"
                 }`}>
-                  {item.configured ? "configured" : item.status}
+                  {item.configured ? "aktif" : publicStatusLabel(item.status)}
                 </span>
               </div>
               <p className={`mt-3 text-xs font-bold leading-5 ${mutedClass}`}>
-                {item.required.join(", ")}
+                {formatInteger(item.required.length)} prasyarat aktivasi diperlukan
               </p>
               <p className={`mt-3 text-sm font-semibold leading-6 ${mutedClass}`}>{item.fallback}</p>
             </article>
           ))}
         </div>
+        {health?.whatsapp?.setup ? (
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <article className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">WhatsApp resmi</p>
+              <p className="mt-2 text-xl font-black">{publicStatusLabel(health.whatsapp.setup.cloudApi?.send)}</p>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                {health.whatsapp.setup.cloudApi?.message ?? "Kanal resmi perlu dicek dari server."}
+              </p>
+            </article>
+            <article className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">QR personal testing</p>
+              <p className="mt-2 text-xl font-black">{publicStatusLabel(health.whatsapp.setup.personalBridge?.status)}</p>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                {health.whatsapp.setup.personalBridge?.message ?? "Bridge personal perlu dijalankan di terminal untuk menampilkan QR."}
+              </p>
+              <p className={`mt-2 text-xs font-bold ${mutedClass}`}>
+                PDF: {health.whatsapp.setup.personalBridge?.capabilities?.pdfTextExtraction ? "siap" : "perlu cek"}; OCR gambar:{" "}
+                {health.whatsapp.setup.personalBridge?.capabilities?.imageOcr ? "aktif" : "opsional"}
+              </p>
+            </article>
+          </div>
+        ) : null}
       </article>
     </section>
   );
@@ -6428,7 +6695,7 @@ function ModuleView({
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message ?? payload.error ?? "WA API gagal.");
+        throw new Error(publicSetupMessage(payload.message ?? payload.error, "WA API gagal."));
       }
       const saved = payload.message as { id: string; module: string; status: string };
       setPanelMessage(`${activeDetail.title}: pesan WA tersimpan sebagai ${saved.id} untuk modul ${saved.module}. Status: ${saved.status}.`, "success");
@@ -6452,7 +6719,7 @@ function ModuleView({
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message ?? payload.error ?? "Agent API gagal.");
+        throw new Error(publicSetupMessage(payload.message ?? payload.error, "Agent API gagal."));
       }
       const run = payload as AgentRunResult;
       setPanelMessage(`${activeDetail.title}: ${run.agent} selesai dan tersimpan untuk record ${run.recordId}.`, "success");

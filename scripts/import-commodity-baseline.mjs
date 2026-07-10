@@ -312,7 +312,7 @@ async function ensureSources(client) {
         'https://webapi.bps.go.id/documentation/',
         'Official API, subject to BPS key and terms',
         'Statistik resmi nasional sesuai domain/variabel BPS yang tersedia.',
-        'Env-gated connector memakai BPS_API_KEY, cache Postgres, dan mapping variabel komoditas.',
+        'Env-gated connector memakai BPS_API_KEY, cache aplikasi, dan mapping variabel komoditas.',
         'env-required',
         'Sumber resmi utama untuk baseline statistik setelah key dan mapping variabel tersedia.',
         now()

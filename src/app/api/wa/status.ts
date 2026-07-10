@@ -53,6 +53,23 @@ export function getWaSetupStatus() {
       message:
         "WhatsApp Cloud API tidak mendukung QR pairing di aplikasi ini; gunakan Meta webhook, token, app secret, dan phone number id.",
     },
+    personalPairing: {
+      status: process.env.WA_PERSONAL_ADAPTER_ENABLED === "1" ? "available" : "setup-required",
+      adapter: "wa-personal-bridge",
+      command: "npm run wa:personal",
+      message:
+        "Untuk testing WA biasa, jalankan bridge personal terpisah di server/terminal, scan QR, lalu pesan masuk akan dicatat ke queue operasional. Jalur produksi tetap WhatsApp Cloud API.",
+      capabilities: {
+        qrPairing: true,
+        mediaDownload: true,
+        pdfTextExtraction: true,
+        imageOcr: process.env.WA_PERSONAL_OCR_ENABLED === "1",
+      },
+      missing:
+        process.env.WA_PERSONAL_ADAPTER_ENABLED === "1"
+          ? []
+          : ["WA_PERSONAL_ADAPTER_ENABLED=1"],
+    },
   };
 }
 

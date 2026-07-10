@@ -95,7 +95,7 @@ export async function POST(request: Request) {
   const waScript = `Halo, koperasi melihat peluang ${commodity.opportunity.toLowerCase()} dari ${commodity.name.toLowerCase()} di ${village.name}. Mohon kirim info pasokan minggu ini, lokasi, dan foto barang bila ada.`;
 
   return NextResponse.json({
-    mode: process.env.OPENAI_API_KEY ? "provider-configured-rules-postgres" : "rules-postgres",
+    mode: process.env.OPENAI_API_KEY ? "provider-configured-rules-operational-data" : "rules-operational-data",
     village: {
       code: village.code,
       name: village.name,
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     selectedLayers,
     visibleAssets: visibleAssets.length,
     score: Math.min(score, 95),
-    confidence: "Postgres, source-labeled",
+    confidence: "source-labeled operational data",
     opportunity: {
       title: commodity.opportunity,
       whyNow: `${commodity.supply} dengan demand ${commodity.demand}. Sinyal harga: ${commodity.priceSignal}.`,

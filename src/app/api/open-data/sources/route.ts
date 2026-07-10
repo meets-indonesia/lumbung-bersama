@@ -59,7 +59,7 @@ function sourceLabelFor(category: string) {
 
 function integrationClaimFor(status: string) {
   if (status === "ready-on-demand") return "implemented";
-  if (status === "env-required") return "env-gated";
+  if (status === "env-required") return "activation-required";
   if (status === "reference-only" || status === "manual-import-or-connector") return status;
   return status === "source-discovery" ? "source-discovery" : "connector-planned";
 }
@@ -121,7 +121,7 @@ function buildRegistryPayload({
   coverage,
   latestImportRuns = [],
 }: {
-  source: "static" | "postgres";
+  source: "static" | "application-db";
   registryStatus: string;
   sources: SourceRow[] | typeof openDataSources;
   coverage: Record<string, unknown>;
@@ -137,7 +137,7 @@ function buildRegistryPayload({
       externalClaims:
         "External integrations stay source-discovery or connector-planned unless an implemented connector is tested.",
       sharedDbScope:
-        "Hackathon shared DB is exploration material, not the canonical SIMKOPDES production reference.",
+        "Sumber eksplorasi hackathon adalah bahan terbatas, bukan referensi produksi SIMKOPDES.",
       privacy:
         "This registry exposes source metadata, labels, and aggregate import status only. It does not expose secret values or PII.",
     },
@@ -151,11 +151,11 @@ export async function GET() {
   if (!isDatabaseConfigured()) {
     return Response.json(buildRegistryPayload({
       source: "static",
-      registryStatus: "static-env-gated",
+      registryStatus: "activation-required",
       sources: openDataSources,
       coverage: {
         administrativeAreasImported: {},
-        message: "DATABASE_URL belum aktif, sehingga coverage nasional belum bisa dihitung.",
+        message: "Koneksi data operasional belum aktif, sehingga coverage nasional belum bisa dihitung.",
       },
     }));
   }
@@ -182,8 +182,8 @@ export async function GET() {
     ]);
 
     return Response.json(buildRegistryPayload({
-      source: sources.length > 0 ? "postgres" : "static",
-      registryStatus: sources.length > 0 ? "postgres-backed" : "static-empty-table-fallback",
+      source: sources.length > 0 ? "application-db" : "static",
+      registryStatus: sources.length > 0 ? "application-db-backed" : "static-empty-table-fallback",
       sources: sources.length > 0 ? sources : openDataSources,
       coverage: {
         administrativeAreasImported: counts.reduce<Record<string, number>>((acc, item) => {

@@ -8,7 +8,7 @@ import { getCurrentUserFromCookies } from "@/lib/auth";
 export const metadata: Metadata = {
   title: "Integrasi",
   description:
-    "Status env-gated integration readiness untuk WhatsApp Business, AI, database, storage, dan SIMKOPDES mapping.",
+    "Status kesiapan integrasi untuk WhatsApp Business, AI, database, storage, dan SIMKOPDES mapping.",
 };
 
 export const dynamic = "force-dynamic";

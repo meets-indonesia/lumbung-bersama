@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   );
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     count: rows.length,
     query: { q, level, parentCode, limit },
     areas: rows,

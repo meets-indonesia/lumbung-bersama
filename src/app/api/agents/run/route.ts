@@ -247,7 +247,7 @@ export async function POST(request: Request) {
       : "Provider AI belum dikonfigurasi; fallback rules dipakai.";
   const explanation = `${formatAgentExplanation({
     agentName: agent.name,
-    mode: provider.used ? provider.mode : `${provider.mode}-rules-local-postgres`,
+    mode: provider.used ? provider.mode : `${provider.mode}-rules-operational-data`,
     dataBasis,
   })} ${providerNote}`;
   const output = provider.suggestion?.output ?? fallbackOutput;

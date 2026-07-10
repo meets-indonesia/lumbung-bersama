@@ -358,13 +358,13 @@ export async function GET(request: Request) {
     "operator-selected commodity";
 
   return Response.json({
-    source: "postgres",
+    source: "application-db",
     cooperative,
     metrics: [
-      { label: "Laporan warga hari ini", value: String(queue.length), note: "Postgres" },
-      { label: "Draft perlu dicek", value: String(queueNeedingAction), note: "Postgres" },
-      { label: "Stok gerai kritis", value: String(criticalStocks), note: "Postgres" },
-      { label: "Siap laporan", value: String(includedReports), note: "Postgres" },
+      { label: "Laporan warga hari ini", value: String(queue.length), note: "Data operasional" },
+      { label: "Draft perlu dicek", value: String(queueNeedingAction), note: "Data operasional" },
+      { label: "Stok gerai kritis", value: String(criticalStocks), note: "Data operasional" },
+      { label: "Siap laporan", value: String(includedReports), note: "Data operasional" },
     ],
     queue,
     stocks,

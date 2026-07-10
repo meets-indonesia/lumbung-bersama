@@ -93,7 +93,7 @@ type DrillArea = {
 };
 
 type DrillData = {
-  source: "postgres" | "demo-fallback";
+  source: "application-db" | "demo-fallback";
   selected: DrillArea;
   breadcrumbs: Array<{
     code: string;
@@ -259,8 +259,8 @@ function boundaryStyle(isHover: boolean, selectedLevel: number): PathOptions {
 }
 
 function getDataModeLabel(source: DrillData["source"] | undefined) {
-  if (source === "demo-fallback") return "Demo fallback";
-  if (source === "postgres") return "Postgres wilayah";
+  if (source === "demo-fallback") return "Sampel awal";
+  if (source === "application-db") return "Data wilayah";
   return "Memuat sumber";
 }
 
@@ -289,9 +289,9 @@ function getAreaInsight(
 
   if (dataSource === "demo-fallback") {
     return {
-      title: "Mode demo, bukan klaim operasional",
-      body: "Alur polygon dan panel siap dipakai untuk presentasi UX. Angka dan profil perlu diganti dengan Postgres/import resmi sebelum dipakai sebagai bukti operasional.",
-      status: "Demo safe",
+      title: "Sampel awal, bukan klaim operasional",
+      body: "Alur polygon dan panel siap dipakai untuk eksplorasi. Angka dan profil perlu diganti dengan data operasional/import resmi sebelum dipakai sebagai bukti operasional.",
+      status: "Sumber awal",
     };
   }
 
@@ -641,7 +641,7 @@ export function PetaUnggulanClient() {
   const selectedInsight = getAreaInsight(selected, children.length, profileList.length, drillData?.source, activeFilterLabel);
   const selectedSourceLabel = selected?.sourceId ? `${selected.sourceId}${selected.sourceVersion ? ` / ${selected.sourceVersion}` : ""}` : "Sumber area belum terbaca";
   const commodityEvidenceLabel = selectedCommodity
-    ? `${getSourceLevelLabel(selectedCommodity.sourceLevel)} - ${selectedCommodity.confidence || "confidence belum ada"}`
+    ? `${getSourceLevelLabel(selectedCommodity.sourceLevel)} - ${selectedCommodity.confidence || "keyakinan belum ada"}`
     : "Belum memilih komoditas";
 
   function chooseSearchArea(area: AreaSearchResult) {
@@ -693,13 +693,13 @@ export function PetaUnggulanClient() {
         setAnalysisNote(
           payload.message ??
             payload.error ??
-            "Analisis belum tersedia. Data Postgres operasional atau komoditas desa perlu diaktifkan.",
+            "Analisis belum tersedia. Data operasional atau komoditas desa perlu diaktifkan.",
         );
         return;
       }
       setAnalysisResult(payload);
       setAnalysisState("ready");
-      setAnalysisNote("Analisis opportunity berhasil dibuat dari endpoint peta.");
+      setAnalysisNote("Analisis peluang berhasil dibuat dari layanan peta.");
     } catch (error) {
       setAnalysisState("error");
       setAnalysisNote(error instanceof Error ? error.message : "Analisis opportunity gagal dijalankan.");
@@ -999,7 +999,7 @@ export function PetaUnggulanClient() {
 
             <div className="mt-5 grid gap-2 text-xs text-[#AEB4B5]">
               <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
-                <p className="font-medium text-[#F4F0E8]">Evidence area</p>
+                <p className="font-medium text-[#F4F0E8]">Bukti area</p>
                 <div className="mt-3 grid gap-2">
                   <div className="flex items-center justify-between gap-3">
                     <span>Hierarki</span>
@@ -1043,7 +1043,7 @@ export function PetaUnggulanClient() {
 
             {drillData?.source === "demo-fallback" ? (
               <div className="mt-3 rounded-[14px] border border-[#D79A2B]/28 bg-black/25 p-3 text-xs leading-5 text-[#F4D7A2]">
-                Mode demo lokal: data ini hanya sample MVP untuk QA UI dan presentasi. Gunakan Postgres/import resmi untuk klaim operasional.
+                Catatan sumber: data ini adalah sampel awal MVP. Gunakan data operasional atau import resmi untuk klaim operasional.
               </div>
             ) : null}
 
@@ -1072,7 +1072,7 @@ export function PetaUnggulanClient() {
                   disabled={analysisState === "loading"}
                   className="inline-flex items-center justify-between gap-3 rounded-[12px] border border-[#D79A2B]/45 bg-[#D79A2B]/10 px-3 py-2 text-sm font-medium text-[#F4D7A2] transition hover:border-[#D79A2B] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:lb-focus"
                 >
-                  {analysisState === "loading" ? "Menganalisis..." : "Jalankan opportunity score"}
+                  {analysisState === "loading" ? "Menganalisis..." : "Jalankan skor peluang"}
                   {analysisState === "loading" ? (
                     <Loader2 size={15} strokeWidth={2.2} className="animate-spin" aria-hidden="true" />
                   ) : (
@@ -1095,15 +1095,15 @@ export function PetaUnggulanClient() {
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-medium text-[#F4F0E8]">
                       {analysisState === "ready"
-                        ? `Score ${analysisResult?.score ?? "-"} - ${analysisResult?.confidence ?? "confidence source-labeled"}`
+                        ? `Skor ${analysisResult?.score ?? "-"} - ${analysisResult?.confidence ?? "keyakinan bersumber"}`
                         : analysisState === "setup"
-                          ? "Setup data diperlukan"
-                          : analysisState === "loading"
-                            ? "Menunggu endpoint analisis"
+                          ? "Aktivasi data diperlukan"
+                        : analysisState === "loading"
+                            ? "Menunggu layanan analisis"
                             : "Analisis belum berhasil"}
                     </p>
                     <span className="rounded-[8px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-[#F4D7A2]">
-                      /api/peta-unggulan/analyze
+                      Layanan peta
                     </span>
                   </div>
                   {analysisResult?.opportunity ? (
@@ -1120,7 +1120,7 @@ export function PetaUnggulanClient() {
                     <p className="mt-2">{analysisNote}</p>
                   )}
                   <p className="mt-3 text-[#858B8D]">
-                    Output ini tetap perlu validasi operator sebelum buyer outreach, stok, atau pembiayaan.
+                    Output ini tetap perlu validasi operator sebelum kontak buyer, stok, atau pembiayaan.
                   </p>
                 </div>
               ) : null}

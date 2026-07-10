@@ -124,7 +124,7 @@ export const featureModules = [
     short: "WhatsApp Business, OpenAI, database, storage, SIMKOPDES mapping.",
     waCommand: "status integrasi sistem",
     owner: "Admin teknis",
-    status: "Env-gated",
+    status: "Perlu konfigurasi",
   },
 ];
 
@@ -687,7 +687,7 @@ export const nationalDataSources = [
     access: "API key",
     use: "Baseline produksi, luas panen, populasi, dan indikator daerah",
     url: "https://webapi.bps.go.id/developer/",
-    status: "Env-gated by key",
+    status: "Perlu API key",
   },
   {
     id: "satudata-pertanian",
@@ -746,7 +746,7 @@ export const integrationChecks = [
     name: "Database",
     env: "DATABASE_URL",
     status: "Belum aktif",
-    fallback: "Postgres wajib dikonfigurasi",
+    fallback: "Database aplikasi wajib dikonfigurasi",
   },
   {
     name: "Media Storage",
@@ -762,9 +762,9 @@ export const integrationChecks = [
   },
   {
     name: "Peta Unggulan Nasional",
-    env: "BPS_API_KEY, POSTGIS_URL, DATA_PIPELINE_SECRET",
+    env: "BPS_API_KEY, GEOSPATIAL_DB_URL, DATA_PIPELINE_SECRET",
     status: "Butuh pipeline data",
-    fallback: "Data awal Postgres dan source-check API",
+    fallback: "Data awal aplikasi dan source-check API",
   },
 ];
 
@@ -861,11 +861,11 @@ export const featureDetails: Record<
   },
   integrasi: {
     title: "Integrasi",
-    intro: "Semua koneksi produksi dibuat env-gated dan jujur.",
+    intro: "Semua koneksi produksi dikunci konfigurasi dan diberi status jujur.",
     waFlows: ["Cek status integrasi", "Kirim pesan uji", "Cek API", "Cek mode produksi bertahap"],
-    agentChecks: ["Env missing", "API health", "Webhook status", "Export readiness"],
-    operatorActions: ["Set env", "Test webhook", "Download mapping", "Switch mode produksi bertahap"],
-    operationalOutputs: ["Env checklist", "Integration status", "Fallback reason", "API map"],
+    agentChecks: ["Konfigurasi belum aktif", "API health", "Webhook status", "Export readiness"],
+    operatorActions: ["Aktifkan konfigurasi", "Test webhook", "Download mapping", "Switch mode produksi bertahap"],
+    operationalOutputs: ["Checklist konfigurasi", "Integration status", "Fallback reason", "API map"],
   },
 };
 

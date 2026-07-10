@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       {
         error: "ADMIN_AUTH_NOT_CONFIGURED",
         message:
-          "Login operator belum dikonfigurasi. Isi ADMIN_EMAIL dan ADMIN_PASSWORD_HASH.",
+          "Login operator belum aktif di server ini. Hubungi operator teknis untuk mengaktifkan akun demo.",
       },
       { status: 503 },
     );

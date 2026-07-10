@@ -323,14 +323,14 @@ Title:
 
 Content:
 
-1. Next.js app/API.
-2. PostgreSQL operational DB.
-3. Shared hackathon DB read-only evidence layer.
-4. Cloud Run scale-to-zero.
-5. Secret Manager for credentials.
-6. Cloud Logging for audit.
-7. Scheduler/Jobs for data refresh.
-8. Budget alert.
+1. Next.js app/API in one OCI container.
+2. Cloud Run service for web/API traffic, with min instances `0` for low-cost demo and optional min instances `1` for jury day.
+3. Cloud SQL relational database as operational database.
+4. Shared hackathon database as read-only evidence source, stored as Secret Manager values and never written into code/slides.
+5. Cloud Run Jobs for migration, seed, data import, and scheduled refresh tasks.
+6. Cloud Storage for media evidence and generated reports.
+7. Secret Manager for `DATABASE_URL`, shared evidence DB URL, AI provider key, session secret, and WA adapter secrets.
+8. Cloud Logging, Error Reporting, Cloud Monitoring alert policies, and budget alerts.
 
 Security:
 
@@ -338,11 +338,14 @@ Security:
 2. PBKDF2 password hash.
 3. CSRF same-origin gate.
 4. Role checks.
-5. No PII in demo endpoints.
+5. Least-privilege service account for Cloud Run.
+6. Cloud SQL connection through Cloud SQL connector or private IP.
+7. No PII in demo endpoints.
+8. No `.env` or plaintext credential in repository, logs, screenshots, or slide exports.
 
 Speaker notes:
 
-> Karena ada Google Cloud credit, kami desain yang realistis: tidak perlu GPU always-on dan tidak menyimpan secret di code. Budget alert perlu dibuat karena alert tidak otomatis menghentikan biaya. Shared DB hackathon dipakai sebagai exploration evidence layer, bukan production source of truth SIMKOPDES.
+> Karena ada Google Cloud credit, kami desain yang realistis: Cloud Run cocok untuk Next.js karena container bisa scale-to-zero saat sepi dan autoscale saat traffic naik. Database tidak ikut dimasukkan ke docker-compose produksi; database dipisah ke Cloud SQL agar backup, koneksi, monitoring, dan operasi nasional lebih aman. Secret tidak masuk code, tetapi di Secret Manager. Shared DB hackathon dipakai sebagai exploration evidence layer, bukan production source of truth SIMKOPDES.
 
 ### Slide 13 - Impact and Business Model
 
@@ -458,12 +461,79 @@ Show only if asked about risk:
 Recommended low-cost architecture:
 
 1. Cloud Run min instances 0.
-2. Small Cloud SQL or managed Postgres only when needed.
+2. Small Cloud SQL or managed relational database only when needed.
 3. Secret Manager, not `.env` in repo.
 4. Cloud Scheduler for short jobs, not always-on workers.
 5. Cloud Storage lifecycle rules for evidence files.
 6. Budget alerts.
 7. Bounded AI calls and cached source checks.
+
+### Backup C2 - Recommended GCP Deployment Architecture
+
+Use when a Google Cloud judge asks why this can scale beyond the hackathon:
+
+| Layer | Recommended GCP service | Why |
+|---|---|---|
+| Web/API | Cloud Run | Container-native, autoscaling, can scale to zero for cost control, and supports gradual revision rollout. |
+| Image build | Cloud Build + Artifact Registry | Reproducible build pipeline, immutable image tags, no image pushed from laptops for production. |
+| Operational database | Cloud SQL relational database | Managed backups, point-in-time recovery, IAM/network controls, easier operations than running a stateful database inside the app container. |
+| Secrets | Secret Manager | Credentials are mounted/injected at runtime; no plaintext `.env` in Git, Docker image, logs, or slides. |
+| Evidence files | Cloud Storage | Object lifecycle rules for OCR/media evidence, generated reports, and export artifacts. |
+| Data refresh | Cloud Run Jobs + Cloud Scheduler | Import/warm-up jobs run on demand or schedule; no always-on worker required for the MVP. |
+| Observability | Cloud Logging, Error Reporting, Cloud Monitoring | Request logs, app logs, error grouping, uptime checks, and latency/error alerts. |
+| Cost control | Cloud Billing budgets and alerts | Alert the team before credits are exhausted; keep min instances and job schedule bounded. |
+
+Recommended service split:
+
+1. `lumbung-web`: Cloud Run service for Next.js pages and API routes.
+2. `lumbung-migrate`: Cloud Run Job for `npm run db:setup`/migration.
+3. `lumbung-import`: Cloud Run Job for commodity/boundary/source refresh.
+4. `lumbung-wa-bridge`: separate service only when WA pairing and adapter are verified; do not mix personal WA session state into the web container.
+
+Do not run a production database through `docker-compose` inside Cloud Run. Docker Compose is useful for local development, but Cloud Run containers are stateless and can be restarted or scaled at any time. Persistent state should live in Cloud SQL or Cloud Storage.
+
+### Backup C3 - GCP Deployment Runbook
+
+Use this as the technical implementation checklist:
+
+1. Create or select GCP project with billing enabled.
+2. Enable APIs: Cloud Run, Cloud Build, Artifact Registry, Cloud SQL Admin, Secret Manager, Cloud Logging, Cloud Monitoring, Cloud Scheduler, Cloud Storage.
+3. Create Artifact Registry repository, for example `asia-southeast2-docker.pkg.dev/<PROJECT_ID>/lumbung/lumbung-web`.
+4. Create Cloud SQL relational database with automated backup and point-in-time recovery enabled.
+5. Create runtime database and app user with least privilege.
+6. Import operational data from the current server using sanitized dump/restore or app-level seed/import scripts.
+7. Store runtime values in Secret Manager: app database URL, shared evidence DB URL, session secret, AI provider key, WA adapter secrets, and any source API keys.
+8. Build container with Cloud Build and push to Artifact Registry.
+9. Deploy Cloud Run with service account, secrets, Cloud SQL connection, region `asia-southeast2` or the region closest to expected users, CPU/memory limits, and concurrency tuned after load testing.
+10. Run Cloud Run migration job once, then run importer job.
+11. Add custom domain and managed TLS.
+12. Configure uptime check, error-rate/latency alert, log retention, and budget alert.
+13. Smoke test `/`, `/login`, `/dashboard`, `/peta-unggulan`, `/wa`, `/laporan`, `/integrasi`, and the aggregate evidence endpoints.
+
+Minimum jury-day production settings:
+
+1. Cloud Run min instances `1` during presentation window to avoid cold start, then return to `0`.
+2. Cloud Run max instances capped to prevent runaway spend.
+3. Cloud SQL instance sized conservatively, with query-heavy aggregation cached where possible.
+4. Budget alert at 50%, 75%, 90%, and 100% of the hackathon credit limit.
+5. Log-based alert for 5xx spikes, auth errors, and failed evidence-data refresh.
+
+### Backup C4 - National Scaling Plan
+
+Use when asked whether this supports national rollout:
+
+1. Start with one Cloud Run service and one Cloud SQL primary for MVP/pilot.
+2. Partition data by cooperative and administrative area in the application layer.
+3. Add read replicas or analytics replica when dashboard/report reads become heavy.
+4. Move large geospatial boundaries and media evidence to Cloud Storage/CDN-backed delivery, not into API payloads.
+5. Use Cloud Run Jobs for province-level refresh/import so national data warming is batchable and retryable.
+6. Introduce Pub/Sub or Cloud Tasks for asynchronous OCR/media processing and WhatsApp events when volume grows.
+7. Keep per-koperasi role checks, audit logs, and PII minimization before adding integrations.
+8. For true national governance, separate tenant data, define retention policy, and add disaster recovery runbooks before production rollout.
+
+National-scale claim wording:
+
+> Architecture is designed to scale nationally because stateless app traffic can autoscale on Cloud Run, operational data can move to managed relational databaseQL with backups/replicas, media evidence sits in object storage, and imports/OCR/WA tasks can become asynchronous jobs. The hackathon MVP demonstrates the flow; national deployment still requires data governance, integration agreements, load testing, and operational SOPs.
 
 ### Backup D - Evaluation Plan
 
@@ -497,7 +567,7 @@ Avoid:
 
 Explain:
 
-1. Next.js/Postgres architecture.
+1. Next.js/relational data architecture.
 2. Shared DB read-only evidence layer.
 3. Auth/session/security basics.
 4. Cloud Run/Secret Manager plan.

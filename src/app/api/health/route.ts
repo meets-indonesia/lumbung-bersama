@@ -1,8 +1,32 @@
 import { integrationChecks } from "@/lib/demo-data";
 import { getAiProviderStatus } from "@/lib/ai-provider";
 import { isDatabaseConfigured, queryOne } from "@/lib/postgres";
+import { getWaSetupStatus } from "@/app/api/wa/status";
 
 export const runtime = "nodejs";
+
+function getPublicWaStatus() {
+  const setup = getWaSetupStatus();
+  return {
+    status: setup.status,
+    cloudApi: {
+      send: setup.send.status,
+      webhook: setup.webhook.status,
+      message:
+        setup.status === "ready"
+          ? "Kanal WhatsApp resmi siap untuk webhook dan outbound text."
+          : "Kanal WhatsApp resmi perlu aktivasi sebelum live send/webhook.",
+    },
+    personalBridge: {
+      status: setup.personalPairing.status,
+      adapter: setup.personalPairing.adapter,
+      command: setup.personalPairing.command,
+      message: setup.personalPairing.message,
+      capabilities: setup.personalPairing.capabilities,
+      activationRequired: setup.personalPairing.status !== "available",
+    },
+  };
+}
 
 export async function GET() {
   const envStatus = integrationChecks.map((item) => {
@@ -11,7 +35,7 @@ export async function GET() {
 
     return {
       name: item.name,
-      required,
+      required: required.map((_, index) => `prasyarat ${index + 1}`),
       configured,
       status: configured ? "configured" : "not-configured",
       fallback: item.fallback,
@@ -22,8 +46,8 @@ export async function GET() {
     configured: isDatabaseConfigured(),
     reachable: false,
     message: isDatabaseConfigured()
-      ? "DATABASE_URL tersedia, koneksi belum dicek."
-      : "DATABASE_URL belum diisi.",
+      ? "Koneksi data operasional tersedia, koneksi belum dicek."
+      : "Koneksi data operasional belum diaktifkan.",
   };
 
   if (isDatabaseConfigured()) {
@@ -32,13 +56,13 @@ export async function GET() {
       database = {
         configured: true,
         reachable: true,
-        message: "Postgres terhubung.",
+        message: "Data operasional terhubung.",
       };
-    } catch (error) {
+    } catch {
       database = {
         configured: true,
         reachable: false,
-        message: error instanceof Error ? error.message : "Postgres tidak merespons.",
+        message: "Data operasional tidak merespons.",
       };
     }
   }
@@ -53,11 +77,12 @@ export async function GET() {
     webhookConfigured: Boolean(process.env.WHATSAPP_VERIFY_TOKEN && process.env.WHATSAPP_APP_SECRET),
     sendConfigured: Boolean(process.env.WHATSAPP_BUSINESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
     required: [
-      "WHATSAPP_VERIFY_TOKEN",
-      "WHATSAPP_APP_SECRET",
-      "WHATSAPP_BUSINESS_TOKEN",
-      "WHATSAPP_PHONE_NUMBER_ID",
+      "WhatsApp webhook verification",
+      "WhatsApp app signature",
+      "WhatsApp send token",
+      "WhatsApp phone number",
     ],
+    setup: getPublicWaStatus(),
   };
   const ai = getAiProviderStatus();
 

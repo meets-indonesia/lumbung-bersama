@@ -11,7 +11,7 @@ export type OpenDataSource = {
 };
 
 export const openDataSourceLabels = [
-  "Shared DB exploration",
+  "Sumber eksplorasi",
   "Official spatial boundary",
   "Official village index",
   "Official statistics",
@@ -68,7 +68,7 @@ export const openDataSources: OpenDataSource[] = [
     coverage:
       "Provinsi, kabupaten/kota, kecamatan, desa/kelurahan nasional berdasarkan Kepmendagri 2025.",
     refreshStrategy:
-      "Import satu kali ke Postgres, lalu refresh manual saat repository sumber berubah.",
+      "Import satu kali ke data operasional aplikasi, lalu refresh manual saat repository sumber berubah.",
     status: "ready-to-import",
     notes:
       "Sumber terbuka paling praktis untuk coverage kode desa nasional. Bukan sumber komoditas, koperasi, atau aset ekonomi.",
@@ -109,7 +109,7 @@ export const openDataSources: OpenDataSource[] = [
     license: "Official API, subject to BPS key and terms",
     coverage: "Statistik resmi nasional sampai level yang tersedia pada tabel/variabel BPS.",
     refreshStrategy:
-      "Env-gated connector memakai BPS_API_KEY, cache Postgres, dan mapping variabel per komoditas.",
+      "Connector aktif setelah API key resmi, cache aplikasi, dan mapping variabel per komoditas siap.",
     status: "env-required",
     notes:
       "Cocok untuk baseline statistik wilayah, bukan pengganti input operasional harian koperasi.",
@@ -363,7 +363,7 @@ export const openDataSources: OpenDataSource[] = [
     coverage:
       "Aplikasi resmi koperasi desa jika akses API/credential diberikan penyelenggara atau Kemenkop.",
     refreshStrategy:
-      "Env-gated integration only. Jangan scraping area login atau mengklaim API publik sebelum ada dokumen resmi.",
+      "Integrasi hanya aktif setelah akses resmi tersedia. Jangan scraping area login atau mengklaim API publik sebelum ada dokumen resmi.",
     status: "no-public-api-found",
     notes:
       "Diperlakukan sebagai target integrasi resmi, bukan sumber open data.",

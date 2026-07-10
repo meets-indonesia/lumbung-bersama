@@ -373,7 +373,7 @@ def render_slide_09(t: float) -> Image.Image:
     img = base_canvas()
     d = ImageDraw.Draw(img, "RGBA")
     title(d, "Slide 09", "Architecture: hemat, aman, cloud-ready.", "No PII demo. Credential di secret manager.")
-    nodes = [("User", COLORS["ink"]), ("Next.js", COLORS["green"]), ("API", COLORS["blue"]), ("Aggregate", COLORS["gold"]), ("Postgres SSL", COLORS["red"]), ("Laporan", COLORS["brown"])]
+    nodes = [("User", COLORS["ink"]), ("Next.js", COLORS["green"]), ("API", COLORS["blue"]), ("Aggregate", COLORS["gold"]), ("DB SSL", COLORS["red"]), ("Laporan", COLORS["brown"])]
     xs = [100, 415, 730, 1045, 1360, 1620]
     for i, (label, color) in enumerate(nodes):
         p = staged(t, 0.05 + i * 0.06, 0.25 + i * 0.06)
