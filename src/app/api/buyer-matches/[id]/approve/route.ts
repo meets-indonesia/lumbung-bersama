@@ -1,4 +1,4 @@
-import { requireAuthenticatedRequest } from "@/lib/auth";
+import { requireAuthenticatedRequest, requireRole } from "@/lib/auth";
 import { dbRequiredResponse, isDatabaseConfigured, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
@@ -11,14 +11,50 @@ export async function POST(request: Request, context: RouteContext) {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
+  const roleResponse = requireRole(auth.user, ["admin", "manager"]);
+  if (roleResponse) return roleResponse;
+  const cooperativeId = auth.user.cooperativeId;
+
+  if (!cooperativeId) {
+    return Response.json(
+      {
+        error: "COOPERATIVE_SCOPE_REQUIRED",
+        message: "User belum memiliki cooperative_id untuk membatasi buyer readiness.",
+      },
+      { status: 409 },
+    );
+  }
 
   const { id } = await context.params;
   const buyer = await queryOne(
-    `UPDATE buyer_matches
-     SET status = 'Disetujui pengurus', approved_at = now(), updated_at = now()
-     WHERE id = $1
-     RETURNING id, buyer, need, match_score AS "matchScore", reason, status, approved_at AS "approvedAt", updated_at AS "updatedAt"`,
-    [id],
+    `WITH updated AS (
+       UPDATE buyer_matches
+       SET status = 'Disetujui pengurus', approved_at = now(), updated_at = now()
+       WHERE id = $1
+         AND cooperative_id = $2
+       RETURNING id, cooperative_id, buyer, need, match_score, reason, status, approved_at, updated_at
+     ),
+     requirement_update AS (
+       UPDATE anak_sarengklek_buyer_requirements requirement
+       SET verification_status = 'Disetujui untuk review outreach',
+           updated_at = now()
+       FROM updated
+       WHERE requirement.cooperative_id = updated.cooperative_id
+         AND lower(requirement.product_name) = lower(updated.need)
+       RETURNING requirement.id
+     )
+     SELECT
+       id,
+       buyer,
+       need,
+       match_score AS "matchScore",
+       reason,
+       status,
+       approved_at AS "approvedAt",
+       updated_at AS "updatedAt",
+       (SELECT COUNT(*)::int FROM requirement_update) AS "requirementsUpdated"
+     FROM updated`,
+    [id, cooperativeId],
   );
 
   if (!buyer) {

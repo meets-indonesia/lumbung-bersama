@@ -19,6 +19,7 @@ export type CommodityCoverageSummary = {
   totalVillages: number;
   totalProvinces: number;
   directVillageProfiles: number;
+  legacyInheritedProfiles: number;
 };
 
 const COMMODITY_KEYWORDS = [
@@ -55,11 +56,13 @@ export async function getCommodityCoverageSummary(): Promise<CommodityCoverageSu
     totalVillages: string;
     totalProvinces: string;
     directVillageProfiles: string;
+    legacyInheritedProfiles: string;
   }>(
-    `SELECT COUNT(DISTINCT area_code)::text AS "totalAreas",
-            COUNT(*)::text AS "totalProfiles",
-            COUNT(DISTINCT CASE WHEN area_level = 4 THEN area_code END)::text AS "totalVillages",
-            COUNT(DISTINCT province_code)::text AS "totalProvinces",
+    `SELECT COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalAreas",
+            COUNT(CASE WHEN source_level <> 'inherited-province-baseline' THEN 1 END)::text AS "totalProfiles",
+            COUNT(DISTINCT CASE WHEN area_level = 4 AND source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalVillages",
+            COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN province_code END)::text AS "totalProvinces",
+            COUNT(CASE WHEN source_level = 'inherited-province-baseline' THEN 1 END)::text AS "legacyInheritedProfiles",
             COUNT(CASE WHEN area_level = 4 AND source_level = 'direct-village' THEN 1 END)::text AS "directVillageProfiles"
      FROM regional_commodity_profiles`,
   );
@@ -71,6 +74,7 @@ export async function getCommodityCoverageSummary(): Promise<CommodityCoverageSu
     totalVillages: Number(row?.totalVillages ?? 0),
     totalProvinces: Number(row?.totalProvinces ?? 0),
     directVillageProfiles: Number(row?.directVillageProfiles ?? 0),
+    legacyInheritedProfiles: Number(row?.legacyInheritedProfiles ?? 0),
   };
 }
 
@@ -91,6 +95,7 @@ export async function getProvinceCommodityProfiles(provinceName: string, limit =
      FROM regional_commodity_profiles
      WHERE province_name ILIKE $1
        AND area_level = 1
+       AND source_level <> 'inherited-province-baseline'
      ORDER BY rank ASC
      LIMIT $2`,
     [`%${provinceName}%`, limit],
@@ -114,6 +119,7 @@ export async function findCommodityProfilesForMessage(message: string, provinceN
               basis
        FROM regional_commodity_profiles
        WHERE commodity ILIKE $1
+         AND source_level <> 'inherited-province-baseline'
        ORDER BY
          CASE WHEN province_name ILIKE $2 THEN 0 ELSE 1 END,
          CASE area_level WHEN 4 THEN 0 WHEN 3 THEN 1 WHEN 2 THEN 2 ELSE 3 END,

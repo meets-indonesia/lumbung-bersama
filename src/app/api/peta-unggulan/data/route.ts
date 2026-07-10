@@ -40,8 +40,8 @@ export async function GET() {
       legacyInheritedProfiles: string;
       directVillageProfiles: string;
     }>(
-      `SELECT COUNT(DISTINCT area_code)::text AS "totalAreas",
-              COUNT(*)::text AS "totalProfiles",
+      `SELECT COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalAreas",
+              COUNT(CASE WHEN source_level <> 'inherited-province-baseline' THEN 1 END)::text AS "totalProfiles",
               COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "directReferenceAreas",
               COUNT(CASE WHEN source_level <> 'inherited-province-baseline' THEN 1 END)::text AS "directReferenceProfiles",
               COUNT(DISTINCT CASE WHEN area_level = 4 AND source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalVillages",

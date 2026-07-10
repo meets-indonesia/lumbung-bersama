@@ -6,9 +6,12 @@ export const SESSION_COOKIE = "lb_session";
 const PASSWORD_ALGORITHM = "pbkdf2_sha256";
 const PASSWORD_ITERATIONS = 210_000;
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 10);
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const OPERATIONAL_MUTATION_ROLES = ["admin", "operator", "manager", "pengurus", "bendahara", "petugas"];
 
 export type AuthUser = {
   id: string;
+  cooperativeId: string | null;
   email: string;
   fullName: string;
   role: string;
@@ -17,8 +20,11 @@ export type AuthUser = {
   avatarInitials: string;
 };
 
+export type AuthRole = "admin" | "manager" | "operator" | "gerai" | "finance_committee" | "viewer";
+
 type UserRow = {
   id: string;
+  cooperativeId: string | null;
   email: string;
   fullName: string;
   role: string;
@@ -30,6 +36,7 @@ type UserRow = {
 function toUser(row: UserRow): AuthUser {
   return {
     id: row.id,
+    cooperativeId: row.cooperativeId,
     email: row.email,
     fullName: row.fullName,
     role: row.role,
@@ -52,9 +59,56 @@ function parseCookieHeader(header: string | null) {
   return cookiesMap;
 }
 
-function getRequestIp(request: Request) {
+export function getRequestIp(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
   return forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null;
+}
+
+function requestOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin) return origin;
+
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function csrfRequiredResponse() {
+  return Response.json(
+    {
+      error: "CSRF_REJECTED",
+      message: "Mutation ditolak karena bukan request same-origin.",
+    },
+    { status: 403 },
+  );
+}
+
+export function isSameOriginMutation(request: Request) {
+  if (!MUTATION_METHODS.has(request.method.toUpperCase())) return true;
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
+    return false;
+  }
+
+  const origin = requestOrigin(request);
+  if (!origin) return true;
+
+  try {
+    return origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+export function requireSameOriginMutation(request: Request) {
+  if (isSameOriginMutation(request)) return null;
+  return csrfRequiredResponse();
 }
 
 export function hashPassword(password: string) {
@@ -147,6 +201,7 @@ async function getUserBySessionToken(token: string | undefined) {
 
   const row = await queryOne<UserRow>(
     `SELECT users.id,
+            users.cooperative_id AS "cooperativeId",
             users.email,
             users.full_name AS "fullName",
             users.role,
@@ -198,9 +253,32 @@ export function authRequiredResponse() {
   );
 }
 
+export function roleRequiredResponse(allowedRoles: string[]) {
+  return Response.json(
+    {
+      error: "ROLE_REQUIRED",
+      message: `Aksi ini memerlukan role: ${allowedRoles.join(", ")}.`,
+    },
+    { status: 403 },
+  );
+}
+
+export function requireRole(user: AuthUser | null | undefined, allowedRoles: string[]) {
+  if (!user) return authRequiredResponse();
+  const allowed = new Set(allowedRoles.map((role) => role.toLowerCase()));
+  if (allowed.has(user.role.toLowerCase())) return null;
+  return roleRequiredResponse(allowedRoles);
+}
+
+export function requireOperationalMutationRole(user: AuthUser | null | undefined) {
+  return requireRole(user, OPERATIONAL_MUTATION_ROLES);
+}
+
 export async function requireAuthenticatedRequest(request: Request) {
   const user = await getCurrentUserFromRequest(request);
   if (!user) return { user: null, response: authRequiredResponse() };
+  const csrfResponse = requireSameOriginMutation(request);
+  if (csrfResponse) return { user: null, response: csrfResponse };
   return { user, response: null };
 }
 

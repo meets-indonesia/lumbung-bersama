@@ -1,4 +1,5 @@
-import { dbRequiredResponse, isDatabaseConfigured, queryRows } from "@/lib/postgres";
+import { getDemoCommoditySearch } from "@/lib/peta-demo-fallback";
+import { isDatabaseConfigured, queryRows } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,6 @@ type CommodityProfileRow = {
 };
 
 export async function GET(request: Request) {
-  if (!isDatabaseConfigured()) return dbRequiredResponse();
-
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const areaCode = searchParams.get("areaCode")?.trim() ?? "";
@@ -33,6 +32,10 @@ export async function GET(request: Request) {
   const includeReference = searchParams.get("includeReference") === "true";
   const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 60), 1), 200);
   const level = levelParam ? Number(levelParam) : null;
+
+  if (!isDatabaseConfigured()) {
+    return getDemoCommoditySearch({ q, areaCode, provinceCode, level, limit });
+  }
 
   const where: string[] = [];
   const params: Array<string | number> = [];

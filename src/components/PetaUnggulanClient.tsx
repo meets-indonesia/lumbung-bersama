@@ -64,7 +64,7 @@ type DrillArea = {
 };
 
 type DrillData = {
-  source: "postgres";
+  source: "postgres" | "demo-fallback";
   selected: DrillArea;
   breadcrumbs: Array<{
     code: string;
@@ -218,14 +218,74 @@ function canStyle(layer: LeafletLayer): layer is LeafletLayer & { setStyle: (sty
 }
 
 function boundaryStyle(isHover: boolean, selectedLevel: number): PathOptions {
-  const selectedFill = selectedLevel > 0 ? 0.16 : 0.08;
+  const selectedFill = selectedLevel > 0 ? 0.2 : 0.14;
   return {
-    color: isHover ? "#D79A2B" : "rgba(244,240,232,0.74)",
-    dashArray: isHover ? "" : "3 6",
+    color: isHover ? "#FFF8EA" : "rgba(244,215,162,0.92)",
+    dashArray: isHover ? "" : selectedLevel > 0 ? "4 5" : "2 5",
     fillColor: isHover ? "#D79A2B" : selectedLevel > 0 ? "#D79A2B" : "#101315",
     fillOpacity: isHover ? 0.42 : selectedFill,
-    opacity: isHover ? 1 : 0.84,
-    weight: isHover ? 2.4 : selectedLevel > 0 ? 1.45 : 1.05,
+    opacity: isHover ? 1 : 0.96,
+    weight: isHover ? 2.6 : selectedLevel > 0 ? 1.75 : 1.35,
+  };
+}
+
+function getDataModeLabel(source: DrillData["source"] | undefined) {
+  if (source === "demo-fallback") return "Demo fallback";
+  if (source === "postgres") return "Postgres wilayah";
+  return "Memuat sumber";
+}
+
+function getSourceLevelLabel(sourceLevel: string | undefined) {
+  if (!sourceLevel) return "Belum ada profil";
+  if (sourceLevel.startsWith("bps-direct")) return "BPS direct";
+  if (sourceLevel.includes("operator")) return "Operator";
+  if (sourceLevel.includes("baseline")) return "Baseline referensi";
+  return sourceLevel;
+}
+
+function getAreaInsight(
+  selected: DrillArea | undefined,
+  childCount: number,
+  profileCount: number,
+  dataSource: DrillData["source"] | undefined,
+  activeFilterLabel: string,
+) {
+  if (!selected) {
+    return {
+      title: "Pilih area untuk membaca peluang",
+      body: "Klik polygon di peta untuk melihat subwilayah, profil komoditas, dan sumber bukti yang tersedia.",
+      status: "Menunggu pilihan",
+    };
+  }
+
+  if (dataSource === "demo-fallback") {
+    return {
+      title: "Mode demo, bukan klaim operasional",
+      body: "Alur polygon dan panel siap dipakai untuk presentasi UX. Angka dan profil perlu diganti dengan Postgres/import resmi sebelum dipakai sebagai bukti operasional.",
+      status: "Demo safe",
+    };
+  }
+
+  if (selected.level < 4 && childCount > 0) {
+    return {
+      title: `${childCount} ${getLevelNextLabel(selected.level)} bisa diprioritaskan`,
+      body: `${profileCount} profil komoditas terlihat untuk area ini${activeFilterLabel ? ` dengan filter ${activeFilterLabel}` : ""}. Gunakan drilldown untuk memilih subwilayah sebelum membuat antrian buyer atau validasi operator.`,
+      status: "Siap drilldown",
+    };
+  }
+
+  if (profileCount > 0) {
+    return {
+      title: "Profil sumber tersedia",
+      body: "Area ini memiliki profil komoditas berbasis sumber data. Tetap minta validasi operator, WA, atau import resmi sebelum menyebut stok siap transaksi.",
+      status: "Perlu validasi",
+    };
+  }
+
+  return {
+    title: "Belum ada profil langsung",
+    body: "Area ini bisa masuk daftar calon survei atau onboarding koperasi. Panel tidak menampilkan data warisan provinsi sebagai fakta lokal.",
+    status: "Perlu data",
   };
 }
 
@@ -545,6 +605,12 @@ export function PetaUnggulanClient() {
   const breadcrumbItems = selected?.level ? drillData?.breadcrumbs ?? [] : [];
   const hasSearchPanel = searchQuery.trim().length >= 2 && (searchResults.length > 0 || commodityResults.length > 0 || searchState === "error");
   const activeFilterLabel = [commodityFilter, sectorOptions.find((item) => item.value === sectorFilter)?.label].filter(Boolean).join(" / ");
+  const dataModeLabel = getDataModeLabel(drillData?.source);
+  const selectedInsight = getAreaInsight(selected, children.length, profileList.length, drillData?.source, activeFilterLabel);
+  const selectedSourceLabel = selected?.sourceId ? `${selected.sourceId}${selected.sourceVersion ? ` / ${selected.sourceVersion}` : ""}` : "Sumber area belum terbaca";
+  const commodityEvidenceLabel = selectedCommodity
+    ? `${getSourceLevelLabel(selectedCommodity.sourceLevel)} - ${selectedCommodity.confidence || "confidence belum ada"}`
+    : "Belum memilih komoditas";
 
   function chooseSearchArea(area: AreaSearchResult) {
     const viewport = getAreaViewport(area, getAreaViewport({ code: getProvinceCode(area.code), level: 1 }));
@@ -586,6 +652,7 @@ export function PetaUnggulanClient() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Cari wilayah atau komoditas: Sumsel, Banyuasin, karet, padi..."
+              aria-label="Cari wilayah atau komoditas unggulan"
               className="min-w-0 flex-1 bg-transparent text-sm font-normal text-[#F4F0E8] outline-none placeholder:text-[#858B8D]"
             />
             {searchState === "loading" ? (
@@ -726,9 +793,28 @@ export function PetaUnggulanClient() {
           <p className="mt-2 text-sm text-[#D2D6D6]">{message}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#858B8D]">
             <span className="inline-flex items-center gap-1 rounded-[9px] border border-white/10 bg-black/20 px-2 py-1">
+              <Database size={12} strokeWidth={2.1} aria-hidden="true" />
+              {dataModeLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-white/10 bg-black/20 px-2 py-1">
               <Layers3 size={12} strokeWidth={2.1} aria-hidden="true" />
               {boundaryState === "loading" ? "Memuat polygon" : `${formatNumber(boundaryCount)} polygon`}
             </span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-white/10 bg-black/20 px-2 py-1">
+              <ChevronRight size={12} strokeWidth={2.1} aria-hidden="true" />
+              Target: {getLevelNextLabel(selected?.level ?? 0)}
+            </span>
+            {boundarySource ? (
+              <a
+                href={boundarySource.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-[9px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-[#F4D7A2] hover:border-[#D79A2B] focus-visible:lb-focus"
+              >
+                Boundary: {boundarySource.id}
+                <ExternalLink size={12} strokeWidth={2.1} aria-hidden="true" />
+              </a>
+            ) : null}
             {activeFilterLabel ? (
               <span className="inline-flex items-center gap-1 rounded-[9px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-[#F4D7A2]">
                 <Filter size={12} strokeWidth={2.1} aria-hidden="true" />
@@ -770,7 +856,10 @@ export function PetaUnggulanClient() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Layers3 size={17} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
-            <p className="text-sm font-medium">Layer administratif</p>
+            <div>
+              <p className="text-sm font-medium">Polygon administratif</p>
+              <p className="text-xs text-[#858B8D]">Hover nama area, klik shape untuk drilldown.</p>
+            </div>
           </div>
           <span className="rounded-[8px] border border-white/10 bg-black/20 px-2 py-1 font-mono text-[11px] text-[#AEB4B5]">
             {boundaryState}
@@ -793,6 +882,16 @@ export function PetaUnggulanClient() {
         <p className="mt-3 line-clamp-2 text-xs leading-5 text-[#AEB4B5]">
           {hoveredArea ? `${hoveredArea.name} - klik untuk masuk level berikutnya.` : boundaryNote || "Polygon wilayah akan tampil sesuai level aktif."}
         </p>
+        <div className="mt-3 grid gap-2 text-xs text-[#AEB4B5]">
+          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-white/10 bg-black/20 px-3 py-2">
+            <span>Mode data</span>
+            <span className="font-medium text-[#F4F0E8]">{dataModeLabel}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-white/10 bg-black/20 px-3 py-2">
+            <span>Area aktif</span>
+            <span className="max-w-[240px] truncate font-medium text-[#F4F0E8]">{selected?.name ?? "Indonesia"}</span>
+          </div>
+        </div>
         {boundarySource ? (
           <a
             href={boundarySource.url}
@@ -831,6 +930,28 @@ export function PetaUnggulanClient() {
               </span>
             </div>
 
+            <div className="mt-5 grid gap-2 text-xs text-[#AEB4B5]">
+              <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
+                <p className="font-medium text-[#F4F0E8]">Evidence area</p>
+                <div className="mt-3 grid gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Hierarki</span>
+                    <span className="max-w-[230px] truncate text-right font-medium text-[#D2D6D6]">{selectedSourceLabel}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Boundary</span>
+                    <span className="max-w-[230px] truncate text-right font-medium text-[#D2D6D6]">
+                      {boundarySource ? boundarySource.id : boundaryState === "loading" ? "Memuat polygon" : "Sumber boundary belum tersedia"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Komoditas</span>
+                    <span className="max-w-[230px] truncate text-right font-medium text-[#D2D6D6]">{commodityEvidenceLabel}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-5 grid grid-cols-2 gap-3">
               {[
                 ["Subwilayah", children.length],
@@ -852,6 +973,44 @@ export function PetaUnggulanClient() {
                 ? `Klik bentuk wilayah di peta atau daftar ${getLevelNextLabel(selected.level)}. Highlight mengikuti polygon administratif, bukan marker buatan.`
                 : "Ini level desa/kelurahan. Komoditas di bawah adalah profil sumber; data operasional tetap perlu WA/operator/import resmi."}
             </div>
+
+            {drillData?.source === "demo-fallback" ? (
+              <div className="mt-3 rounded-[14px] border border-[#D79A2B]/28 bg-black/25 p-3 text-xs leading-5 text-[#F4D7A2]">
+                Mode demo lokal: data ini hanya sample MVP untuk QA UI dan presentasi. Gunakan Postgres/import resmi untuk klaim operasional.
+              </div>
+            ) : null}
+
+            <section className="mt-5 rounded-[14px] border border-white/10 bg-white/[0.045] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-[#858B8D]">Insight area terpilih</p>
+                  <h2 className="mt-1 text-base font-semibold text-[#F4F0E8]">{selectedInsight.title}</h2>
+                </div>
+                <span className="shrink-0 rounded-[8px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-xs text-[#F4D7A2]">
+                  {selectedInsight.status}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-[#AEB4B5]">{selectedInsight.body}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <a
+                  href="/login?next=/dashboard"
+                  className="inline-flex items-center justify-between gap-3 rounded-[12px] bg-[#D79A2B] px-3 py-2 text-sm font-medium text-[#080A0B] transition hover:bg-[#F4D7A2] focus-visible:lb-focus"
+                >
+                  Buka dashboard operator
+                  <ChevronRight size={15} strokeWidth={2.2} aria-hidden="true" />
+                </a>
+                <a
+                  href="/login?next=/dashboard"
+                  className="inline-flex items-center justify-between gap-3 rounded-[12px] border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium text-[#F4F0E8] transition hover:border-[#D79A2B] focus-visible:lb-focus"
+                >
+                  Login untuk validasi
+                  <ChevronRight size={15} strokeWidth={2.2} aria-hidden="true" />
+                </a>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-[#858B8D]">
+                CTA ini hanya menyiapkan tindak lanjut buyer/operator. Stok siap transaksi tetap perlu bukti WA, upload resmi, atau import data yang berwenang.
+              </p>
+            </section>
 
             {(commodityFilter || sectorFilter) && (
               <div className="mt-3 rounded-[14px] border border-white/10 bg-black/25 p-3 text-sm text-[#D2D6D6]">

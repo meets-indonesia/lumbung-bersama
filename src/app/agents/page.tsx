@@ -6,9 +6,9 @@ import { AgentCenterClient } from "@/components/AgentCenterClient";
 import { getCurrentUserFromCookies } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "Agent AI Center",
+  title: "Agen Rekomendasi",
   description:
-    "Agent AI Lumbung Bersama untuk intake, normalisasi, kualitas, harga, pasar, stok, simpan pinjam, dan laporan.",
+    "Tiga agent MVP Lumbung Bersama untuk rekomendasi unggulan desa, buyer matching lite, dan laporan aksi.",
 };
 
 export const dynamic = "force-dynamic";

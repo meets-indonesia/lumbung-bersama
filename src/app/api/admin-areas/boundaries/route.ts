@@ -1,4 +1,5 @@
-import { dbRequiredResponse, isDatabaseConfigured, queryOne, queryRows } from "@/lib/postgres";
+import { checkRateLimit, fetchWithTimeout } from "@/lib/external-fetch";
+import { queryOne, queryRows } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -141,10 +142,10 @@ async function fetchTextCached(url: string) {
   const cached = cache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: { "User-Agent": "lumbung-bersama-map-boundary-loader" },
     next: { revalidate: 60 * 60 * 24 },
-  });
+  }, { timeoutMs: 9000, label: "Boundary source" });
   if (!response.ok) throw new Error(`Boundary source gagal dimuat: ${response.status}`);
   const value = await response.text();
   cache.set(url, { expiresAt: Date.now() + 1000 * 60 * 60 * 24, value });
@@ -299,7 +300,8 @@ async function withProvinceFallbacks(features: BoundaryFeature[]): Promise<Bound
 }
 
 export async function GET(request: Request) {
-  if (!isDatabaseConfigured()) return dbRequiredResponse();
+  const rateLimit = checkRateLimit(request, "admin-boundaries", { limit: 40, windowMs: 60_000 });
+  if (rateLimit) return rateLimit;
 
   const { searchParams } = new URL(request.url);
   const selectedCode = searchParams.get("code")?.trim() ?? "";

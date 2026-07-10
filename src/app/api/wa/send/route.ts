@@ -1,5 +1,12 @@
-import { requireAuthenticatedRequest } from "@/lib/auth";
+import { requireAuthenticatedRequest, requireOperationalMutationRole } from "@/lib/auth";
+import { checkRateLimit, fetchWithTimeout } from "@/lib/external-fetch";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
+import {
+  getWaSetupStatus,
+  maskPhoneForDisplay,
+  providerErrorMeta,
+  providerMessageIdFromPayload,
+} from "../status";
 
 export const runtime = "nodejs";
 
@@ -11,17 +18,29 @@ export async function POST(request: Request) {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
+  const roleResponse = requireOperationalMutationRole(auth.user);
+  if (roleResponse) return roleResponse;
+  const cooperativeId = auth.user.cooperativeId;
+  if (!cooperativeId) {
+    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+  }
+
+  const rateLimit = checkRateLimit(request, "wa-send", { limit: 10, windowMs: 60_000 });
+  if (rateLimit) return rateLimit;
 
   const token = process.env.WHATSAPP_BUSINESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION || "v23.0";
+  const setup = getWaSetupStatus();
 
-  if (!token || !phoneNumberId) {
+  if (setup.send.status !== "ready" || !token || !phoneNumberId) {
     return Response.json(
       {
         error: "WHATSAPP_SEND_NOT_CONFIGURED",
         message:
           "Isi WHATSAPP_BUSINESS_TOKEN dan WHATSAPP_PHONE_NUMBER_ID untuk mengirim pesan.",
+        status: "setup-required",
+        setup,
       },
       { status: 503 },
     );
@@ -41,25 +60,39 @@ export async function POST(request: Request) {
     );
   }
 
-  const response = await fetch(
-    `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to,
-        type: "text",
-        text: {
-          preview_url: false,
-          body: message,
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-      }),
-    },
-  );
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "text",
+          text: {
+            preview_url: false,
+            body: message,
+          },
+        }),
+      },
+      { timeoutMs: 8000, label: "WhatsApp Graph API" },
+    );
+  } catch {
+    return Response.json(
+      {
+        error: "WHATSAPP_SEND_UNAVAILABLE",
+        message: "WhatsApp Graph API tidak merespons sebelum batas waktu.",
+        status: "ready",
+        setup,
+      },
+      { status: 504 },
+    );
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -67,29 +100,35 @@ export async function POST(request: Request) {
       {
         error: "WHATSAPP_SEND_FAILED",
         message: "WhatsApp Graph API menolak pengiriman.",
-        details: payload,
+        status: "ready",
+        provider: providerErrorMeta(payload),
+        setup,
       },
       { status: 502 },
     );
   }
 
-  const cooperative = await queryOne<{ id: string }>(
-    "SELECT id FROM cooperatives ORDER BY created_at ASC LIMIT 1",
+  const providerMessageId = providerMessageIdFromPayload(payload);
+  await queryOne(
+    `INSERT INTO wa_messages (id, cooperative_id, provider_message_id, sender, message, intent, module, bot_reply, status)
+     VALUES ($1, $2, $3, $4, $5, 'outbound', 'WA Center', $6, 'Dikirim lewat WhatsApp Graph API')
+     ON CONFLICT (provider_message_id) WHERE provider_message_id IS NOT NULL DO NOTHING`,
+    [
+      newId("wa"),
+      cooperativeId,
+      providerMessageId,
+      auth.user.fullName,
+      message,
+      `Terkirim ke ${maskPhoneForDisplay(to)}.`,
+    ],
   );
 
-  if (cooperative) {
-    await queryOne(
-      `INSERT INTO wa_messages (id, cooperative_id, sender, message, intent, module, bot_reply, status)
-       VALUES ($1, $2, $3, $4, 'outbound', 'WA Center', $5, 'Dikirim lewat WhatsApp Graph API')`,
-      [
-        newId("wa"),
-        cooperative.id,
-        auth.user!.fullName,
-        message,
-        `Terkirim ke ${to}.`,
-      ],
-    );
-  }
-
-  return Response.json({ ok: true, provider: payload });
+  return Response.json({
+    ok: true,
+    status: "ready",
+    provider: {
+      messageId: providerMessageId,
+    },
+    setup,
+  });
 }

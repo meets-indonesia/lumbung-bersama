@@ -26,6 +26,7 @@ CREATE INDEX IF NOT EXISTS operator_queue_module_idx ON operator_queue(module);
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
+  cooperative_id TEXT REFERENCES cooperatives(id) ON DELETE SET NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   full_name TEXT NOT NULL,
@@ -38,7 +39,21 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cooperative_id TEXT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'users_cooperative_id_fkey'
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT users_cooperative_id_fkey
+      FOREIGN KEY (cooperative_id) REFERENCES cooperatives(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS users_email_idx ON users(email);
+CREATE INDEX IF NOT EXISTS users_cooperative_idx ON users(cooperative_id);
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY,
@@ -92,6 +107,67 @@ CREATE TABLE IF NOT EXISTS buyer_matches (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS anak_sarengklek_buyer_requirements (
+  id TEXT PRIMARY KEY,
+  cooperative_id TEXT NOT NULL REFERENCES cooperatives(id) ON DELETE CASCADE,
+  buyer_archetype TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  required_quantity NUMERIC(14, 2) NOT NULL,
+  unit_label TEXT NOT NULL,
+  quality_spec TEXT NOT NULL,
+  packaging_spec TEXT NOT NULL,
+  target_window TEXT NOT NULL,
+  verification_status TEXT NOT NULL,
+  source_label TEXT NOT NULL,
+  notes TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS anak_sarengklek_buyer_requirements_coop_idx
+  ON anak_sarengklek_buyer_requirements(cooperative_id);
+CREATE INDEX IF NOT EXISTS anak_sarengklek_buyer_requirements_product_idx
+  ON anak_sarengklek_buyer_requirements(product_name);
+
+CREATE TABLE IF NOT EXISTS anak_sarengklek_stock_ledger (
+  id TEXT PRIMARY KEY,
+  cooperative_id TEXT NOT NULL REFERENCES cooperatives(id) ON DELETE CASCADE,
+  stock_item_id TEXT NOT NULL REFERENCES stock_items(id) ON DELETE CASCADE,
+  movement_type TEXT NOT NULL,
+  quantity NUMERIC(14, 2) NOT NULL,
+  unit_label TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  evidence_ref TEXT NOT NULL,
+  readiness_status TEXT NOT NULL,
+  recorded_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS anak_sarengklek_stock_ledger_stock_idx
+  ON anak_sarengklek_stock_ledger(stock_item_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS anak_sarengklek_stock_ledger_coop_idx
+  ON anak_sarengklek_stock_ledger(cooperative_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS anak_sarengklek_media_evidence (
+  id TEXT PRIMARY KEY,
+  cooperative_id TEXT NOT NULL REFERENCES cooperatives(id) ON DELETE CASCADE,
+  related_record_type TEXT NOT NULL,
+  related_record_id TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  storage_uri TEXT NOT NULL,
+  redacted_label TEXT NOT NULL,
+  caption TEXT NOT NULL,
+  verification_status TEXT NOT NULL,
+  source_label TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS anak_sarengklek_media_evidence_related_idx
+  ON anak_sarengklek_media_evidence(related_record_type, related_record_id);
+CREATE INDEX IF NOT EXISTS anak_sarengklek_media_evidence_coop_idx
+  ON anak_sarengklek_media_evidence(cooperative_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS finance_requests (
   id TEXT PRIMARY KEY,
   cooperative_id TEXT NOT NULL REFERENCES cooperatives(id) ON DELETE CASCADE,
@@ -124,6 +200,7 @@ CREATE TABLE IF NOT EXISTS report_periods (
 CREATE TABLE IF NOT EXISTS wa_messages (
   id TEXT PRIMARY KEY,
   cooperative_id TEXT NOT NULL REFERENCES cooperatives(id) ON DELETE CASCADE,
+  provider_message_id TEXT,
   sender TEXT NOT NULL,
   message TEXT NOT NULL,
   intent TEXT NOT NULL,
@@ -133,7 +210,11 @@ CREATE TABLE IF NOT EXISTS wa_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS provider_message_id TEXT;
 CREATE INDEX IF NOT EXISTS wa_messages_created_at_idx ON wa_messages(created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS wa_messages_provider_message_id_idx
+  ON wa_messages(provider_message_id)
+  WHERE provider_message_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,

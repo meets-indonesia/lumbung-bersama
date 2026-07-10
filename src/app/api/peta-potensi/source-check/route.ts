@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, fetchWithTimeout } from "@/lib/external-fetch";
 import { openDataSources } from "@/lib/open-data-sources";
 import { isDatabaseConfigured, queryRows } from "@/lib/postgres";
 
@@ -21,13 +22,12 @@ async function checkSource(target: (typeof openDataSources)[number]) {
         };
       }
 
-      const response = await fetch(`https://webapi.bps.go.id/v1/api/domain/type/all/key/${process.env.BPS_API_KEY}/`, {
+      const response = await fetchWithTimeout(`https://webapi.bps.go.id/v1/api/domain/type/all/key/${process.env.BPS_API_KEY}/`, {
         cache: "no-store",
-        signal: AbortSignal.timeout(6500),
         headers: {
           "User-Agent": "LumbungBersamaBPSConnectorCheck/0.1",
         },
-      });
+      }, { timeoutMs: 6500, label: "BPS source check" });
       const payload = (await response.json().catch(() => null)) as { status?: string; message?: string } | null;
 
       return {
@@ -44,13 +44,12 @@ async function checkSource(target: (typeof openDataSources)[number]) {
       };
     }
 
-    const response = await fetch(target.url, {
+    const response = await fetchWithTimeout(target.url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(4500),
       headers: {
         "User-Agent": "LumbungBersamaSourceCheck/0.1",
       },
-    });
+    }, { timeoutMs: 4500, label: `source check ${target.id}` });
 
     return {
       ...target,
@@ -67,7 +66,10 @@ async function checkSource(target: (typeof openDataSources)[number]) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rateLimit = checkRateLimit(request, "peta-source-check", { limit: 20, windowMs: 60_000 });
+  if (rateLimit) return rateLimit;
+
   const [results, areaCounts, commodityCoverage] = await Promise.all([
     Promise.all(openDataSources.map((target) => checkSource(target))),
     isDatabaseConfigured()
@@ -85,8 +87,8 @@ export async function GET() {
         directReferenceProfiles: string;
         legacyInheritedProfiles: string;
       }>(
-        `SELECT COUNT(DISTINCT area_code)::text AS "totalAreas",
-                COUNT(*)::text AS "totalProfiles",
+        `SELECT COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalAreas",
+                COUNT(CASE WHEN source_level <> 'inherited-province-baseline' THEN 1 END)::text AS "totalProfiles",
                 COUNT(DISTINCT CASE WHEN source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "directReferenceAreas",
                 COUNT(CASE WHEN source_level <> 'inherited-province-baseline' THEN 1 END)::text AS "directReferenceProfiles",
                 COUNT(DISTINCT CASE WHEN area_level = 4 AND source_level <> 'inherited-province-baseline' THEN area_code END)::text AS "totalVillages",

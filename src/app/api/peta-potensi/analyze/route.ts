@@ -92,10 +92,10 @@ export async function POST(request: Request) {
     "Siapkan buyer atau warung mitra sebelum produksi diperbesar.",
   ];
 
-  const waScript = `Pak/Bu, koperasi melihat peluang ${commodity.opportunity.toLowerCase()} dari ${commodity.name.toLowerCase()} di ${village.name}. Mohon kirim info pasokan minggu ini, lokasi, dan foto barang bila ada.`;
+  const waScript = `Halo, koperasi melihat peluang ${commodity.opportunity.toLowerCase()} dari ${commodity.name.toLowerCase()} di ${village.name}. Mohon kirim info pasokan minggu ini, lokasi, dan foto barang bila ada.`;
 
   return NextResponse.json({
-    mode: process.env.OPENAI_API_KEY ? "ai-ready" : "rules-postgres",
+    mode: process.env.OPENAI_API_KEY ? "provider-configured-rules-postgres" : "rules-postgres",
     village: {
       code: village.code,
       name: village.name,

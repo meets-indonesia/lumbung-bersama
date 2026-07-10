@@ -1,4 +1,5 @@
 import { integrationChecks } from "@/lib/demo-data";
+import { getAiProviderStatus } from "@/lib/ai-provider";
 import { isDatabaseConfigured, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
@@ -58,6 +59,7 @@ export async function GET() {
       "WHATSAPP_PHONE_NUMBER_ID",
     ],
   };
+  const ai = getAiProviderStatus();
 
   return Response.json({
     app: "Lumbung Bersama",
@@ -65,6 +67,7 @@ export async function GET() {
     checkedAt: new Date().toISOString(),
     database,
     auth,
+    ai,
     whatsapp,
     integrations: envStatus,
   });

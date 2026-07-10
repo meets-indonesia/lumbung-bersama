@@ -1,4 +1,5 @@
-import { dbRequiredResponse, isDatabaseConfigured, queryOne, queryRows } from "@/lib/postgres";
+import { getDemoDrilldown } from "@/lib/peta-demo-fallback";
+import { isDatabaseConfigured, queryOne, queryRows } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -72,14 +73,16 @@ async function getBreadcrumb(area: AreaRow | null) {
 }
 
 export async function GET(request: Request) {
-  if (!isDatabaseConfigured()) return dbRequiredResponse();
-
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code")?.trim() ?? "";
   const q = searchParams.get("q")?.trim() ?? "";
   const commodity = searchParams.get("commodity")?.trim() ?? "";
   const sector = searchParams.get("sector")?.trim() ?? "";
   const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 80), 1), 250);
+
+  if (!isDatabaseConfigured()) {
+    return getDemoDrilldown({ code, q, commodity, sector, limit });
+  }
 
   const selected = code
     ? await queryOne<AreaRow>(

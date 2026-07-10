@@ -1,134 +1,110 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
-  Building2,
+  BarChart3,
   CheckCircle2,
   ClipboardCheck,
   Database,
   FileDown,
   Handshake,
+  Layers3,
   MapPinned,
-  MessageCircle,
+  Network,
   ShieldCheck,
-  Store,
+  Sparkles,
   Warehouse,
 } from "lucide-react";
-import { BrandMark } from "@/components/BrandMark";
 import { PublicHeader } from "@/components/PublicHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { stitchAssets } from "@/lib/stitch-assets";
 import {
   brand,
-  pilotCooperative,
+  buyerMatches,
   indonesiaOpportunityRegions,
   nationalDataSources,
-  operatorQueue,
+  stockItems,
 } from "@/lib/pilot-data";
 
-const audienceCards = [
-  {
-    title: "Warga",
-    copy: "Cukup kirim WhatsApp untuk panen, stok, harga, pickup, atau pinjaman.",
-  },
-  {
-    title: "Operator koperasi",
-    copy: "Mengecek draft, bukti, satuan, status, dan catatan yang belum lengkap.",
-  },
-  {
-    title: "Pengurus",
-    copy: "Melihat stok, buyer, pembiayaan, peta unggulan, dan laporan harian.",
-  },
-];
+const mvpName = "Lumbung Bersama - Koperasi Opportunity & Offtaker Radar";
 
-const workflow = [
+const mvpFlow = [
   {
-    title: "Lapor lewat WA",
-    copy: "Warga mengirim teks, foto, atau voice note seperti biasa.",
+    step: "01",
+    title: "Peta Potensi Desa",
+    copy: "Wilayah, komoditas, aset, dan karakter desa menjadi pintu masuk analisis.",
+    icon: MapPinned,
   },
   {
-    title: "Jadi draft data",
-    copy: "AI membaca komoditas, jumlah, lokasi, dan kebutuhan tindak lanjut.",
+    step: "02",
+    title: "Opportunity Score",
+    copy: "Skor menjelaskan potensi, kesiapan koperasi, stok, pasar, kemitraan, dan confidence.",
+    icon: BarChart3,
   },
   {
-    title: "Dicek manusia",
-    copy: "Operator mengoreksi, meminta bukti, lalu menyetujui catatan.",
-  },
-  {
-    title: "Masuk aksi",
-    copy: "Data dipakai untuk stok, pickup, buyer, pembiayaan, peta, dan laporan.",
-  },
-];
-
-const platformModules = [
-  {
-    title: "Suara Warga",
-    copy: "WhatsApp menjadi pintu masuk laporan petani dan anggota.",
-    icon: MessageCircle,
-    href: "/wa",
-  },
-  {
-    title: "Lumbung Data",
-    copy: "Semua catatan punya status, sumber, bukti, dan audit.",
-    icon: Database,
-    href: "/modules/lumbung-data",
-  },
-  {
-    title: "Gerai dan Stok",
-    copy: "Stok gerai, gudang, pickup, dan restock terlihat cepat.",
-    icon: Store,
-    href: "/modules/gerai-pintar",
-  },
-  {
-    title: "Pasar dan Mitra",
-    copy: "Buyer match disertai alasan dan approval pengurus.",
+    step: "03",
+    title: "Buyer Matching Lite",
+    copy: "Produk desa dicocokkan dengan archetype buyer tanpa klaim komitmen atau checkout.",
     icon: Handshake,
-    href: "/modules/pasar-mitra",
   },
   {
-    title: "Lapor Siap",
-    copy: "Ringkasan dan CSV siap untuk rapat atau integrasi lanjutan.",
-    icon: FileDown,
-    href: "/laporan",
+    step: "04",
+    title: "Aggregation/Stock Readiness",
+    copy: "Stok, kualitas, bukti media, dan gap logistik dibaca sebelum outreach.",
+    icon: Warehouse,
   },
-];
-
-const governance = [
   {
-    title: "AI tidak memutuskan",
-    copy: "Harga, buyer, stok, dan pembiayaan tetap perlu approval manusia.",
+    step: "05",
+    title: "Financing Readiness",
+    copy: "Draft/requested/verified dibaca sebagai checklist deal room, bukan approval otomatis.",
     icon: ShieldCheck,
   },
   {
-    title: "Sumber data jelas",
-    copy: "Setiap catatan dibedakan antara input warga, operator, sumber nasional, dan integrasi resmi.",
+    step: "06",
+    title: "Laporan Aksi",
+    copy: "Pengurus mendapat ringkasan evidence, risiko, keputusan, dan tindak lanjut.",
+    icon: FileDown,
+  },
+];
+
+const guardrails = [
+  {
+    title: "Human-reviewed AI",
+    copy: "AI memberi rekomendasi berbasis aturan dan data. Keputusan tetap oleh operator atau pengurus.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Evidence first",
+    copy: "Setiap aksi punya status sumber: input warga, operator, app DB, shared DB read-only, atau connector planned.",
     icon: ClipboardCheck,
   },
   {
-    title: "Siap dioperasikan bertahap",
-    copy: "Akses operator, database, webhook, dan connector disiapkan sebagai jalur produksi.",
-    icon: Building2,
+    title: "Koperasi sebagai trust layer",
+    copy: "Fokusnya bukan transaksi checkout, tetapi kesiapan usaha dan koordinasi koperasi.",
+    icon: Network,
   },
 ];
 
 const faqItems = [
   {
-    question: "Apa ini sebenarnya?",
+    question: "Landing ini menjual apa?",
     answer:
-      "Lumbung Bersama adalah dashboard dan bot WhatsApp untuk membantu koperasi desa mencatat laporan warga, memverifikasi data, dan mengambil aksi operasional.",
+      "Bukan toko online. Ini ruang kerja koperasi untuk mengubah data potensi desa menjadi keputusan operasional yang bisa diverifikasi.",
   },
   {
-    question: "Apakah petani harus belajar aplikasi baru?",
+    question: "Apakah data shared DB dipakai sebagai sumber utama?",
     answer:
-      "Tidak. Petani cukup memakai WhatsApp. Dashboard dipakai operator dan pengurus koperasi.",
+      "Tidak. Shared DB hanya evidence eksplorasi terbatas. App DB sendiri dipakai untuk requirement, ledger, dan media evidence.",
   },
   {
-    question: "Apakah sudah sistem resmi pemerintah?",
+    question: "Kenapa buyer tidak disebut nama asli?",
     answer:
-      "Belum. Ini platform hackathon yang siap dipilotkan, dengan integrasi produksi yang tetap membutuhkan credential dan izin resmi.",
+      "MVP memakai archetype buyer agar tidak membuat klaim komitmen palsu. Outreach tetap butuh verifikasi pengurus.",
   },
   {
-    question: "Apa yang perlu disiapkan untuk pilot?",
+    question: "Apa demo pertama yang harus dibuka?",
     answer:
-      "Akses WhatsApp Business API, database, storage, role pengguna, data koperasi, dan izin integrasi resmi bila dibutuhkan.",
+      "Mulai dari Peta Unggulan, lalu masuk dashboard operator untuk rekomendasi, readiness, buyer matching, dan laporan aksi.",
   },
 ];
 
@@ -142,179 +118,176 @@ const mapShapes = [
   ["M698 170 C724 147 755 154 774 177 C807 148 862 152 888 185 C916 221 884 260 837 252 C803 247 778 224 756 208 C738 224 706 219 690 197 C681 186 685 178 698 170 Z", 6, "Papua", 794, 202],
 ] as const;
 
+function PrimaryCta({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="group inline-flex w-fit items-center gap-3 rounded-full bg-[#C92A2A] py-2.5 pl-5 pr-2.5 text-sm font-black text-[#FFF8EA] shadow-[0_18px_42px_rgba(201,42,42,0.24)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-[#A82020] active:scale-[0.98] focus-visible:lb-focus sm:text-base"
+    >
+      {children}
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-[#FFF8EA]/18 transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1 group-hover:-translate-y-0.5">
+        <ArrowRight size={17} strokeWidth={2.2} aria-hidden="true" />
+      </span>
+    </Link>
+  );
+}
+
 export default function Home() {
   return (
     <>
-      <main className="min-h-[100dvh] bg-[#FFF8EA] text-[#1F2933]">
+      <main className="lb-landing min-h-[100dvh] overflow-hidden bg-[#FFF8EA] text-[#1F2933]">
         <PublicHeader />
+        <div className="lb-landing-grain" aria-hidden="true" />
 
-        <section className="mx-auto grid max-w-7xl gap-10 px-4 pb-12 pt-10 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:pb-16 lg:pt-14">
-          <div className="flex flex-col justify-center">
-            <div className="lb-reveal">
-              <StatusBadge tone="service">Untuk Koperasi Desa/Kelurahan Merah Putih</StatusBadge>
-            </div>
-            <h1 className="lb-reveal mt-6 max-w-4xl text-4xl font-black leading-[1.05] tracking-tight text-[#1F2933] [--lb-delay:90ms] sm:text-6xl">
-              Dashboard koperasi desa yang dimulai dari WhatsApp warga.
-            </h1>
-            <p className="lb-reveal mt-5 max-w-2xl text-lg font-semibold leading-8 text-[#53606A] [--lb-delay:170ms]">
-              Warga lapor lewat WhatsApp. Operator memverifikasi. Pengurus
-              melihat stok, peta unggulan, buyer, pembiayaan, dan laporan dalam
-              satu ruang kerja.
-            </p>
-            <div className="lb-reveal mt-8 flex flex-col gap-3 [--lb-delay:250ms] sm:flex-row">
-              <Link
-                href="#alur"
-                className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#C92A2A] px-5 py-3 text-base font-extrabold text-[#FFF8EA] transition hover:bg-[#A82020] focus-visible:lb-focus"
-              >
-                Pelajari alur WhatsApp
-                <ArrowRight size={18} strokeWidth={2.4} aria-hidden="true" />
-              </Link>
-              <Link
-                href="/login?next=/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-[#D9CFC0] bg-[#FFFCF5] px-5 py-3 text-base font-extrabold text-[#1F2933] transition hover:border-[#D79A2B] focus-visible:lb-focus"
-              >
-                Masuk operator
-              </Link>
-            </div>
-            <p className="lb-reveal mt-5 max-w-2xl text-sm font-semibold leading-6 text-[#7A4E2D] [--lb-delay:330ms]">
-              Dashboard operator memakai login. Integrasi produksi tetap
-              membutuhkan akses, izin, dan credential yang sah.
-            </p>
+        <section className="relative isolate overflow-hidden bg-[#F8F5F0] px-4 py-10 sm:px-6 lg:px-8 lg:py-0">
+          <div className="absolute inset-0 z-0" aria-hidden="true">
+            <img
+              alt=""
+              src={stitchAssets.heroVillage}
+              className="h-full w-full scale-105 object-cover opacity-70"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,248,234,0.96)_0%,rgba(255,248,234,0.82)_43%,rgba(255,248,234,0.12)_100%)]" />
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#FFF8EA] to-transparent" />
           </div>
-
-          <div className="lb-reveal lb-float rounded-[24px] border border-[#E7DED1] bg-[#FFFCF5] p-3 shadow-[0_24px_70px_rgba(122,78,45,0.12)] [--lb-delay:180ms]">
-            <div className="rounded-[18px] border border-[#E7DED1] bg-white">
-              <div className="flex items-center justify-between gap-4 border-b border-[#E7DED1] p-4">
-                <div>
-                  <p className="text-sm font-black">{pilotCooperative.name}</p>
-                  <p className="mt-1 text-xs font-semibold text-[#7A4E2D]">
-                    Ruang kerja operator
-                  </p>
-                </div>
-                <StatusBadge tone="warning">Contoh alur</StatusBadge>
-              </div>
-              <div className="grid gap-4 p-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-[14px] bg-[#E7F5E8] p-4">
-                  <p className="text-sm font-extrabold text-[#236327]">Pesan warga</p>
-                  <p className="mt-3 text-sm font-semibold leading-7 text-[#1F2933]">
-                    Panen kopi kering sekitar 120 kilo. Mohon cek harga koperasi.
-                  </p>
-                  <div className="mt-4 rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-black text-white">
-                    Masuk queue operator
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {operatorQueue.slice(0, 3).map((item) => (
-                    <div key={item.id} className="rounded-[12px] border border-[#E7DED1] bg-[#FFF8EA] p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-mono text-xs font-black text-[#7A4E2D]">{item.id}</p>
-                        <StatusBadge tone="warning">{item.status}</StatusBadge>
-                      </div>
-                      <p className="mt-2 text-sm font-black">{item.sender}</p>
-                      <p className="mt-1 text-sm leading-6 text-[#53606A]">{item.module}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="platform" className="border-y border-[#E7DED1] bg-[#FFFCF5]">
-          <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
-            <div className="lb-view-reveal">
-              <h2 className="max-w-2xl text-3xl font-black tracking-tight sm:text-5xl">
-                Apa yang dibereskan?
-              </h2>
-              <p className="mt-5 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
-                Data koperasi sering tercecer di chat, buku stok, dan file laporan.
-                Lumbung Bersama menyatukannya tanpa memaksa warga belajar aplikasi baru.
+          <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-5rem)] max-w-7xl flex-col items-center lg:flex-row">
+            <div className="w-full py-10 text-center lg:w-[52%] lg:py-20 lg:text-left">
+              <img
+                alt="Lumbung Bersama"
+                src={stitchAssets.landingLogo}
+                className="mx-auto mb-5 h-auto w-[min(390px,88vw)] object-contain drop-shadow-[0_24px_54px_rgba(31,41,51,0.18)] lg:mx-0 lg:w-[430px]"
+              />
+              <p className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#E7DED1] bg-white/82 px-3 py-2 text-xs font-black text-[#7A4E2D] shadow-[0_12px_30px_rgba(122,78,45,0.08)]">
+                <Sparkles size={14} strokeWidth={2.2} aria-hidden="true" />
+                {mvpName}
               </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {audienceCards.map((item, index) => (
-                <article
-                  key={item.title}
-                  className="lb-view-reveal rounded-[16px] border border-[#E7DED1] bg-[#FFF8EA] p-5"
-                  style={{ animationDelay: `${index * 80}ms` }}
+              <h1 className="text-4xl font-extrabold leading-[1.03] text-[#172027] sm:text-5xl lg:text-7xl">
+                Transformasi Digital <br />
+                <span className="text-[#C92A2A]">Koperasi Desa</span>
+              </h1>
+              <p className="mx-auto mt-6 max-w-xl text-base font-semibold leading-8 text-[#4F5B63] sm:text-lg lg:mx-0">
+                Mengubah potensi desa menjadi aksi koperasi berbasis data,
+                rekomendasi terjelaskan, dan bukti yang bisa diaudit.
+              </p>
+              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+                <PrimaryCta href="/login?next=/dashboard">Masuk Dashboard</PrimaryCta>
+                <Link
+                  href="/peta-unggulan"
+                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl border border-[#E7DED1] bg-white px-8 py-4 text-sm font-black text-[#1F2933] shadow-[0_14px_32px_rgba(122,78,45,0.08)] transition-all duration-300 hover:border-[#D79A2B] hover:bg-[#FFFCF5] active:scale-[0.98] focus-visible:lb-focus sm:w-auto"
                 >
-                  <h3 className="text-xl font-black">{item.title}</h3>
-                  <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.copy}</p>
-                </article>
+                  Lihat Demo
+                  <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[#C92A2A] text-[#C92A2A]">
+                    <ArrowRight size={13} strokeWidth={3} aria-hidden="true" />
+                  </span>
+                </Link>
+              </div>
+              <div className="mx-auto mt-8 flex max-w-xl items-start justify-center gap-2 text-left text-sm font-semibold leading-6 text-[#4F5B63] lg:mx-0 lg:justify-start">
+                <CheckCircle2 size={20} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
+                Platform ini dibangun untuk keputusan koperasi yang aman, transparan, dan dapat dipertanggungjawabkan.
+              </div>
+            </div>
+
+            <div className="relative hidden min-h-[calc(100dvh-5rem)] w-full self-end lg:block lg:w-[48%]">
+              <div className="absolute bottom-0 right-0 top-10 h-[calc(100%-2.5rem)] w-[88%] rounded-t-[2.5rem] bg-[#D6D7D4]/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)]" aria-hidden="true" />
+              <img
+                alt="Visual kepemimpinan koperasi desa dari referensi Stitch"
+                src={stitchAssets.heroLeader}
+                className="relative z-10 mx-auto block h-[calc(100dvh-3rem)] min-h-[680px] w-full origin-bottom scale-[1.08] object-contain object-bottom"
+              />
+              {[
+                ["Data Terintegrasi", "bg-[#2F7D32]/20 text-[#2F7D32]", "translate-x-4 top-28"],
+                ["AI Terjelaskan", "bg-[#1D5D8F]/20 text-[#1D5D8F]", "-translate-x-12 top-60"],
+                ["Keputusan Koperasi", "bg-[#D79A2B]/20 text-[#7A4E2D]", "top-[25rem] translate-x-1"],
+              ].map(([label, tone, position]) => (
+                <div
+                  key={label}
+                  className={`lb-soft-float absolute right-0 z-20 flex h-28 w-28 flex-col items-center justify-center rounded-full border border-white/45 bg-white/38 p-4 text-center shadow-[0_20px_54px_rgba(31,41,51,0.18)] backdrop-blur-md ${position}`}
+                >
+                  <div className={`mb-1 grid h-10 w-10 place-items-center rounded-full text-xs font-black ${tone}`}>
+                    {label === "AI Terjelaskan" ? "AI" : <CheckCircle2 size={22} strokeWidth={2.2} aria-hidden="true" />}
+                  </div>
+                  <p className="text-[9px] font-black leading-3 text-[#172027]">{label}</p>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="alur" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="lb-view-reveal max-w-3xl">
-            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
-              Alur kerja dibuat pendek.
-            </h2>
-            <p className="mt-5 text-base font-semibold leading-8 text-[#53606A]">
-              Dari pesan warga sampai keputusan pengurus, setiap langkah punya
-              status yang bisa dicek.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-4">
-            {workflow.map((step, index) => (
-              <article
-                key={step.title}
-                className="lb-view-reveal rounded-[16px] border border-[#E7DED1] bg-[#FFFCF5] p-5"
-                style={{ animationDelay: `${index * 70}ms` }}
-              >
-                <CheckCircle2 size={22} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
-                <h3 className="mt-5 text-xl font-black">{step.title}</h3>
-                <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{step.copy}</p>
-              </article>
-            ))}
+        <section id="mvp" className="relative border-y border-[#E7DED1] bg-[#FFFCF5] px-4 py-24 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.78fr_1.22fr]">
+            <div className="lb-view-reveal">
+              <p className="text-sm font-black text-[#C92A2A]">MVP yang dipresentasikan</p>
+              <h2 className="lb-display mt-4 max-w-xl text-4xl font-black leading-[0.98] sm:text-6xl">
+                Satu alur, bukan kumpulan fitur terpisah.
+              </h2>
+              <p className="mt-6 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
+                Flow demo sengaja pendek agar juri melihat masalah, bukti,
+                rekomendasi, kesiapan operasional, dan keputusan pengurus dalam
+                satu narasi.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              {mvpFlow.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <article
+                    key={step.title}
+                    className={`lb-view-reveal lb-spotlight-card rounded-[1.5rem] p-1.5 ${index % 2 ? "xl:mt-10" : ""}`}
+                    style={{ animationDelay: `${index * 70}ms` }}
+                  >
+                    <div className="h-full rounded-[1.15rem] bg-[#FFF8EA] p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-mono text-xs font-black text-[#7A4E2D]">{step.step}</span>
+                        <Icon size={22} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
+                      </div>
+                      <h3 className="mt-10 text-xl font-black leading-tight">{step.title}</h3>
+                      <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{step.copy}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        <section className="bg-[#F6F8F2]" id="unggulan">
-          <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[0.82fr_1.18fr] lg:px-8">
+        <section id="peta" className="relative bg-[#F4F8ED] px-4 py-24 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="lb-view-reveal flex flex-col justify-center">
-              <MapPinned size={32} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
-              <h2 className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">
-                Peta untuk melihat peluang desa.
+              <MapPinned size={34} strokeWidth={2.1} className="text-[#2F7D32]" aria-hidden="true" />
+              <h2 className="lb-display mt-5 max-w-2xl text-4xl font-black leading-[0.98] sm:text-6xl">
+                Peta menjadi alat memilih prioritas.
               </h2>
-              <p className="mt-5 max-w-2xl text-base font-semibold leading-8 text-[#53606A]">
-                Komoditas, gudang, koperasi, UMKM, sawah, dan peternakan dibaca
-                sebagai sinyal usaha. Pengurus bisa mencari daerah, klik peta,
-                lalu melihat rekomendasi awal.
+              <p className="mt-6 max-w-2xl text-base font-semibold leading-8 text-[#53606A]">
+                Pengurus bisa mencari wilayah, melihat komoditas, memeriksa aset,
+                dan memahami kenapa satu produk layak diprioritaskan.
               </p>
-              <div className="mt-6 grid gap-3">
+              <div className="mt-7 grid gap-3">
                 {[
-                  "Klik wilayah untuk memilih desa contoh lintas Indonesia.",
-                  "Cari komoditas seperti kopi, cabai, sagu, singkong, atau rumput laut.",
-                  "Legenda warna membantu membaca surplus, olahan, risiko harga, dan logistik.",
+                  "Layer nasional siap untuk baseline dan connector resmi.",
+                  "Klik wilayah mengantar ke detail komoditas, aset, risiko, dan readiness.",
+                  "Peta tetap halaman mandiri agar fokus presentasi tidak pecah.",
                 ].map((item) => (
-                  <div key={item} className="flex gap-3 rounded-[14px] border border-[#DDE7D6] bg-white p-4">
+                  <div key={item} className="flex gap-3 rounded-[18px] border border-[#DDE7D6] bg-white/70 p-4">
                     <CheckCircle2 size={19} strokeWidth={2.2} className="mt-0.5 shrink-0 text-[#2F7D32]" aria-hidden="true" />
                     <p className="text-sm font-bold leading-6 text-[#53606A]">{item}</p>
                   </div>
                 ))}
               </div>
-              <Link
-                href="/peta-unggulan"
-                className="mt-7 inline-flex w-fit items-center gap-2 rounded-[12px] bg-[#2F7D32] px-5 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Buka peta interaktif
-                <ArrowRight size={17} strokeWidth={2.2} aria-hidden="true" />
-              </Link>
+              <div className="mt-8">
+                <PrimaryCta href="/peta-unggulan">Coba peta interaktif</PrimaryCta>
+              </div>
             </div>
 
-            <div className="lb-view-reveal rounded-[22px] border border-[#DDE7D6] bg-[#FBFFF7] p-4 shadow-[0_24px_70px_rgba(47,125,50,0.12)]">
-              <div className="flex flex-col gap-3 border-b border-[#DDE7D6] pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-black text-[#45623D]">Preview peta nasional</p>
-                  <p className="mt-1 text-sm font-semibold text-[#53606A]">
-                    Kode wilayah nasional siap; layer GIS resmi dapat ditambahkan saat integrasi data tersedia.
-                  </p>
+            <div className="lb-view-reveal lb-bezel rounded-[2rem] p-2">
+              <div className="overflow-hidden rounded-[1.55rem] bg-[#EAF3E4]">
+                <div className="flex flex-col gap-3 border-b border-[#C6D8BD] bg-[#FBFFF7] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-[#45623D]">Preview peta nasional</p>
+                    <p className="mt-1 text-sm font-semibold text-[#53606A]">
+                      Warna menunjukkan sinyal surplus, olahan, risiko harga, logistik, dan data.
+                    </p>
+                  </div>
+                  <StatusBadge tone="service">Map-first</StatusBadge>
                 </div>
-                <StatusBadge tone="warning">Data Awal</StatusBadge>
-              </div>
-              <div className="mt-4 overflow-hidden rounded-[18px] border border-[#C6D8BD] bg-[#EAF3E4]">
                 <svg
                   viewBox="0 0 940 330"
                   role="img"
@@ -332,210 +305,209 @@ export default function Home() {
                         strokeWidth="3"
                         className="lb-map-region"
                       />
-                      <text
-                        x={x}
-                        y={y}
-                        textAnchor="middle"
-                        className="fill-white text-[14px] font-black"
-                      >
+                      <text x={x} y={y} textAnchor="middle" className="fill-white text-[14px] font-black">
                         {label}
                       </text>
                     </g>
                   ))}
-                  <g fill="#A7B99D">
+                  <g fill="#172027">
                     <circle className="lb-soft-pulse" cx="592" cy="274" r="5" />
                     <circle cx="614" cy="279" r="4" />
                     <circle cx="637" cy="284" r="4" />
-                    <circle cx="662" cy="286" r="3" />
                     <circle className="lb-soft-pulse" cx="694" cy="220" r="5" />
                     <circle cx="723" cy="232" r="4" />
                   </g>
                 </svg>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-5">
-                {[
-                  ["#2F7D32", "Surplus"],
-                  ["#D79A2B", "Olahan"],
-                  ["#C92A2A", "Harga"],
-                  ["#1D5D8F", "Logistik"],
-                  ["#7A4E2D", "Data"],
-                ].map(([color, label]) => (
-                  <div key={label} className="rounded-[12px] border border-[#DDE7D6] bg-white p-3">
-                    <span className="block h-3 w-8 rounded-[4px]" style={{ backgroundColor: color }} />
-                    <p className="mt-2 text-xs font-black text-[#1F2933]">{label}</p>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </section>
 
-        <section id="fitur" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="lb-view-reveal max-w-3xl">
-            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
-              Modulnya mengikuti kerja harian koperasi.
-            </h2>
-            <p className="mt-5 text-base font-semibold leading-8 text-[#53606A]">
-              Bukan daftar fitur kosong. Setiap modul punya alur, aksi, dan route
-              alur operasional yang bisa dibuka operator.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-            {platformModules.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  href={item.href}
-                  key={item.title}
-                  className="lb-view-reveal rounded-[16px] border border-[#E7DED1] bg-[#FFFCF5] p-5 transition hover:-translate-y-1 hover:border-[#D79A2B] focus-visible:lb-focus"
-                  style={{ animationDelay: `${index * 60}ms` }}
-                >
-                  <Icon size={24} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
-                  <h3 className="mt-5 text-xl font-black">{item.title}</h3>
-                  <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.copy}</p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        <section id="tata-kelola" className="border-y border-[#E7DED1] bg-[#FFFCF5]">
-          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-              <div className="lb-view-reveal">
-                <ShieldCheck size={32} strokeWidth={2.2} className="text-[#C92A2A]" aria-hidden="true" />
-                <h2 className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">
-                  Aman untuk pilot, jujur untuk produksi.
-                </h2>
-                <p className="mt-5 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
-                  Sistem membedakan input warga, data operator, sumber nasional,
-                  dan integrasi resmi. Tidak ada klaim palsu.
+        <section id="flow" className="px-4 py-24 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="lb-view-reveal max-w-3xl">
+              <p className="text-sm font-black text-[#C92A2A]">Buyer dan readiness</p>
+              <h2 className="lb-display mt-4 text-4xl font-black leading-[0.98] sm:text-6xl">
+                Outreach hanya dilakukan saat stok siap.
+              </h2>
+            </div>
+            <div className="mt-10 grid gap-5 lg:grid-cols-[1fr_0.82fr_1fr]">
+              <div className="lb-view-reveal lb-bezel rounded-[2rem] p-2">
+                <div className="h-full rounded-[1.55rem] bg-[#FFFCF5] p-5">
+                  <BarChart3 size={26} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
+                  <h3 className="mt-5 text-2xl font-black">Requirement buyer</h3>
+                  <div className="mt-5 grid gap-3">
+                    {buyerMatches.slice(0, 3).map((item) => (
+                      <div key={item.buyer} className="rounded-[16px] bg-[#FFF8EA] p-4">
+                        <p className="text-sm font-black">{item.need}</p>
+                        <p className="mt-1 text-xs font-bold text-[#7A4E2D]">{item.buyer}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="lb-view-reveal rounded-[2rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_70px_rgba(31,41,51,0.22)] [--lb-delay:100ms]">
+                <Layers3 size={28} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
+                <p className="mt-8 text-5xl font-black leading-none">No fake demand</p>
+                <p className="mt-5 text-sm font-semibold leading-7 text-[#C9D0D4]">
+                  Landing, dashboard, dan laporan memakai archetype buyer dan status readiness.
+                  Tidak ada nama buyer palsu atau janji pembelian.
                 </p>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                {governance.map((item, index) => {
-                  const Icon = item.icon;
-                  return (
-                    <article
-                      key={item.title}
-                      className="lb-view-reveal rounded-[16px] border border-[#E7DED1] bg-[#FFF8EA] p-5"
-                      style={{ animationDelay: `${index * 80}ms` }}
-                    >
-                      <Icon size={24} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
-                      <h3 className="mt-5 text-xl font-black">{item.title}</h3>
-                      <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.copy}</p>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="lb-view-reveal mt-8 rounded-[18px] border border-[#E7DED1] bg-[#FFF8EA] p-5">
-              <div className="flex items-center gap-2">
-                <Database size={20} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
-                <h3 className="text-xl font-black">Sumber data yang disiapkan</h3>
-              </div>
-              <div className="mt-5 grid gap-3 md:grid-cols-5">
-                {nationalDataSources.map((source) => (
-                  <a
-                    key={source.id}
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-[12px] border border-[#E7DED1] bg-[#FFFCF5] p-4 text-sm transition hover:border-[#2F7D32] focus-visible:lb-focus"
-                  >
-                    <p className="font-black">{source.name}</p>
-                    <p className="mt-2 font-semibold leading-6 text-[#53606A]">{source.status}</p>
-                  </a>
-                ))}
+              <div className="lb-view-reveal lb-bezel rounded-[2rem] p-2 [--lb-delay:160ms]">
+                <div className="h-full rounded-[1.55rem] bg-[#FFFCF5] p-5">
+                  <Warehouse size={26} strokeWidth={2.1} className="text-[#2F7D32]" aria-hidden="true" />
+                  <h3 className="mt-5 text-2xl font-black">Stock ledger</h3>
+                  <div className="mt-5 grid gap-3">
+                    {stockItems.slice(0, 3).map((item) => (
+                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-[16px] bg-[#FFF8EA] p-4">
+                        <p className="text-sm font-black">{item.name}</p>
+                        <p className="text-xs font-bold text-[#7A4E2D]">{item.state}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="bg-[#F4EBDD]">
-          <div className="mx-auto grid max-w-7xl gap-6 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_0.8fr] lg:px-8">
+        <section id="bukti" className="border-y border-[#E7DED1] bg-[#FFFCF5] px-4 py-24 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="lb-view-reveal">
-              <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
-                Siap dipresentasikan. Siap dipilotkan bertahap.
+              <Database size={32} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
+              <h2 className="lb-display mt-5 max-w-2xl text-4xl font-black leading-[0.98] sm:text-6xl">
+                Bukti ditandai, bukan dilebihkan.
               </h2>
-              <p className="mt-5 max-w-2xl text-base font-semibold leading-8 text-[#53606A]">
-                Fondasi operasional sudah memakai login, Postgres, webhook, dan
-                API. Tahap berikutnya adalah mengisi credential resmi, data
-                koperasi, storage, dan connector pemerintah yang diizinkan.
+              <p className="mt-6 max-w-2xl text-base font-semibold leading-8 text-[#53606A]">
+                Shared DB diperlakukan sebagai bahan eksplorasi terbatas. Data
+                operasional MVP disimpan di DB aplikasi dengan prefix tim.
               </p>
             </div>
-            <div className="lb-view-reveal flex flex-col justify-center gap-3 sm:flex-row lg:flex-col">
+            <div className="grid gap-4 md:grid-cols-3">
+              {guardrails.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <article
+                    key={item.title}
+                    className="lb-view-reveal rounded-[1.5rem] border border-[#E7DED1] bg-[#FFF8EA] p-5"
+                    style={{ animationDelay: `${index * 90}ms` }}
+                  >
+                    <Icon size={24} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
+                    <h3 className="mt-5 text-xl font-black">{item.title}</h3>
+                    <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.copy}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="lb-view-reveal mx-auto mt-10 max-w-7xl rounded-[2rem] border border-[#E7DED1] bg-[#FFF8EA] p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-[#7A4E2D]">Source registry</p>
+                <h3 className="mt-1 text-2xl font-black">Sumber nasional dan connector plan</h3>
+              </div>
+              <StatusBadge tone="warning">Source-labeled</StatusBadge>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-5">
+              {nationalDataSources.slice(0, 5).map((source) => (
+                <a
+                  key={source.id}
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[18px] bg-[#FFFCF5] p-4 text-sm transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:bg-white focus-visible:lb-focus"
+                >
+                  <p className="font-black">{source.name}</p>
+                  <p className="mt-2 font-semibold leading-6 text-[#53606A]">{source.status}</p>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-4 py-24 sm:px-6 lg:px-8">
+          <div className="lb-view-reveal mx-auto grid max-w-7xl gap-8 rounded-[2.5rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_80px_rgba(31,41,51,0.24)] lg:grid-cols-[1fr_0.75fr] lg:p-10">
+            <div>
+              <p className="text-sm font-black text-[#D79A2B]">Siap demo</p>
+              <h2 className="lb-display mt-4 max-w-3xl text-4xl font-black leading-[0.98] sm:text-6xl">
+                Mulai dari peta, tutup dengan laporan aksi.
+              </h2>
+              <p className="mt-6 max-w-2xl text-base font-semibold leading-8 text-[#C9D0D4]">
+                Login operator membuka dashboard, WA intake, agent center,
+                integrasi, dan laporan. Semua tetap membutuhkan review manusia.
+              </p>
+            </div>
+            <div className="flex flex-col justify-center gap-3">
+              <PrimaryCta href="/login?next=/dashboard">Masuk dashboard</PrimaryCta>
               <Link
-                href="/login?next=/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#1F2933] px-5 py-3 text-sm font-extrabold text-[#FFF8EA] focus-visible:lb-focus"
+                href="/login?next=/laporan"
+                className="inline-flex w-fit items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.08] px-5 py-3 text-sm font-black text-[#FFF8EA] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-white/[0.12] active:scale-[0.98] focus-visible:lb-focus"
               >
-                Masuk operator
-                <Warehouse size={18} strokeWidth={2.2} aria-hidden="true" />
-              </Link>
-              <Link
-                href="/login?next=/integrasi"
-                className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-[#D9CFC0] bg-[#FFFCF5] px-5 py-3 text-sm font-extrabold text-[#1F2933] focus-visible:lb-focus"
-              >
-                Cek readiness integrasi
+                Lihat laporan aksi
               </Link>
             </div>
           </div>
         </section>
 
-        <section id="faq" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="lb-view-reveal max-w-3xl">
-            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
-              Pertanyaan singkat.
-            </h2>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {faqItems.map((item, index) => (
-              <article
-                key={item.question}
-                className="lb-view-reveal rounded-[16px] border border-[#E7DED1] bg-[#FFFCF5] p-5"
-                style={{ animationDelay: `${index * 70}ms` }}
-              >
-                <h3 className="text-xl font-black">{item.question}</h3>
-                <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.answer}</p>
-              </article>
-            ))}
+        <section id="faq" className="px-4 pb-24 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="lb-view-reveal max-w-3xl">
+              <h2 className="lb-display text-4xl font-black leading-[0.98] sm:text-6xl">
+                Jawaban cepat untuk pitch.
+              </h2>
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
+              {faqItems.map((item, index) => (
+                <article
+                  key={item.question}
+                  className="lb-view-reveal rounded-[1.5rem] border border-[#E7DED1] bg-[#FFFCF5] p-6"
+                  style={{ animationDelay: `${index * 70}ms` }}
+                >
+                  <h3 className="text-xl font-black">{item.question}</h3>
+                  <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{item.answer}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
       </main>
 
       <footer className="border-t border-[#E7DED1] bg-[#FFFCF5] text-[#1F2933]">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr_0.9fr_0.9fr] lg:px-8">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] lg:px-8">
           <div>
-            <BrandMark />
+            <img
+              alt="Lumbung Bersama"
+              src={stitchAssets.footerLogo}
+              className="h-16 w-auto object-contain"
+            />
             <p className="mt-5 max-w-sm text-sm font-semibold leading-7 text-[#53606A]">
-              {brand.tagline} Dibangun untuk membantu koperasi menerima laporan,
-              mengecek data, membaca peluang, dan menyiapkan laporan.
+              {brand.tagline} Dibangun untuk membantu koperasi membaca peluang,
+              mengecek readiness, dan mengambil tindakan yang bisa diaudit.
             </p>
           </div>
           <div>
             <h3 className="font-black">Produk</h3>
             <div className="mt-4 grid gap-3 text-sm font-semibold text-[#53606A]">
-              <Link href="/login?next=/wa">WA Center</Link>
+              <Link href="/peta-unggulan">Peta Potensi</Link>
               <Link href="/login?next=/dashboard">Dashboard</Link>
-              <Link href="/peta-unggulan">Peta Unggulan</Link>
-              <Link href="/login?next=/modules">Modul</Link>
+              <Link href="/login?next=/agents">Agent Center</Link>
             </div>
           </div>
           <div>
             <h3 className="font-black">Operasional</h3>
             <div className="mt-4 grid gap-3 text-sm font-semibold text-[#53606A]">
-              <Link href="/login?next=/agents">Agent Center</Link>
+              <Link href="/login?next=/wa">WA Intake</Link>
               <Link href="/login?next=/laporan">Laporan</Link>
               <Link href="/login?next=/integrasi">Integrasi</Link>
-              <Link href="#alur">Alur WA</Link>
             </div>
           </div>
           <div>
             <h3 className="font-black">Catatan</h3>
             <p className="mt-4 text-sm font-semibold leading-7 text-[#53606A]">
-              Bukan sistem resmi pemerintah. Semua integrasi produksi harus
-              melalui akses, izin, dan keamanan data yang sesuai.
+              Platform hackathon/pilot. Integrasi produksi memerlukan izin,
+              credential resmi, dan pengamanan data.
             </p>
           </div>
         </div>

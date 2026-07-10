@@ -1,3 +1,5 @@
+import { checkRateLimit, fetchWithTimeout } from "@/lib/external-fetch";
+
 export const runtime = "nodejs";
 
 type GdeltArticle = {
@@ -44,6 +46,9 @@ function getCacheKey(commodity: string, area: string, limit: number) {
 }
 
 export async function GET(request: Request) {
+  const rateLimit = checkRateLimit(request, "commodity-news", { limit: 30, windowMs: 60_000 });
+  if (rateLimit) return rateLimit;
+
   const { searchParams } = new URL(request.url);
   const commodity = sanitizeQueryPart(searchParams.get("commodity") ?? "");
   const area = sanitizeQueryPart(searchParams.get("area") ?? "");
@@ -74,10 +79,10 @@ export async function GET(request: Request) {
   gdeltUrl.searchParams.set("sort", "hybridrel");
 
   try {
-    const response = await fetch(gdeltUrl, {
+    const response = await fetchWithTimeout(gdeltUrl, {
       headers: { "User-Agent": "lumbung-bersama-commodity-news" },
       next: { revalidate: 60 * 10 },
-    });
+    }, { timeoutMs: 6500, label: "GDELT commodity news" });
 
     if (response.status === 429) {
       return Response.json({

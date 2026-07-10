@@ -6,16 +6,16 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://lumbungbersama.id"),
   applicationName: "Lumbung Bersama",
   title: {
-    default: "Lumbung Bersama | Platform Operasional Koperasi Desa",
+    default: "Lumbung Bersama | Peta Peluang dan Aksi Koperasi Desa",
     template: "%s | Lumbung Bersama",
   },
   description:
-    "Platform operasional koperasi desa berbasis WhatsApp untuk laporan warga, komoditas unggulan, stok, buyer, pembiayaan, dan laporan yang bisa diverifikasi.",
+    "Ruang kerja koperasi desa untuk memetakan potensi, merekomendasikan komoditas, mencocokkan buyer, mengecek readiness stok, dan membuat laporan aksi.",
   keywords: [
     "koperasi desa",
     "koperasi merah putih",
     "komoditas unggulan desa",
-    "WhatsApp koperasi",
+    "buyer matching koperasi",
     "dashboard koperasi",
     "peta unggulan desa",
     "Lumbung Bersama",
@@ -47,9 +47,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Lumbung Bersama | Platform Operasional Koperasi Desa",
+    title: "Lumbung Bersama | Peta Peluang dan Aksi Koperasi Desa",
     description:
-      "Dari WhatsApp warga menjadi data koperasi yang bisa diverifikasi untuk stok, komoditas unggulan, buyer, pembiayaan, dan laporan.",
+      "Dari potensi desa menjadi rekomendasi komoditas, buyer matching lite, readiness stok, dan laporan aksi yang bisa diverifikasi.",
     url: "https://lumbungbersama.id",
     siteName: "Lumbung Bersama",
     locale: "id_ID",
@@ -57,9 +57,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary",
-    title: "Lumbung Bersama | Platform Operasional Koperasi Desa",
+    title: "Lumbung Bersama | Peta Peluang dan Aksi Koperasi Desa",
     description:
-      "Platform WhatsApp-first untuk laporan warga, komoditas unggulan, stok, buyer, pembiayaan, dan laporan koperasi.",
+      "Peta potensi, rekomendasi komoditas, buyer matching lite, readiness stok, dan laporan aksi untuk koperasi desa.",
   },
 };
 

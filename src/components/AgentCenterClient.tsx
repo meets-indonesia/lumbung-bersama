@@ -38,14 +38,15 @@ export function AgentCenterClient() {
     <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="rounded-[24px] border border-[#E7DED1] bg-[#FFFCF5] p-5">
         <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#C92A2A]">
-          Agent AI Center
+          Agen Rekomendasi
         </p>
         <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">
-          Agent bantu cek, manusia tetap approve.
+          Tiga agent untuk flow MVP.
         </h1>
         <p className="mt-4 text-base font-semibold leading-8 text-[#53606A]">
-          Semua agent dapat dijalankan dari record koperasi atau dari alur WA.
-          Saat API key belum aktif, hasil memakai rules lokal.
+          Fokus hanya pada unggulan desa, pasar dan mitra, serta laporan aksi.
+          Saat API key belum aktif, hasil memakai rules lokal dan tetap perlu
+          approval manusia.
         </p>
 
         <label htmlFor="record-id" className="mt-6 block text-sm font-extrabold text-[#1F2933]">
@@ -108,7 +109,7 @@ export function AgentCenterClient() {
           ) : (
             <Play size={17} strokeWidth={2.2} aria-hidden="true" />
           )}
-          Jalankan Agent Aktif
+          Jalankan agent aktif
         </button>
 
         {result ? (
@@ -134,7 +135,7 @@ export function AgentCenterClient() {
           <div className="mt-5 rounded-[18px] border border-dashed border-[#D79A2B] bg-[#FFF8EA] p-8 text-center">
             <p className="text-lg font-black text-[#1F2933]">Belum ada agent run.</p>
             <p className="mt-2 text-sm font-semibold leading-6 text-[#7A4E2D]">
-              Pilih agent atau tekan Jalankan Agent Aktif.
+              Pilih agent atau tekan Jalankan agent aktif.
             </p>
           </div>
         )}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
+  BarChart3,
   Bot,
   Building2,
   CheckCircle2,
@@ -14,7 +15,6 @@ import {
   Download,
   FileCheck2,
   FileText,
-  HelpCircle,
   LayoutDashboard,
   Loader2,
   Lock,
@@ -44,33 +44,38 @@ import {
   villageInsights,
   waIntents,
 } from "@/lib/demo-data";
-import { BrandMark } from "./BrandMark";
+import { stitchAssets } from "@/lib/stitch-assets";
 import { StatusBadge } from "./StatusBadge";
 
 const navGroups = [
   {
-    label: "Command",
+    label: "MVP utama",
     items: [
       { label: "Ringkasan", view: "overview", icon: LayoutDashboard },
-      { label: "WA Center", view: "wa", icon: MessageCircle },
-      { label: "Agent Center", view: "agents", icon: Bot },
+      { label: "Peta Potensi", view: "peta-unggulan", icon: MapPinned },
+      { label: "Rekomendasi", view: "agents", icon: Bot },
     ],
   },
   {
-    label: "Operasi",
+    label: "Data dan verifikasi",
     items: [
       { label: "Lumbung Data", view: "lumbung-data", icon: Database },
-      { label: "Gerai Pintar", view: "gerai-pintar", icon: Store },
-      { label: "Stok Logistik", view: "stok-logistik", icon: Warehouse },
-      { label: "Peta Unggulan", view: "peta-unggulan", icon: MapPinned },
+      { label: "WA Intake", view: "wa", icon: MessageCircle },
     ],
   },
   {
-    label: "Tata Kelola",
+    label: "Eksekusi",
     items: [
-      { label: "Pasar Mitra", view: "pasar-mitra", icon: Building2 },
-      { label: "Simpan Pinjam", view: "simpan-pinjam", icon: ShieldCheck },
-      { label: "Laporan", view: "laporan", icon: FileText },
+      { label: "Buyer Matching", view: "pasar-mitra", icon: Building2 },
+      { label: "Stok Readiness", view: "stok-logistik", icon: Warehouse },
+      { label: "Laporan Aksi", view: "laporan", icon: FileText },
+    ],
+  },
+  {
+    label: "Pendukung",
+    items: [
+      { label: "Gerai Readiness", view: "gerai-pintar", icon: Store },
+      { label: "Financing Readiness", view: "simpan-pinjam", icon: ShieldCheck },
       { label: "Integrasi", view: "integrasi", icon: Settings },
     ],
   },
@@ -90,7 +95,7 @@ const dashboardTourSteps: TourStep[] = [
   {
     id: "sidebar",
     title: "Navigasi kerja",
-    body: "Sidebar membagi pekerjaan menjadi Command, Operasi, dan Tata Kelola. Semua modul tetap dibuka di dashboard yang sama.",
+    body: "Sidebar sekarang mengikuti flow MVP: peta, rekomendasi, buyer, readiness stok, dan laporan aksi.",
     selector: "[data-tour='sidebar']",
   },
   {
@@ -102,21 +107,21 @@ const dashboardTourSteps: TourStep[] = [
   {
     id: "queue",
     title: "Antrian verifikasi",
-    body: "Data warga dari WhatsApp masuk sebagai draft. Operator bisa tanya ulang, setujui, atau membuka modul tujuan.",
+    body: "Data warga dari WhatsApp masuk sebagai draft pendukung. Operator bisa tanya ulang, setujui, atau membuka modul tujuan.",
     selector: "[data-tour='work-queue']",
     view: "overview",
   },
   {
     id: "lumbung-data",
     title: "Lumbung Data",
-    body: "Ini meja verifikasi. Master nasional hanya baseline; data operasional menjadi resmi setelah warga/operator memberi bukti dan pengurus menyetujui.",
+    body: "Ini meja verifikasi. Data awal dan baseline nasional tidak menjadi klaim operasional sebelum operator memberi bukti dan pengurus menyetujui.",
     selector: "[data-tour='lumbung-data']",
     view: "lumbung-data",
   },
   {
     id: "peta",
     title: "Peta Unggulan",
-    body: "Peta dibuka sebagai halaman penuh agar operator bisa zoom, geser, mencari wilayah, dan membaca panel detail tanpa sidebar dashboard.",
+    body: "Peta adalah layar utama demo dan dibuka sebagai halaman penuh agar operator bisa drill-down wilayah, komoditas, dan sumber.",
     selector: "[data-testid='dashboard-nav-peta-unggulan']",
   },
   {
@@ -134,15 +139,6 @@ function dashboardViewForFeature(slug: string) {
   return slug;
 }
 
-function getViewTitle(view: string) {
-  if (view === "overview") return "Operasi koperasi hari ini";
-  if (view === "wa") return "WA Center";
-  if (view === "agents") return "Agent Center";
-  if (view === "laporan") return "Laporan";
-  if (view === "integrasi") return "Integrasi";
-  return featureDetails[view]?.title ?? "Ruang Kerja";
-}
-
 function formatRupiah(value: string | number) {
   const numberValue = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numberValue)) return String(value);
@@ -153,6 +149,17 @@ function formatRupiah(value: string | number) {
   }).format(numberValue);
 }
 
+function formatInteger(value: string | number | null | undefined) {
+  const numberValue = typeof value === "number" ? value : Number(value ?? 0);
+  if (!Number.isFinite(numberValue)) return String(value ?? "0");
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(numberValue);
+}
+
+function formatPercentRatio(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
+  return `${Math.round(value * 100)}%`;
+}
+
 function downloadTextFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -161,6 +168,10 @@ function downloadTextFile(filename: string, content: string, type = "text/plain;
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function buyerEvidenceLabel(match: BuyerMatch) {
+  return match.sourceLabel ?? "Buyer archetype; bukan named buyer atau komitmen permintaan live.";
 }
 
 function toCsv(rows: Array<Array<string | number | boolean | null | undefined>>) {
@@ -231,6 +242,63 @@ type BuyerMatch = {
   reason: string;
   status: string;
   approvedAt?: string | null;
+  buyerSource?: string;
+  sourceLabel?: string;
+  verifiedBuyer?: boolean;
+};
+
+type BuyerRequirement = {
+  id: string;
+  buyerArchetype: string;
+  productName: string;
+  requiredQuantity: string;
+  unitLabel: string;
+  qualitySpec: string;
+  packagingSpec: string;
+  targetWindow: string;
+  verificationStatus: string;
+  sourceLabel: string;
+  notes: string;
+};
+
+type StockLedgerEntry = {
+  id: string;
+  stockItemId: string;
+  stockName: string;
+  movementType: string;
+  quantity: string;
+  unitLabel: string;
+  reason: string;
+  evidenceRef: string;
+  readinessStatus: string;
+  recordedBy: string;
+  createdAt: string;
+};
+
+type MediaEvidence = {
+  id: string;
+  relatedRecordType: string;
+  relatedRecordId: string;
+  mediaType: string;
+  storageKey: string;
+  redactedLabel: string;
+  caption: string;
+  verificationStatus: string;
+  sourceLabel: string;
+};
+
+type PrefixedDbTableStatus = {
+  tableName: string;
+  status: "ready" | "setup-required";
+  rows: number;
+  errorCode?: string;
+};
+
+type PrefixedDbStatus = {
+  prefix: string;
+  status: "ready" | "setup-required";
+  message: string;
+  tables: PrefixedDbTableStatus[];
 };
 
 type FinanceRequest = {
@@ -268,6 +336,182 @@ type DashboardData = {
   reportPeriod: ReportPeriod | null;
   commodityCoverage?: CommodityCoverage | null;
   commodityHighlights?: CommodityHighlight[];
+  buyerRequirements?: BuyerRequirement[];
+  stockLedger?: StockLedgerEntry[];
+  mediaEvidence?: MediaEvidence[];
+  teamTablePrefix?: string;
+  prefixedDbStatus?: PrefixedDbStatus;
+};
+
+type HackathonTableCount = {
+  tableName: string;
+  total: string;
+};
+
+type HackathonCoverage = {
+  totalProvinces: string;
+  totalRegencies: string;
+  totalDistricts: string;
+  totalVillages: string;
+  commodityAreas: string;
+  cooperatives: string;
+  cooperativesWithProducts: string;
+  cooperativesWithStock: string;
+  cooperativesWithTransactions: string;
+  cooperativesWithPartnerships: string;
+};
+
+type HackathonProvinceOpportunity = {
+  province: string;
+  villages: string;
+  commodityRows: string;
+  potentialValue: string | null;
+  cooperatives: string;
+  products: string;
+  stockItems: string;
+  transactions: string;
+  partnershipRequests: string;
+};
+
+type HackathonCooperativeCandidate = {
+  cooperativeRef: string;
+  cooperativeName: string | null;
+  province: string | null;
+  regency: string | null;
+  village: string | null;
+  products: string;
+  stockItems: string;
+  stockTotal: string | null;
+  transactions: string;
+  partnershipRequests: string;
+};
+
+type HackathonMvpSummary = {
+  source: string;
+  mode: string;
+  tablePrefix: string;
+  schemaScope?: {
+    label: string;
+    notPrimaryReference: boolean;
+    description: string;
+  };
+  tableCounts: HackathonTableCount[];
+  coverage: HackathonCoverage | null;
+  provinceOpportunities: HackathonProvinceOpportunity[];
+  cooperativeCandidates: HackathonCooperativeCandidate[];
+  dataQualityFlags: string[];
+};
+
+type HackathonDataQuality = {
+  source?: string;
+  mode?: string;
+  tablePrefix?: string;
+  checks: Array<{
+    table: string;
+    totalRows: number;
+    missingKeyRefs: Array<{ field: string; missingRows: number; presentRows: number; completenessRate: number | null }>;
+    completeness: Array<{ field: string; missingRows: number; presentRows: number; completenessRate: number | null }>;
+    quality: Array<{ field: string; risk: string; affectedRows: number; affectedRate: number | null }>;
+  }>;
+  recommendations: string[];
+};
+
+type HackathonOpportunityScores = {
+  source?: string;
+  mode?: string;
+  tablePrefix?: string;
+  topAreas: Array<{
+    area: {
+      kodeWilayah: string | null;
+      province: string | null;
+      regency: string | null;
+      district: string | null;
+      village: string | null;
+    };
+    rawSignals: Record<string, number>;
+    componentScores: Record<string, number>;
+    score: number;
+  }>;
+  recommendations: string[];
+};
+
+type HackathonBuyerMatching = {
+  source?: string;
+  mode?: string;
+  tablePrefix?: string;
+  matches: Array<{
+    rank: number;
+    buyerArchetypeLabel: string;
+    score: number;
+    readinessCluster: string;
+    cooperativeRef: string;
+    cooperativeName: string | null;
+    location: {
+      province: string | null;
+      regency: string | null;
+      locationLinks: number;
+    };
+    productSnapshot: {
+      productsTotal: number;
+      namedProducts: number;
+      productExamples: string[];
+    };
+    signals: {
+      stockItems: number;
+      stockTotal: number;
+      positiveStockItems: number;
+      transactions: number;
+      partnershipRequests: number;
+    };
+  }>;
+  nextActions: string[];
+};
+
+type HackathonFinancingReadiness = {
+  source?: string;
+  mode?: string;
+  tablePrefix?: string;
+  freshness?: {
+    generatedAt: string;
+    method: string;
+    caveat: string;
+  };
+  confidence?: {
+    level: string;
+    basis: string;
+    caveat: string;
+  };
+  totals: {
+    totalRequests: number;
+    totalAmount: string;
+    draftRequests: number;
+    requestedRequests: number;
+    verifiedRequests: number;
+    unverifiedRequests: number;
+    verificationRate: number | null;
+    missingStatus: number;
+    missingChannel: number;
+    missingAmount: number;
+  };
+  statusSummary: Array<{
+    status: string;
+    statusKey: string;
+    requests: number;
+    amount: string;
+  }>;
+  channelSummary: Array<{
+    channel: string;
+    requests: number;
+    amount: string;
+  }>;
+  actionChecklist: Array<{
+    id: string;
+    title: string;
+    status: string;
+    nextAction: string;
+    source: string;
+    caveat: string;
+  }>;
 };
 
 type DashboardUser = {
@@ -294,6 +538,9 @@ const EMPTY_METRICS: MetricItem[] = [];
 const EMPTY_QUEUE: QueueItem[] = [];
 const EMPTY_STOCKS: StockItem[] = [];
 const EMPTY_BUYERS: BuyerMatch[] = [];
+const EMPTY_BUYER_REQUIREMENTS: BuyerRequirement[] = [];
+const EMPTY_STOCK_LEDGER: StockLedgerEntry[] = [];
+const EMPTY_MEDIA_EVIDENCE: MediaEvidence[] = [];
 const EMPTY_FINANCE: FinanceRequest[] = [];
 const EMPTY_REPORTS: ReportSection[] = [];
 
@@ -347,6 +594,13 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [hackathonSummary, setHackathonSummary] = useState<HackathonMvpSummary | null>(null);
+  const [hackathonDataQuality, setHackathonDataQuality] = useState<HackathonDataQuality | null>(null);
+  const [hackathonOpportunityScores, setHackathonOpportunityScores] = useState<HackathonOpportunityScores | null>(null);
+  const [hackathonBuyerMatching, setHackathonBuyerMatching] = useState<HackathonBuyerMatching | null>(null);
+  const [hackathonFinancingReadiness, setHackathonFinancingReadiness] = useState<HackathonFinancingReadiness | null>(null);
+  const [hackathonStatus, setHackathonStatus] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
+  const [hackathonError, setHackathonError] = useState("");
   const [user, setUser] = useState(initialUser);
   const [profileForm, setProfileForm] = useState({
     fullName: initialUser.fullName,
@@ -484,6 +738,57 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
     }
   }
 
+  async function loadHackathonSummary() {
+    try {
+      setHackathonStatus((current) => (current === "ready" ? "ready" : "loading"));
+      const endpoints = [
+        ["summary", "/api/hackathon/mvp-summary"],
+        ["dataQuality", "/api/hackathon/data-quality"],
+        ["opportunityScores", "/api/hackathon/opportunity-scores"],
+        ["buyerMatching", "/api/hackathon/buyer-matching"],
+        ["financingReadiness", "/api/hackathon/financing-readiness"],
+      ] as const;
+      const responses = await Promise.all(
+        endpoints.map(async ([key, url]) => {
+          const response = await fetch(url, { cache: "no-store" });
+          const payload = await response.json().catch(() => null);
+          return { key, response, payload };
+        }),
+      );
+      if (responses.some((item) => item.response.status === 401)) {
+        window.location.href = "/login?next=/dashboard";
+        return;
+      }
+      const failed = responses.find((item) => !item.response.ok);
+      if (failed) {
+        setHackathonSummary(null);
+        setHackathonDataQuality(null);
+        setHackathonOpportunityScores(null);
+        setHackathonBuyerMatching(null);
+        setHackathonFinancingReadiness(null);
+        setHackathonStatus(failed.response.status === 503 ? "unavailable" : "error");
+        setHackathonError(failed.payload?.message ?? failed.payload?.error ?? "Shared DB hackathon belum tersedia.");
+        return;
+      }
+      const payloadByKey = Object.fromEntries(responses.map((item) => [item.key, item.payload]));
+      setHackathonSummary(payloadByKey.summary as HackathonMvpSummary);
+      setHackathonDataQuality(payloadByKey.dataQuality as HackathonDataQuality);
+      setHackathonOpportunityScores(payloadByKey.opportunityScores as HackathonOpportunityScores);
+      setHackathonBuyerMatching(payloadByKey.buyerMatching as HackathonBuyerMatching);
+      setHackathonFinancingReadiness(payloadByKey.financingReadiness as HackathonFinancingReadiness);
+      setHackathonStatus("ready");
+      setHackathonError("");
+    } catch (error) {
+      setHackathonSummary(null);
+      setHackathonDataQuality(null);
+      setHackathonOpportunityScores(null);
+      setHackathonBuyerMatching(null);
+      setHackathonFinancingReadiness(null);
+      setHackathonStatus("error");
+      setHackathonError(error instanceof Error ? error.message : "Gagal memuat shared DB hackathon.");
+    }
+  }
+
   async function loadNotifications() {
     const response = await fetch("/api/notifications", { cache: "no-store" });
     if (response.status === 401) {
@@ -549,6 +854,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadDashboard();
+      void loadHackathonSummary();
       void loadNotifications();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -573,6 +879,10 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const queue = dashboardData?.queue ?? EMPTY_QUEUE;
   const stocks = dashboardData?.stocks ?? EMPTY_STOCKS;
   const buyers = dashboardData?.buyers ?? EMPTY_BUYERS;
+  const buyerRequirements = dashboardData?.buyerRequirements ?? EMPTY_BUYER_REQUIREMENTS;
+  const stockLedger = dashboardData?.stockLedger ?? EMPTY_STOCK_LEDGER;
+  const mediaEvidence = dashboardData?.mediaEvidence ?? EMPTY_MEDIA_EVIDENCE;
+  const prefixedDbStatus = dashboardData?.prefixedDbStatus ?? null;
   const finance = dashboardData?.finance ?? EMPTY_FINANCE;
   const reports = dashboardData?.reportSections ?? EMPTY_REPORTS;
   const reportPeriod = dashboardData?.reportPeriod ?? null;
@@ -644,20 +954,31 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
 
   const isDark = theme === "dark";
   const shellClass = isDark
-    ? "bg-[#0F1519] text-[#F8F4EA]"
+    ? "bg-[#0B1013] text-[#F8F4EA]"
     : "bg-[#F5F0E7] text-[#172027]";
   const sidebarClass = isDark
-    ? "border-white/10 bg-[#111A20]"
+    ? "border-[#26323B] bg-[#101820]"
     : "border-[#D9CFC0] bg-[#FFFCF5]";
   const panelClass = isDark
-    ? "border-white/10 bg-[#172027] text-[#F8F4EA]"
+    ? "border-white/10 bg-[#172027] text-[#F8F4EA] shadow-[0_18px_60px_rgba(0,0,0,0.18)]"
     : "border-[#D9CFC0] bg-[#FFFCF5] text-[#172027]";
   const innerClass = isDark
     ? "border-white/10 bg-[#101820]"
     : "border-[#E7DED1] bg-[#FFF8EA]";
   const mutedClass = isDark ? "text-[#CFC3B2]" : "text-[#5B6871]";
-  const activeTitle = getViewTitle(activeView);
   const setupRequired = dataStatus === "setup" || dataStatus === "error";
+  const activeNavItem = navGroups.flatMap((group) => group.items).find((item) => item.view === activeView);
+  const activeViewLabel =
+    activeView === "overview"
+      ? "Ringkasan Operator"
+      : activeNavItem?.label ?? featureDetails[activeView]?.title ?? "Ruang Kerja";
+  const headerEvidenceCount = [
+    hackathonSummary,
+    hackathonDataQuality,
+    hackathonOpportunityScores,
+    hackathonBuyerMatching,
+    hackathonFinancingReadiness,
+  ].filter(Boolean).length;
 
   return (
     <main className={`lb-dashboard-type h-[100dvh] overflow-hidden ${shellClass}`}>
@@ -671,23 +992,31 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
       ) : null}
       <div
         className={`lb-dashboard-grid grid h-[100dvh] min-w-0 grid-cols-[minmax(0,1fr)] ${
-          sidebarCollapsed ? "lg:grid-cols-[88px_minmax(0,1fr)]" : "lg:grid-cols-[286px_minmax(0,1fr)]"
+          sidebarCollapsed ? "lg:grid-cols-[88px_minmax(0,1fr)]" : "lg:grid-cols-[292px_minmax(0,1fr)]"
         }`}
       >
         <aside
           data-collapsed={sidebarCollapsed ? "true" : "false"}
           data-tour="sidebar"
-          className={`lb-sidebar-scroll fixed inset-y-0 left-0 z-40 w-[min(88vw,320px)] min-w-0 overflow-y-auto border-r p-4 transition-transform duration-200 lg:relative lg:inset-auto lg:z-auto lg:h-[100dvh] lg:w-auto lg:translate-x-0 ${
+          className={`lb-sidebar-scroll fixed inset-y-0 left-0 z-40 w-[min(88vw,336px)] min-w-0 overflow-y-auto border-r py-5 transition-transform duration-200 lg:relative lg:inset-auto lg:z-auto lg:h-[100dvh] lg:w-auto lg:translate-x-0 ${
             mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
           } lb-sidebar-panel ${sidebarClass}`}
         >
           <div
-            className={`lb-sidebar-head flex items-center gap-3 ${
+            className={`lb-sidebar-head flex items-center gap-3 px-4 ${
               sidebarCollapsed ? "lg:justify-center lg:gap-0" : "justify-between"
             }`}
           >
-            <div className="lb-sidebar-brand">
-              <BrandMark compact />
+            <div className={`lb-sidebar-brand flex min-w-0 items-center gap-3 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+              <img
+                alt="Lumbung Bersama"
+                src={stitchAssets.dashboardLogo}
+                className={`${sidebarCollapsed ? "h-12" : "h-16 lg:h-20"} w-auto object-contain drop-shadow-[0_18px_34px_rgba(215,154,43,0.2)]`}
+              />
+              <div className={`lb-sidebar-copy min-w-0 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
+                <p className="truncate text-sm font-black text-[#FFF8EA]">Lumbung Bersama</p>
+                <p className="mt-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#D79A2B]">Ringkasan Operator</p>
+              </div>
             </div>
             <div className={`flex items-center gap-1 ${sidebarCollapsed ? "lg:ml-0" : "ml-auto"}`}>
               <button
@@ -716,9 +1045,10 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             </div>
           </div>
 
-          <div className={`lb-sidebar-info mt-5 rounded-[16px] border p-4 ${innerClass}`}>
-            <p className="text-sm font-semibold">{cooperative.name}</p>
-            <p className={`mt-2 text-xs font-normal leading-5 ${mutedClass}`}>
+          <div className={`lb-sidebar-info mx-4 mt-5 rounded-[8px] border border-[#26323B] bg-[#0B1013] p-3 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#D79A2B]">Authenticated</p>
+            <p className="mt-2 truncate text-sm font-semibold">{cooperative.name}</p>
+            <p className={`mt-1 text-xs font-normal leading-5 ${mutedClass}`}>
               {cooperative.village}, {cooperative.district}
             </p>
           </div>
@@ -727,7 +1057,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             {navGroups.map((group) => (
               <div key={group.label} className="min-w-0">
                 <p
-                  className={`lb-sidebar-group-label px-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${mutedClass}`}
+                  className={`lb-sidebar-group-label px-4 text-[10px] font-black uppercase tracking-[0.18em] ${mutedClass} ${sidebarCollapsed ? "lg:sr-only" : ""}`}
                   aria-hidden={sidebarCollapsed}
                 >
                   {group.label}
@@ -751,14 +1081,14 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                           setMobileSidebarOpen(false);
                         }}
                         title={item.label}
-                        className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium transition focus-visible:lb-focus ${
+                        className={`flex min-h-10 w-full items-center justify-between gap-3 border-l-4 px-4 py-2.5 text-left text-sm font-medium transition focus-visible:lb-focus ${
                           sidebarCollapsed ? "lg:justify-center lg:px-2" : ""
                         } ${
                           active
-                            ? "bg-[#C92A2A] text-[#FFF8EA]"
+                            ? "border-[#D79A2B] bg-[#42302E] text-[#FFE5E2]"
                             : isDark
-                              ? "text-[#D8CBB8] hover:bg-white/5 hover:text-white"
-                              : "text-[#4F5D66] hover:bg-[#F3E7D5] hover:text-[#172027]"
+                              ? "border-transparent text-[#E4BEBA] hover:bg-[#2B1C1A] hover:text-white"
+                              : "border-transparent text-[#4F5D66] hover:bg-[#F3E7D5] hover:text-[#172027]"
                         }`}
                       >
                         <span className="lb-sidebar-item-content flex min-w-0 items-center gap-3">
@@ -781,7 +1111,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
           <header
             className={`sticky top-0 z-20 border-b px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8 ${
               isDark
-                ? "border-white/10 bg-[#0F1519]/92"
+                ? "border-[#26323B] bg-[#0B1013]/96"
                 : "border-[#D9CFC0] bg-[#F5F0E7]/92"
             }`}
           >
@@ -796,13 +1126,28 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 >
                   <Menu size={18} strokeWidth={2.2} aria-hidden="true" />
                 </button>
-                <div className="min-w-0">
-                  <h1 className="truncate text-xl font-semibold tracking-normal sm:text-2xl">
-                    {activeTitle}
-                  </h1>
-                  <p className={`mt-1 text-xs font-normal ${mutedClass}`}>
-                    Data operasional koperasi dari Postgres
-                  </p>
+                <div className="flex min-w-0 flex-wrap items-center gap-4">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Authenticated command center</p>
+                    <h1 className="mt-1 truncate text-lg font-black tracking-normal text-[#FFF8EA] sm:text-xl">
+                      {activeViewLabel}
+                    </h1>
+                  </div>
+                  <span className="hidden h-6 w-px bg-[#1F2933] sm:block" aria-hidden="true" />
+                  <div className="flex items-center gap-3 text-xs font-bold">
+                    <span className="border-b-2 border-[#D79A2B] pb-1 text-[#D79A2B]">
+                      {cooperative.village}
+                    </span>
+                    <span className={mutedClass}>{cooperative.province}</span>
+                  </div>
+                  <div className="hidden items-center gap-2 xl:flex">
+                    <span className="rounded-[4px] border border-[#26323B] bg-[#101820] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
+                      /api/dashboard: {dataStatus}
+                    </span>
+                    <span className="rounded-[4px] border border-[#26323B] bg-[#101820] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
+                      hackathon: {headerEvidenceCount}/5
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -827,11 +1172,12 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                   <button
                     type="button"
                     onClick={openTour}
-                    className={`rounded-[12px] border p-2.5 focus-visible:lb-focus ${innerClass}`}
-                    aria-label="Buka panduan dashboard"
-                    title="Panduan"
+                    className="inline-flex items-center gap-2 rounded-[4px] bg-[#C92A2A] px-3 py-2 text-xs font-black text-[#FFE5E2] focus-visible:lb-focus"
+                    aria-label="Buka verifikasi data"
+                    title="Verifikasi data"
                   >
-                    <HelpCircle size={18} strokeWidth={2.2} aria-hidden="true" />
+                    <CheckCircle2 size={16} strokeWidth={2.2} aria-hidden="true" />
+                    <span className="hidden sm:inline">Verifikasi Data</span>
                   </button>
                   <button
                     type="button"
@@ -923,18 +1269,12 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                         setNotificationsOpen(false);
                       }}
                       data-tour="operator-profile"
-                      className={`flex items-center gap-3 rounded-[14px] border px-3 py-2 focus-visible:lb-focus ${innerClass}`}
+                      className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#D79A2B] bg-[#42302E] focus-visible:lb-focus"
                       aria-label={`${user.fullName}, buka menu profil`}
                       aria-expanded={profileOpen}
                       aria-haspopup="menu"
                     >
-                      <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-[#2F7D32] text-sm font-semibold text-white">
-                        {user.avatarInitials}
-                      </span>
-                      <span className="hidden text-left sm:block">
-                        <span className="block max-w-[160px] truncate text-sm font-semibold">{user.fullName}</span>
-                        <span className={`block max-w-[160px] truncate text-xs font-normal ${mutedClass}`}>{user.title}</span>
-                      </span>
+                      <img alt="" src={stitchAssets.dashboardAvatar} className="h-full w-full object-cover" />
                     </button>
                     {profileOpen ? (
                       <div className={`fixed left-4 right-4 top-48 z-50 rounded-[16px] border p-4 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[360px] ${panelClass}`}>
@@ -1045,8 +1385,19 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 filteredQueue={filteredQueue}
                 stocks={stocks}
                 buyers={buyers}
+                buyerRequirements={buyerRequirements}
+                stockLedger={stockLedger}
+                mediaEvidence={mediaEvidence}
+                prefixedDbStatus={prefixedDbStatus}
                 finance={finance}
                 reports={reports}
+                hackathonSummary={hackathonSummary}
+                hackathonDataQuality={hackathonDataQuality}
+                hackathonOpportunityScores={hackathonOpportunityScores}
+                hackathonBuyerMatching={hackathonBuyerMatching}
+                hackathonFinancingReadiness={hackathonFinancingReadiness}
+                hackathonStatus={hackathonStatus}
+                hackathonError={hackathonError}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
                 openModule={openModule}
@@ -1054,7 +1405,6 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 setPanelMessage={announce}
                 reload={loadDashboard}
                 isDark={isDark}
-                commodityCoverage={dashboardData?.commodityCoverage ?? null}
                 commodityHighlights={dashboardData?.commodityHighlights ?? []}
               />
             ) : activeView === "wa" ? (
@@ -1079,7 +1429,16 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 panelClass={panelClass}
                 innerClass={innerClass}
                 mutedClass={mutedClass}
+                isDark={isDark}
                 filteredQueue={filteredQueue}
+                hackathonSummary={hackathonSummary}
+                hackathonDataQuality={hackathonDataQuality}
+                hackathonOpportunityScores={hackathonOpportunityScores}
+                hackathonBuyerMatching={hackathonBuyerMatching}
+                hackathonFinancingReadiness={hackathonFinancingReadiness}
+                hackathonStatus={hackathonStatus}
+                hackathonError={hackathonError}
+                reloadHackathon={loadHackathonSummary}
                 approveDraft={approveDraft}
                 askFarmer={askFarmer}
                 openModule={openModule}
@@ -1087,9 +1446,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             ) : activeView === "gerai-pintar" ? (
               <GeraiPintarView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} stocks={stocks} reload={loadDashboard} setPanelMessage={announce} requestConfirm={requestConfirm} />
             ) : activeView === "stok-logistik" ? (
-              <StokLogistikView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} queue={queue} stocks={stocks} setPanelMessage={announce} />
+              <StokLogistikView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} queue={queue} stocks={stocks} stockLedger={stockLedger} mediaEvidence={mediaEvidence} setPanelMessage={announce} />
             ) : activeView === "pasar-mitra" ? (
-              <PasarMitraView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} buyers={buyers} reload={loadDashboard} setPanelMessage={announce} requestConfirm={requestConfirm} />
+              <PasarMitraView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} buyers={buyers} buyerRequirements={buyerRequirements} mediaEvidence={mediaEvidence} reload={loadDashboard} setPanelMessage={announce} requestConfirm={requestConfirm} />
             ) : activeView === "simpan-pinjam" ? (
               <SimpanPinjamView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} finance={finance} reload={loadDashboard} setPanelMessage={announce} requestConfirm={requestConfirm} />
             ) : (
@@ -1467,8 +1826,19 @@ function OverviewView({
   filteredQueue,
   stocks,
   buyers,
+  buyerRequirements,
+  stockLedger,
+  mediaEvidence,
+  prefixedDbStatus,
   finance,
   reports,
+  hackathonSummary,
+  hackathonDataQuality,
+  hackathonOpportunityScores,
+  hackathonBuyerMatching,
+  hackathonFinancingReadiness,
+  hackathonStatus,
+  hackathonError,
   approveDraft,
   askFarmer,
   openModule,
@@ -1476,15 +1846,25 @@ function OverviewView({
   setPanelMessage,
   reload,
   isDark,
-  commodityCoverage,
   commodityHighlights,
 }: ViewClassProps & {
   metrics: MetricItem[];
   filteredQueue: QueueItem[];
   stocks: StockItem[];
   buyers: BuyerMatch[];
+  buyerRequirements: BuyerRequirement[];
+  stockLedger: StockLedgerEntry[];
+  mediaEvidence: MediaEvidence[];
+  prefixedDbStatus: PrefixedDbStatus | null;
   finance: FinanceRequest[];
   reports: ReportSection[];
+  hackathonSummary: HackathonMvpSummary | null;
+  hackathonDataQuality: HackathonDataQuality | null;
+  hackathonOpportunityScores: HackathonOpportunityScores | null;
+  hackathonBuyerMatching: HackathonBuyerMatching | null;
+  hackathonFinancingReadiness: HackathonFinancingReadiness | null;
+  hackathonStatus: "loading" | "ready" | "unavailable" | "error";
+  hackathonError: string;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
   openModule: (moduleTitle: string) => void;
@@ -1492,177 +1872,373 @@ function OverviewView({
   setPanelMessage: (message: string, tone?: ToastTone) => void;
   reload: () => Promise<void>;
   isDark: boolean;
-  commodityCoverage: CommodityCoverage | null;
   commodityHighlights: CommodityHighlight[];
 }) {
+  const kpiIcons = [MessageCircle, FileCheck2, Warehouse, ClipboardCheck];
+  const kpiTones = ["#1D5D8F", "#D79A2B", "#C92A2A", "#88D982"];
+  const kpiLabels = ["WA/Verified", "System Pending", "Inventory Alert", "Ready"];
+  const visibleMetrics = metrics.slice(0, 4);
+  const systemStatus =
+    prefixedDbStatus?.status === "ready"
+      ? "Postgres Operational"
+      : prefixedDbStatus
+        ? "Setup Required"
+        : "Postgres Checking";
+  const systemReady = systemStatus === "Postgres Operational";
+  const topCommodity = commodityHighlights[0];
+  const secondCommodity = commodityHighlights[1];
+  const recentBuyer = buyers[0];
+  const recentReport = reports[0];
+  const systemFeed = [
+    recentBuyer
+      ? `Matching readiness: ${buyerEvidenceLabel(recentBuyer)}`
+      : "Buyer matching menunggu requirement terverifikasi.",
+    recentReport
+      ? `Laporan aksi: ${recentReport.title}`
+      : "Laporan aksi belum difinalkan.",
+  ];
+  const hackathonPayloads = [
+    hackathonSummary,
+    hackathonDataQuality,
+    hackathonOpportunityScores,
+    hackathonBuyerMatching,
+    hackathonFinancingReadiness,
+  ];
+  const hackathonReadyCount = hackathonPayloads.filter(Boolean).length;
+  const qualityIssueCount =
+    hackathonDataQuality?.checks.reduce(
+      (sum, check) =>
+        sum +
+        check.missingKeyRefs.filter((item) => item.missingRows > 0).length +
+        check.completeness.filter((item) => item.missingRows > 0).length +
+        check.quality.filter((item) => item.affectedRows > 0).length,
+      0,
+    ) ?? 0;
+  const topOpportunityArea = hackathonOpportunityScores?.topAreas[0];
+  const topOpportunityLabel =
+    topOpportunityArea
+      ? [topOpportunityArea.area.village, topOpportunityArea.area.district, topOpportunityArea.area.regency, topOpportunityArea.area.province]
+          .filter(Boolean)
+          .join(", ") || "Area belum lengkap"
+      : "Belum ada ranked area";
+  const financingTotals = hackathonFinancingReadiness?.totals;
+  const readyPrefixedTables = prefixedDbStatus?.tables.filter((table) => table.status === "ready").length ?? 0;
+  const evidenceCards = [
+    {
+      label: "/api/dashboard",
+      value: `${formatInteger(filteredQueue.length)} queue`,
+      detail: `${formatInteger(stockLedger.length)} ledger, ${formatInteger(mediaEvidence.length)} media evidence, ${formatInteger(buyerRequirements.length)} buyer requirements`,
+      source: prefixedDbStatus ? `${readyPrefixedTables}/${prefixedDbStatus.tables.length} prefixed tables ready` : "prefixed table status belum tersedia",
+      toneClass: "text-[#88D982]",
+    },
+    {
+      label: "/api/hackathon/*",
+      value:
+        hackathonStatus === "ready"
+          ? `${hackathonReadyCount}/5 endpoints`
+          : hackathonStatus === "loading"
+            ? "loading"
+            : "blocked",
+      detail:
+        hackathonStatus === "ready"
+          ? `${formatInteger(hackathonSummary?.coverage?.totalVillages ?? 0)} wilayah sample, ${formatInteger(hackathonSummary?.coverage?.commodityAreas ?? 0)} area komoditas`
+          : hackathonError || "Tidak ada fallback angka demo.",
+      source: "read-only aggregate evidence",
+      toneClass: hackathonStatus === "ready" ? "text-[#88D982]" : "text-[#D79A2B]",
+    },
+    {
+      label: "Data-quality gate",
+      value: `${formatInteger(qualityIssueCount)} warnings`,
+      detail: hackathonDataQuality
+        ? `${formatInteger(hackathonDataQuality.checks.length)} table checks dari endpoint data-quality`
+        : "Data-quality belum mengirim payload.",
+      source: "missing key, completeness, quality risk",
+      toneClass: qualityIssueCount > 0 ? "text-[#D79A2B]" : "text-[#88D982]",
+    },
+    {
+      label: "Financing readiness",
+      value: financingTotals
+        ? `${formatPercentRatio(financingTotals.verificationRate)} verified`
+        : "n/a",
+      detail: financingTotals
+        ? `${formatInteger(financingTotals.totalRequests)} aggregate requests, ${formatRupiah(financingTotals.totalAmount)} total amount`
+        : "Endpoint readiness belum mengirim aggregate.",
+      source: "readiness only; bukan approval",
+      toneClass: "text-[#80CFFF]",
+    },
+  ];
+  const commandFacts = [
+    ["Top opportunity", topOpportunityLabel, topOpportunityArea ? `Score ${topOpportunityArea.score}` : "Menunggu endpoint opportunity-scores"],
+    ["Buyer archetype", `${formatInteger(hackathonBuyerMatching?.matches.length ?? 0)} matches`, "Bukan named buyer atau PII"],
+    ["Evidence media", `${formatInteger(mediaEvidence.length)} metadata`, "Label redacted dari /api/dashboard"],
+  ];
+
   return (
     <>
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <article key={metric.label} className={`rounded-[14px] border p-4 ${panelClass}`}>
-            <p className={`text-sm font-extrabold ${mutedClass}`}>{metric.label}</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="font-mono text-4xl font-black tabular-nums">{metric.value}</p>
-              <span className="rounded-[8px] bg-[#FFF3D8] px-2.5 py-1 text-xs font-black text-[#7A4E2D]">
-                {metric.note}
-              </span>
-            </div>
-          </article>
-        ))}
+      <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#D79A2B]">Command Center Koperasi</p>
+          <h2 className="mt-1 text-2xl font-black text-[#FFF8EA]">Ringkasan Operator</h2>
+        </div>
+        <div className="text-left lg:text-right">
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#CFC3B2]/55">System Status</p>
+          <p className={`mt-1 flex items-center gap-2 text-xs font-black ${systemReady ? "text-[#88D982]" : "text-[#D79A2B]"} lg:justify-end`}>
+            <span className={`h-2 w-2 rounded-full ${systemReady ? "bg-[#88D982] shadow-[0_0_8px_#88d982]" : "bg-[#D79A2B]"}`} />
+            {systemStatus}
+          </p>
+        </div>
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_380px]">
-        <div data-tour="work-queue" className={`rounded-[16px] border ${panelClass}`}>
-          <div className="flex flex-col gap-3 border-b border-current/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {visibleMetrics.map((metric, index) => {
+          const Icon = kpiIcons[index] ?? ClipboardCheck;
+          const tone = kpiTones[index] ?? "#D79A2B";
+          return (
+            <article
+              key={metric.label}
+              className="border border-[#1F2933] bg-[#172027] p-4 transition-colors hover:bg-[#2B1C1A]"
+              style={{ borderTopColor: tone, borderTopWidth: 2 }}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <Icon size={19} strokeWidth={2.2} style={{ color: tone }} aria-hidden="true" />
+                <span className="rounded-[3px] bg-[#1F2933] px-2 py-1 text-[10px] font-black text-[#CFC3B2]">
+                  {kpiLabels[index] ?? "Metric"}
+                </span>
+              </div>
+              <h3 className="text-xs font-black text-[#CFC3B2]">{metric.label}</h3>
+              <div className="mt-2 flex items-baseline gap-2">
+                <p className="font-mono text-3xl font-black tabular-nums text-[#FFF8EA]">{metric.value}</p>
+                <p className="text-[10px] font-black uppercase text-[#CFC3B2]/45">{metric.note}</p>
+              </div>
+              <div className="mt-4 h-1 overflow-hidden rounded-full bg-[#1F2933]">
+                <div className="h-full" style={{ width: `${Math.min(100, 35 + index * 18)}%`, backgroundColor: tone }} />
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-2xl font-black">Antrian kerja operator</h2>
-              <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
-                WA, assisted input, gerai, logistik, dan simpan pinjam masuk ke satu meja kerja.
-              </p>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Evidence board</p>
+              <h2 className="mt-1 text-lg font-black text-[#FFF8EA]">Sumber data yang sedang dibaca</h2>
             </div>
-            <StatusBadge tone="service">{filteredQueue.length} catatan tampil</StatusBadge>
+            <span className="w-fit rounded-[4px] border border-[#26323B] bg-[#0B1013] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
+              no dummy buyer/PII
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {evidenceCards.map((card) => (
+              <div key={card.label} className="border-l-4 border-[#D79A2B] bg-[#172027] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]/55">{card.label}</p>
+                  <span className={`font-mono text-xs font-black ${card.toneClass}`}>{card.value}</span>
+                </div>
+                <p className="mt-2 text-sm font-black leading-5 text-[#FFF8EA]">{card.detail}</p>
+                <p className="mt-2 text-[11px] font-semibold leading-5 text-[#CFC3B2]/60">{card.source}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Operator brief</p>
+          <div className="mt-4 space-y-3">
+            {commandFacts.map(([label, value, note]) => (
+              <div key={label} className="grid grid-cols-[120px_1fr] gap-3 border-b border-[#26323B] pb-3 last:border-b-0 last:pb-0">
+                <p className="text-[11px] font-black uppercase tracking-[0.1em] text-[#CFC3B2]/45">{label}</p>
+                <div>
+                  <p className="font-black text-[#FFF8EA]">{value}</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-[#CFC3B2]/60">{note}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div data-tour="work-queue" className="flex min-h-[310px] flex-col rounded-[4px] border border-[#1F2933] bg-[#172027]">
+          <div className="flex flex-col gap-3 border-b border-[#1F2933] p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-black text-[#FFF8EA]">Antrian Kerja Operator</h2>
+            </div>
+            <p className="text-xs font-semibold text-[#CFC3B2]/55">Last update: dari API dashboard</p>
           </div>
 
-          <div className="divide-y divide-current/10">
+          <div className="overflow-x-auto">
             {filteredQueue.length ? (
-              filteredQueue.map((item) => {
-                const approved = item.status === "Sudah Disetujui";
-                return (
-                  <article key={item.id} className="p-5">
-                    <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-black text-[#D79A2B]">
-                            {item.id}
+              <table className="w-full min-w-[720px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-[#1F2933] bg-[#111A20]/60">
+                    {["Status", "Source", "Module", "Action"].map((heading) => (
+                      <th key={heading} className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-[#CFC3B2]/55">
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1F2933]">
+                  {filteredQueue.slice(0, 5).map((item, index) => {
+                    const approved = item.status === "Sudah Disetujui";
+                    const urgent = index === 0 && !approved;
+                    const statusColor = approved ? "#88D982" : urgent ? "#FFB4AC" : "#D79A2B";
+                    return (
+                      <tr key={item.id} className="transition-colors hover:bg-[#2B1C1A]">
+                        <td className="px-4 py-3">
+                          <span className="flex items-center gap-2 text-xs font-black" style={{ color: statusColor }}>
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+                            {approved ? "VERIFIED" : urgent ? "URGENT" : "PENDING"}
                           </span>
-                          <StatusBadge tone={approved ? "success" : "warning"}>
-                            {item.status}
-                          </StatusBadge>
-                          <span className={`text-xs font-bold ${mutedClass}`}>{item.source}</span>
-                        </div>
-                        <h3 className="mt-3 text-lg font-black">{item.sender}</h3>
-                        <p className={`mt-2 max-w-3xl text-sm font-semibold leading-6 ${mutedClass}`}>
-                          {item.summary}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openModule(item.module)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2 text-sm font-extrabold ${innerClass} focus-visible:lb-focus`}
-                        >
-                          Buka di dashboard
-                          <ChevronRight size={15} strokeWidth={2.2} aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => approveDraft(item.id)}
-                          disabled={approved}
-                          className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#2F7D32] px-3 py-2 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:bg-[#62766A] focus-visible:lb-focus"
-                        >
-                          <CheckCircle2 size={16} strokeWidth={2.2} aria-hidden="true" />
-                          {approved ? "Disetujui" : "Setujui"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => askFarmer(item.id)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2 text-sm font-extrabold ${innerClass} focus-visible:lb-focus`}
-                        >
-                          <MessageCircle size={16} strokeWidth={2.2} aria-hidden="true" />
-                          Tanya WA
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs font-black text-[#FFF8EA]">{item.id}</span>
+                            <span className="mt-1 text-[11px] font-semibold text-[#CFC3B2]/45">{item.source}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-[3px] border border-[#D79A2B]/35 bg-[#1F2933] px-2 py-1 font-mono text-[10px] font-black uppercase text-[#D79A2B]">
+                            {item.module}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openModule(item.module)}
+                              className="rounded-[3px] border border-[#1F2933] px-3 py-1.5 text-xs font-black text-[#CFC3B2] hover:bg-[#42302E] focus-visible:lb-focus"
+                            >
+                              Inspect
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => (approved ? askFarmer(item.id) : approveDraft(item.id))}
+                              className={`rounded-[3px] px-3 py-1.5 text-xs font-black focus-visible:lb-focus ${
+                                approved ? "border border-[#88D982]/30 text-[#88D982]" : "bg-[#C92A2A] text-[#FFE5E2]"
+                              }`}
+                            >
+                              {approved ? "Details" : "Review"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : (
               <div className="p-10 text-center">
-                <p className="text-lg font-black">Tidak ada catatan yang cocok.</p>
-                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
+                <p className="text-lg font-black text-[#FFF8EA]">Tidak ada catatan yang cocok.</p>
+                <p className="mt-2 text-sm font-semibold text-[#CFC3B2]">
                   Ubah kata kunci pencarian atau kosongkan input.
                 </p>
               </div>
             )}
           </div>
+          <div className="mt-auto border-t border-[#1F2933] bg-[#111A20]/60 p-3">
+            <p className="text-center text-[11px] font-semibold italic text-[#CFC3B2]/35">
+              Semua aksi dicatat ke log audit sistem. Keputusan tetap human-reviewed.
+            </p>
+          </div>
         </div>
 
-        <aside className="space-y-5">
-          <div className={`rounded-[16px] border p-5 ${panelClass}`}>
+        <aside className="space-y-4">
+          <div className="rounded-[4px] border border-[#1F2933] bg-[#172027] p-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black">Intel operasional</h2>
+              <h2 className="flex items-center gap-2 text-sm font-black text-[#D79A2B]">
+                <BarChart3 size={16} strokeWidth={2.2} aria-hidden="true" />
+                Opportunity Highlight
+              </h2>
               <button
                 type="button"
                 onClick={async () => {
                   await reload();
                   setPanelMessage("Intel operasional disegarkan dari /api/dashboard.", "success");
                 }}
-                className={`rounded-[10px] border p-2 ${innerClass} focus-visible:lb-focus`}
+                className="rounded-[4px] border border-[#1F2933] p-2 text-[#CFC3B2] focus-visible:lb-focus"
                 aria-label="Segarkan intel operasional"
               >
                 <RefreshCcw size={16} strokeWidth={2.2} aria-hidden="true" />
               </button>
             </div>
             <div className="mt-4 space-y-3">
-              {commodityCoverage ? (
-                <div className={`rounded-[12px] border p-4 ${innerClass}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">Coverage komoditas nasional</p>
-                      <p className="mt-2 font-mono text-xs font-semibold text-[#D79A2B]">
-                        {Number(commodityCoverage.totalVillages).toLocaleString("id-ID")} desa/kelurahan baseline
-                      </p>
-                    </div>
-                    <StatusBadge tone={Number(commodityCoverage.directVillageProfiles) > 0 ? "success" : "warning"}>
-                      {Number(commodityCoverage.directVillageProfiles) > 0 ? "Direct data" : "Baseline"}
-                    </StatusBadge>
+              {[topCommodity, secondCommodity].filter(Boolean).map((profile, index) => (
+                <div key={`${profile?.commodity}-${index}`} className={`border-l-4 bg-[#111A20] p-3 ${index === 0 ? "border-[#D79A2B]" : "border-[#1D5D8F]"}`}>
+                  <div className="mb-1 flex items-start justify-between gap-3">
+                    <span className={`text-[10px] font-black ${index === 0 ? "text-[#D79A2B]" : "text-[#80CFFF]"}`}>
+                      {index === 0 ? "Top Commodity" : "Rising Demand"}
+                    </span>
+                    <span className="text-[10px] font-black text-[#88D982]">{profile?.confidence}</span>
                   </div>
-                  <p className={`mt-2 text-sm font-normal leading-6 ${mutedClass}`}>
-                    {Number(commodityCoverage.totalProfiles).toLocaleString("id-ID")} profil komoditas untuk {Number(commodityCoverage.totalAreas).toLocaleString("id-ID")} area. Data desa langsung akan menimpa baseline saat connector/WA/operator masuk.
-                  </p>
-                  {commodityHighlights.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {commodityHighlights.map((profile) => (
-                        <span key={`${profile.commodity}-${profile.rank}`} className="rounded-[8px] bg-[#FFF3D8] px-2.5 py-1 text-xs font-medium text-[#7A4E2D]">
-                          {profile.commodity}
-                        </span>
+                  <h3 className="font-black text-[#FFF8EA]">{profile?.commodity}</h3>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-semibold text-[#CFC3B2]/60">{profile?.sourceLevel}</span>
+                    <div className="flex gap-1">
+                      {Array.from({ length: 4 }).map((_, barIndex) => (
+                        <span
+                          key={barIndex}
+                          className="h-1.5 w-4"
+                          style={{ backgroundColor: barIndex <= index + 1 ? (index === 0 ? "#D79A2B" : "#1D5D8F") : "#1F2933" }}
+                        />
                       ))}
                     </div>
-                  ) : null}
+                  </div>
+                </div>
+              ))}
+              {prefixedDbStatus ? (
+                <div className="border-l-4 border-[#88D982] bg-[#111A20] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-[#FFF8EA]">Prefixed app DB</p>
+                      <p className="mt-2 font-mono text-xs font-semibold text-[#D79A2B]">
+                        {prefixedDbStatus.prefix}
+                      </p>
+                    </div>
+                    <StatusBadge tone={prefixedDbStatus.status === "ready" ? "success" : "warning"}>
+                      {prefixedDbStatus.status === "ready" ? "Ready" : "Setup"}
+                    </StatusBadge>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-[#CFC3B2]">
+                    {prefixedDbStatus.message}
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {prefixedDbStatus.tables.slice(0, 3).map((table) => (
+                      <div key={table.tableName} className="flex items-center justify-between gap-3 text-xs font-bold">
+                        <span className="truncate">{table.tableName}</span>
+                        <span className={table.status === "ready" ? "text-[#2F7D32]" : "text-[#C92A2A]"}>
+                          {table.status === "ready" ? `${table.rows} rows` : table.errorCode ?? "setup-required"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
-              {villageInsights.map((insight) => (
-                <div key={insight.title} className={`rounded-[12px] border p-4 ${innerClass}`}>
-                  <p className="font-semibold">{insight.title}</p>
-                  <p className="mt-2 font-mono text-xs font-semibold text-[#D79A2B]">
-                    {insight.signal}
-                  </p>
-                  <p className={`mt-2 text-sm font-normal leading-6 ${mutedClass}`}>
-                    {insight.action}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className={`rounded-[16px] border p-5 ${panelClass}`}>
-            <h2 className="text-xl font-black">Agent aktif</h2>
-            <div className="mt-4 space-y-3">
-              {aiAgents.slice(0, 4).map((agent) => (
-                <div key={agent.name} className={`rounded-[12px] border p-4 ${innerClass}`}>
-                  <p className="font-black">{agent.name}</p>
-                  <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{agent.output}</p>
-                </div>
-              ))}
             </div>
             <button
               type="button"
-              onClick={() => setActiveView("agents")}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#1D5D8F] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+              onClick={() => setActiveView("lumbung-data")}
+              className="mt-4 w-full border border-[#1F2933] py-3 text-xs font-black text-[#CFC3B2] hover:bg-[#2B1C1A] focus-visible:lb-focus"
             >
-              Buka Agent Center
-              <Bot size={17} strokeWidth={2.2} aria-hidden="true" />
+              Lihat Analisis Lengkap
             </button>
+          </div>
+
+          <div className="rounded-[4px] border border-[#1F2933] bg-[#172027] p-4">
+            <h2 className="mb-3 text-xs font-black uppercase tracking-[0.14em] text-[#CFC3B2]/55">Sistem Feed</h2>
+            <div className="space-y-3">
+              {systemFeed.map((item, index) => (
+                <div key={item} className="flex gap-3 text-xs">
+                  <span className={`mt-1 h-2 w-2 rounded-full ${index === 0 ? "bg-[#88D982]" : "bg-[#D79A2B]"}`} />
+                  <div>
+                    <p className="font-black text-[#FFF8EA]">{item}</p>
+                    <p className="mt-1 font-semibold text-[#CFC3B2]/45">{index === 0 ? "Via buyer matching lite" : "Via laporan aksi"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </aside>
       </section>
@@ -1685,27 +2261,46 @@ function OverviewView({
                 </p>
               </div>
             ))}
+            {stockLedger.slice(0, 1).map((entry) => (
+              <div key={entry.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
+                <p className="text-xs font-black uppercase text-[#D79A2B]">Ledger terbaru</p>
+                <p className="mt-2 font-black">{entry.stockName}</p>
+                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
+                  {entry.movementType} - {formatInteger(entry.quantity)} {entry.unitLabel}
+                </p>
+              </div>
+            ))}
           </div>
         </article>
 
         <article className={`rounded-[16px] border p-5 ${panelClass}`}>
           <div className="flex items-center gap-2">
             <Building2 size={20} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
-            <h2 className="text-xl font-black">Pasar dan pembiayaan</h2>
+            <h2 className="text-xl font-black">Buyer dan readiness</h2>
           </div>
           <div className="mt-4 space-y-3">
             {buyers.slice(0, 2).map((match) => (
-              <div key={match.buyer} className={`rounded-[12px] border p-4 ${innerClass}`}>
+              <div key={match.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
                 <p className="font-black">{match.buyer}</p>
                 <p className="mt-2 font-mono text-xs font-black text-[#D79A2B]">
                   Match {match.matchScore}% - {match.status}
                 </p>
+                <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(match)}</p>
               </div>
             ))}
             {finance.slice(0, 1).map((request) => (
               <div key={request.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
                 <p className="font-black">{request.member} - {formatRupiah(request.amount)}</p>
-                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>{request.purpose}</p>
+                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>Financing readiness: {request.purpose}</p>
+              </div>
+            ))}
+            {buyerRequirements.slice(0, 1).map((requirement) => (
+              <div key={requirement.id} className={`rounded-[12px] border p-4 ${innerClass}`}>
+                <p className="text-xs font-black uppercase text-[#D79A2B]">Requirement table</p>
+                <p className="mt-2 font-black">{requirement.productName}</p>
+                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
+                  {formatInteger(requirement.requiredQuantity)} {requirement.unitLabel} - {requirement.verificationStatus}
+                </p>
               </div>
             ))}
           </div>
@@ -1730,6 +2325,12 @@ function OverviewView({
                 <p className={`mt-1 font-semibold ${mutedClass}`}>{item.status}</p>
               </div>
             ))}
+            {mediaEvidence.slice(0, 1).map((item) => (
+              <div key={item.id} className={`rounded-[10px] border px-3 py-2 text-sm ${innerClass}`}>
+                <p className="font-black">{item.redactedLabel}</p>
+                <p className={`mt-1 font-semibold ${mutedClass}`}>{item.verificationStatus}</p>
+              </div>
+            ))}
           </div>
         </article>
       </section>
@@ -1739,7 +2340,7 @@ function OverviewView({
           <div>
             <h2 className="text-xl font-black">Modul operasional</h2>
             <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
-              Klik modul untuk membuka workspace internal tanpa meninggalkan dashboard.
+              Core MVP muncul lebih dulu. Klik modul untuk membuka workspace internal.
             </p>
           </div>
           <button
@@ -1794,12 +2395,30 @@ function LumbungDataView({
   panelClass,
   innerClass,
   mutedClass,
+  isDark,
   filteredQueue,
+  hackathonSummary,
+  hackathonDataQuality,
+  hackathonOpportunityScores,
+  hackathonBuyerMatching,
+  hackathonFinancingReadiness,
+  hackathonStatus,
+  hackathonError,
+  reloadHackathon,
   approveDraft,
   askFarmer,
   openModule,
 }: ViewClassProps & {
+  isDark: boolean;
   filteredQueue: QueueItem[];
+  hackathonSummary: HackathonMvpSummary | null;
+  hackathonDataQuality: HackathonDataQuality | null;
+  hackathonOpportunityScores: HackathonOpportunityScores | null;
+  hackathonBuyerMatching: HackathonBuyerMatching | null;
+  hackathonFinancingReadiness: HackathonFinancingReadiness | null;
+  hackathonStatus: "loading" | "ready" | "unavailable" | "error";
+  hackathonError: string;
+  reloadHackathon: () => Promise<void>;
   approveDraft: (id: string) => void;
   askFarmer: (id: string) => void;
   openModule: (moduleTitle: string) => void;
@@ -1807,6 +2426,200 @@ function LumbungDataView({
   const [selectedId, setSelectedId] = useState(filteredQueue[0]?.id ?? "");
   const selected = filteredQueue.find((item) => item.id === selectedId) ?? filteredQueue[0];
   const completed = filteredQueue.filter((item) => item.status === "Sudah Disetujui").length;
+  const sharedCoverage = hackathonSummary?.coverage ?? null;
+  const rowClass = isDark
+    ? "border-white/10 bg-white/5"
+    : "border-[#E7DED1] bg-[#FFFCF5]";
+  const alertRowClass = isDark
+    ? "border-[#D79A2B]/25 bg-[#D79A2B]/10"
+    : "border-[#E0B25E]/50 bg-[#FFF3D8]";
+  const dangerRowClass = isDark
+    ? "border-[#C92A2A]/35 bg-[#C92A2A]/10"
+    : "border-[#F0B4B4] bg-[#FFE3E3]";
+  const softLabelClass = isDark ? "text-[#FFF8EA]" : "text-[#172027]";
+  const sharedMetrics = sharedCoverage
+    ? [
+        ["Wilayah referensi", sharedCoverage.totalVillages, "desa/kelurahan sample"],
+        ["Area komoditas", sharedCoverage.commodityAreas, "kode wilayah dengan komoditas"],
+        ["Profil koperasi", sharedCoverage.cooperatives, "koperasi dalam sample"],
+        ["Koperasi berstok", sharedCoverage.cooperativesWithStock, "punya catatan inventaris"],
+      ]
+    : [];
+  const sourceLabel =
+    hackathonSummary?.source ??
+    hackathonDataQuality?.source ??
+    hackathonOpportunityScores?.source ??
+    hackathonBuyerMatching?.source ??
+    hackathonFinancingReadiness?.source ??
+    "shared-db-env-gated";
+  const tablePrefix =
+    hackathonSummary?.tablePrefix ??
+    hackathonDataQuality?.tablePrefix ??
+    hackathonFinancingReadiness?.tablePrefix ??
+    "shared";
+  const readyEndpointCount = [
+    hackathonSummary,
+    hackathonDataQuality,
+    hackathonOpportunityScores,
+    hackathonBuyerMatching,
+    hackathonFinancingReadiness,
+  ].filter(Boolean).length;
+  const endpointStatus =
+    hackathonStatus === "ready"
+      ? `${readyEndpointCount}/5 siap`
+      : hackathonStatus === "loading"
+        ? "Memuat 5 endpoint"
+        : hackathonStatus === "unavailable"
+          ? "Missing env"
+          : "Error endpoint";
+  const gateState =
+    hackathonStatus === "ready"
+      ? "Configured"
+      : hackathonStatus === "loading"
+        ? "Checking"
+        : hackathonStatus === "unavailable"
+          ? "Missing"
+          : "Error";
+  const gateTone: "success" | "risk" | "warning" =
+    hackathonStatus === "ready"
+      ? "success"
+      : hackathonStatus === "error"
+        ? "risk"
+        : "warning";
+  const endpointCards = [
+    {
+      label: "MVP summary",
+      path: "/api/hackathon/mvp-summary",
+      payloadReady: Boolean(hackathonSummary),
+      source: hackathonSummary?.source,
+      mode: hackathonSummary?.mode,
+      note: hackathonSummary
+        ? `${hackathonSummary.tableCounts.length} table counts, coverage, province opportunities`
+        : "Gate belum membuka payload.",
+    },
+    {
+      label: "Data quality",
+      path: "/api/hackathon/data-quality",
+      payloadReady: Boolean(hackathonDataQuality),
+      source: hackathonDataQuality?.source,
+      mode: hackathonDataQuality?.mode,
+      note: hackathonDataQuality
+        ? `${hackathonDataQuality.checks.length} table checks, aggregate warnings`
+        : "Gate belum membuka payload.",
+    },
+    {
+      label: "Opportunity scores",
+      path: "/api/hackathon/opportunity-scores",
+      payloadReady: Boolean(hackathonOpportunityScores),
+      source: hackathonOpportunityScores?.source,
+      mode: hackathonOpportunityScores?.mode,
+      note: hackathonOpportunityScores
+        ? `${hackathonOpportunityScores.topAreas.length} ranked areas`
+        : "Gate belum membuka payload.",
+    },
+    {
+      label: "Buyer matching lite",
+      path: "/api/hackathon/buyer-matching",
+      payloadReady: Boolean(hackathonBuyerMatching),
+      source: hackathonBuyerMatching?.source,
+      mode: hackathonBuyerMatching?.mode,
+      note: hackathonBuyerMatching
+        ? `${hackathonBuyerMatching.matches.length} readiness matches`
+        : "Gate belum membuka payload.",
+    },
+    {
+      label: "Financing readiness",
+      path: "/api/hackathon/financing-readiness",
+      payloadReady: Boolean(hackathonFinancingReadiness),
+      source: hackathonFinancingReadiness?.source,
+      mode: hackathonFinancingReadiness?.mode,
+      note: hackathonFinancingReadiness
+        ? `${hackathonFinancingReadiness.totals.totalRequests} aggregate requests, ${hackathonFinancingReadiness.totals.verifiedRequests} verified`
+        : "Gate belum membuka payload.",
+    },
+  ];
+  const qualityRisks =
+    hackathonDataQuality?.checks
+      .flatMap((check) => [
+        ...check.missingKeyRefs
+          .filter((item) => item.missingRows > 0)
+          .map((item) => ({
+            label: `${check.table}.${item.field}`,
+            value: item.missingRows,
+            rateLabel:
+              item.completenessRate === null ? "rate n/a" : `${Math.round(item.completenessRate * 100)}% complete`,
+            note: "missing key reference",
+            tone: "critical" as const,
+          })),
+        ...check.completeness
+          .filter((item) => item.missingRows > 0)
+          .map((item) => ({
+            label: `${check.table}.${item.field}`,
+            value: item.missingRows,
+            rateLabel:
+              item.completenessRate === null ? "rate n/a" : `${Math.round(item.completenessRate * 100)}% complete`,
+            note: "missing field before reporting",
+            tone: "warning" as const,
+          })),
+        ...check.quality
+          .filter((item) => item.affectedRows > 0)
+          .map((item) => ({
+            label: `${check.table}.${item.field}`,
+            value: item.affectedRows,
+            rateLabel:
+              item.affectedRate === null ? "rate n/a" : `${Math.round(item.affectedRate * 100)}% affected`,
+            note: item.risk,
+            tone: "warning" as const,
+          })),
+      ])
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 6) ?? [];
+  const qualityTableSummaries =
+    hackathonDataQuality?.checks.map((check) => ({
+      table: check.table,
+      rows: check.totalRows,
+      missingKeys: check.missingKeyRefs.reduce((sum, item) => sum + item.missingRows, 0),
+      missingFields: check.completeness.reduce((sum, item) => sum + item.missingRows, 0),
+      qualityRows: check.quality.reduce((sum, item) => sum + item.affectedRows, 0),
+    })) ?? [];
+  const topOpportunityAreas = hackathonOpportunityScores?.topAreas.slice(0, 5) ?? [];
+  const buyerReadiness = hackathonBuyerMatching?.matches.slice(0, 5) ?? [];
+  const financingStatusSummary = hackathonFinancingReadiness?.statusSummary ?? [];
+  const financingChecklist = hackathonFinancingReadiness?.actionChecklist ?? [];
+  const financingChannelSummary = hackathonFinancingReadiness?.channelSummary.slice(0, 3) ?? [];
+  const financingTotals = hackathonFinancingReadiness?.totals;
+  const buyerClusterCounts = buyerReadiness.reduce<Record<string, number>>((counts, item) => {
+    counts[item.readinessCluster] = (counts[item.readinessCluster] ?? 0) + 1;
+    return counts;
+  }, {});
+  const clusterLabel: Record<string, string> = {
+    pilot_ready: "Pilot ready",
+    qualified: "Qualified",
+    emerging: "Emerging",
+    early_stage: "Early stage",
+  };
+  const lumbungEvidenceCards = [
+    {
+      label: "Endpoint ready",
+      value: endpointStatus,
+      note: `${sourceLabel} / prefix ${tablePrefix}`,
+    },
+    {
+      label: "Quality warnings",
+      value: `${formatInteger(qualityRisks.length)} visible`,
+      note: hackathonDataQuality ? `${formatInteger(hackathonDataQuality.checks.length)} table checks` : "payload belum tersedia",
+    },
+    {
+      label: "Buyer readiness",
+      value: `${formatInteger(buyerReadiness.length)} matches`,
+      note: "archetype aggregate, bukan named buyer",
+    },
+    {
+      label: "Financing readiness",
+      value: financingTotals ? `${formatPercentRatio(financingTotals.verificationRate)} verified` : "n/a",
+      note: "readiness only; bukan approval pembiayaan",
+    },
+  ];
 
   return (
     <section data-tour="lumbung-data" className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
@@ -1836,6 +2649,353 @@ function LumbungDataView({
             </div>
           ))}
         </div>
+      </article>
+
+      <article className={`xl:col-span-2 rounded-[4px] border p-5 ${isDark ? "border-[#26323B] bg-[#101820] text-[#F8F4EA]" : panelClass}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Shared DB hackathon</p>
+            <h2 className="mt-2 text-2xl font-black">Evidence panel eksplorasi MVP</h2>
+            <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
+              {hackathonSummary?.schemaScope?.description ??
+                "Shared DB dipakai sebagai bahan eksplorasi terbatas. Data ini memperkaya pola dan prioritas MVP, bukan klaim referensi utama SIMKOPDES atau data operasional resmi."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone={gateTone}>{gateState}</StatusBadge>
+            <button
+              type="button"
+              onClick={() => void reloadHackathon()}
+              className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-current/15 px-4 py-2 text-xs font-extrabold focus-visible:lb-focus"
+            >
+              <RefreshCcw size={15} strokeWidth={2.2} aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[0.85fr_1.15fr_1fr]">
+          <div className={`rounded-[14px] border p-4 ${gateTone === "risk" ? dangerRowClass : gateTone === "warning" ? alertRowClass : rowClass}`}>
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Gate state</p>
+            <p className="mt-2 text-2xl font-black">{gateState}</p>
+            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+              {hackathonStatus === "ready"
+                ? "Shared DB env reachable; semua endpoint dibaca sebagai agregat read-only."
+                : hackathonStatus === "loading"
+                  ? "Menunggu response dari lima endpoint evidence."
+                  : hackathonStatus === "unavailable"
+                    ? "Env shared DB belum lengkap atau sengaja dimatikan."
+                    : hackathonError || "Endpoint shared DB gagal merespons."}
+            </p>
+          </div>
+          <div className={`rounded-[14px] border p-4 ${rowClass}`}>
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Shared DB scope</p>
+            <p className="mt-2 text-lg font-black">{sourceLabel}</p>
+            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+              Prefix: {tablePrefix}. {hackathonSummary?.schemaScope?.notPrimaryReference ? "Bukan referensi utama SIMKOPDES." : "Scope terbatas untuk demo evidence."}
+            </p>
+          </div>
+          <div className={`rounded-[14px] border p-4 ${rowClass}`}>
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Endpoint evidence</p>
+            <p className="mt-2 text-2xl font-black">{endpointStatus}</p>
+            <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+              Summary, data-quality, opportunity-score, buyer-matching-lite, dan financing-readiness dikonsumsi terpisah.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-5">
+          {endpointCards.map((endpoint) => (
+            <div
+              key={endpoint.path}
+              className={`rounded-[12px] border px-3 py-3 ${endpoint.payloadReady ? rowClass : alertRowClass}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-black">{endpoint.label}</p>
+                <span className={`rounded-[8px] px-2 py-1 text-[11px] font-black ${
+                  endpoint.payloadReady ? "bg-[#E7F5E8] text-[#236327]" : "bg-[#FFF3D8] text-[#7A4E2D]"
+                }`}>
+                  {endpoint.payloadReady ? "payload" : hackathonStatus === "loading" ? "loading" : "blocked"}
+                </span>
+              </div>
+              <p className={`mt-2 break-all font-mono text-[11px] font-bold ${mutedClass}`}>{endpoint.path}</p>
+              <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>
+                Source: {endpoint.source ?? sourceLabel}
+              </p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{endpoint.mode ?? endpoint.note}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {lumbungEvidenceCards.map((card) => (
+            <div key={card.label} className={`rounded-[4px] border-l-4 border-[#D79A2B] p-3 ${rowClass}`}>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#D79A2B]">{card.label}</p>
+              <p className="mt-2 text-lg font-black">{card.value}</p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{card.note}</p>
+            </div>
+          ))}
+        </div>
+
+        {hackathonStatus === "ready" && hackathonSummary ? (
+          <>
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              {sharedMetrics.map(([label, value, note]) => (
+                <div key={label} className={`rounded-[14px] border p-4 ${rowClass}`}>
+                  <p className="text-xs font-black text-[#D79A2B]">{label}</p>
+                  <p className="mt-2 text-3xl font-black">{formatInteger(value)}</p>
+                  <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{note}</p>
+                  <p className={`mt-2 text-[11px] font-black ${softLabelClass}`}>Source: /api/hackathon/mvp-summary</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black">Tabel evidence</h3>
+                  <span className="text-xs font-black text-[#D79A2B]">Source: mvp-summary</span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {hackathonSummary.tableCounts.length > 0 ? (
+                    hackathonSummary.tableCounts.map((item) => (
+                      <div key={item.tableName} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                        <p className="text-xs font-black text-[#D79A2B]">{item.tableName}</p>
+                        <p className="mt-1 text-lg font-black">{formatInteger(item.total)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${alertRowClass}`}>
+                      Endpoint mvp-summary tidak mengirim table count.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black">Data-quality warnings</h3>
+                  <span className="text-xs font-black text-[#D79A2B]">Source: data-quality</span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {qualityTableSummaries.map((item) => (
+                    <div key={item.table} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                      <p className="text-xs font-black text-[#D79A2B]">{item.table}</p>
+                      <p className="mt-1 text-sm font-black">{formatInteger(item.rows)} rows checked</p>
+                      <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>
+                        Key {formatInteger(item.missingKeys)} - field {formatInteger(item.missingFields)} - quality {formatInteger(item.qualityRows)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {qualityRisks.length > 0 ? (
+                    qualityRisks.map((item) => (
+                      <div
+                        key={`${item.label}-${item.note}`}
+                        className={`grid gap-2 rounded-[10px] border px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center ${
+                          item.tone === "critical" ? dangerRowClass : alertRowClass
+                        }`}
+                      >
+                        <div>
+                          <p className="text-sm font-black">{item.label}</p>
+                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.note}</p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="font-mono text-sm font-black text-[#C92A2A]">{formatInteger(item.value)}</p>
+                          <p className={`text-[11px] font-bold ${mutedClass}`}>{item.rateLabel}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                      Tidak ada warning agregat yang dilaporkan endpoint data-quality.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black">Top opportunity areas</h3>
+                  <span className="text-xs font-black text-[#D79A2B]">Source: opportunity-scores</span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {topOpportunityAreas.length > 0 ? (
+                    topOpportunityAreas.map((item) => (
+                      <div
+                        key={item.area.kodeWilayah ?? `${item.area.province}-${item.area.regency}-${item.area.village}`}
+                        className={`grid gap-3 rounded-[12px] border p-3 md:grid-cols-[1fr_auto] md:items-center ${rowClass}`}
+                      >
+                        <div>
+                          <p className="font-black">
+                            {[item.area.village, item.area.district, item.area.regency, item.area.province].filter(Boolean).join(", ") || "Area belum lengkap"}
+                          </p>
+                          <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
+                            Komoditas {formatInteger(item.rawSignals.commodityRows)}, koperasi {formatInteger(item.rawSignals.cooperatives)}, produk {formatInteger(item.rawSignals.products)}, stok {formatInteger(item.rawSignals.stockItems)}
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            {[
+                              ["Commodity", item.componentScores.commodityPotential],
+                              ["Coop", item.componentScores.cooperativeReadiness],
+                              ["Stock", item.componentScores.productStockReadiness],
+                            ].map(([label, score]) => (
+                              <div key={label} className={`rounded-[8px] border px-2 py-1.5 ${alertRowClass}`}>
+                                <p className="text-[11px] font-black text-[#7A4E2D]">{label}</p>
+                                <p className="font-mono text-sm font-black">{formatInteger(score)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="text-left md:text-right">
+                          <p className="text-xs font-black text-[#D79A2B]">Score</p>
+                          <p className="font-mono text-2xl font-black">{item.score}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                      Endpoint opportunity-scores belum mengirim area prioritas.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black">Buyer matching lite</h3>
+                  <span className="text-xs font-black text-[#D79A2B]">Source: buyer-matching</span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {Object.entries(buyerClusterCounts).map(([cluster, count]) => (
+                    <div key={cluster} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                      <p className="text-xs font-black text-[#D79A2B]">{clusterLabel[cluster] ?? cluster}</p>
+                      <p className="mt-1 font-mono text-lg font-black">{formatInteger(count)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-3">
+                  {buyerReadiness.length > 0 ? (
+                    buyerReadiness.map((item) => (
+                      <div key={`${item.rank}-${item.cooperativeRef}-${item.buyerArchetypeLabel}`} className={`rounded-[12px] border p-3 ${rowClass}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black">{item.buyerArchetypeLabel}</p>
+                            <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.cooperativeName ?? item.cooperativeRef}</p>
+                          </div>
+                          <span className="font-mono text-sm font-black text-[#2F7D32]">{item.score}</span>
+                        </div>
+                        <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
+                          {[item.location.regency, item.location.province].filter(Boolean).join(", ") || "Lokasi belum lengkap"} - {clusterLabel[item.readinessCluster] ?? item.readinessCluster}
+                        </p>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                          <span>Produk {formatInteger(item.productSnapshot.productsTotal)}</span>
+                          <span>Stok {formatInteger(item.signals.stockItems)}</span>
+                          <span>Kemitraan {formatInteger(item.signals.partnershipRequests)}</span>
+                        </div>
+                        <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
+                          Archetype generik, bukan buyer bernama; perlu review operator sebelum outreach.
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className={`rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                      Endpoint buyer-matching belum mengirim readiness match.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className={`lg:col-span-2 rounded-[14px] border p-4 ${innerClass}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black">Financing readiness deal room</h3>
+                    <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>
+                      Aggregate-only status Draft/Requested/Verified. Ini readiness, bukan approval pembiayaan.
+                    </p>
+                  </div>
+                  <span className="text-xs font-black text-[#D79A2B]">Source: financing-readiness</span>
+                </div>
+                {hackathonFinancingReadiness ? (
+                  <>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      {financingStatusSummary.map((item) => (
+                        <div key={item.statusKey} className={`rounded-[10px] border px-3 py-2 ${rowClass}`}>
+                          <p className="text-xs font-black text-[#D79A2B]">{item.status}</p>
+                          <p className="mt-1 font-mono text-lg font-black">{formatInteger(item.requests)}</p>
+                          <p className={`mt-1 text-[11px] font-semibold ${mutedClass}`}>{formatRupiah(item.amount)}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[0.85fr_1.15fr]">
+                      <div className={`rounded-[12px] border p-3 ${rowClass}`}>
+                        <p className="text-xs font-black uppercase text-[#D79A2B]">Channel summary</p>
+                        <div className="mt-3 space-y-2">
+                          {financingChannelSummary.length > 0 ? (
+                            financingChannelSummary.map((item) => (
+                              <div key={item.channel} className="flex items-center justify-between gap-3 text-xs font-bold">
+                                <span>{item.channel}</span>
+                                <span>{formatInteger(item.requests)} / {formatRupiah(item.amount)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className={`text-xs font-semibold ${mutedClass}`}>Kanal pembiayaan belum terdeteksi.</p>
+                          )}
+                        </div>
+                        <p className={`mt-3 text-[11px] font-semibold leading-5 ${mutedClass}`}>
+                          Confidence: {hackathonFinancingReadiness.confidence?.level ?? "limited"}. {hackathonFinancingReadiness.freshness?.caveat}
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        {financingChecklist.map((item) => (
+                          <div key={item.id} className={`rounded-[12px] border p-3 ${rowClass}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-black">{item.title}</p>
+                              <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
+                                {item.status}
+                              </span>
+                            </div>
+                            <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>{item.nextAction}</p>
+                            <p className={`mt-2 text-[11px] font-bold leading-5 ${mutedClass}`}>{item.caveat}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className={`mt-4 rounded-[10px] border px-3 py-2 text-sm font-semibold ${rowClass}`}>
+                    Endpoint financing-readiness belum mengirim aggregate deal room.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {hackathonSummary.dataQualityFlags.slice(0, 4).map((flag) => (
+                <div key={flag} className={`rounded-[12px] border p-3 text-sm font-semibold leading-6 ${alertRowClass}`}>
+                  {flag}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className={`mt-5 rounded-[14px] border p-4 text-sm font-semibold leading-6 ${hackathonStatus === "error" ? dangerRowClass : alertRowClass}`}>
+            <p className="font-black">
+              {hackathonStatus === "loading"
+                ? "Memuat lima endpoint hackathon."
+                : hackathonStatus === "unavailable"
+                  ? "Shared DB missing atau belum configured."
+                  : "Shared DB evidence gagal dimuat."}
+            </p>
+            <p className={`mt-2 ${mutedClass}`}>
+              {hackathonStatus === "loading"
+                ? "Panel tidak menampilkan angka sampai endpoint mengembalikan payload."
+                : hackathonError || "Tidak ada fallback angka demo untuk evidence hackathon."}
+            </p>
+          </div>
+        )}
       </article>
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
@@ -2065,10 +3225,14 @@ function StokLogistikView({
   mutedClass,
   queue,
   stocks,
+  stockLedger,
+  mediaEvidence,
   setPanelMessage,
 }: ViewClassProps & {
   queue: QueueItem[];
   stocks: StockItem[];
+  stockLedger: StockLedgerEntry[];
+  mediaEvidence: MediaEvidence[];
   setPanelMessage: (message: string, tone?: ToastTone) => void;
 }) {
   const [scheduled, setScheduled] = useState<string[]>([]);
@@ -2088,6 +3252,17 @@ function StokLogistikView({
       [],
       ["stock_id", "name", "unit", "state", "location"],
       ...warehouseItems.map((item) => [item.id, item.name, item.unit, item.state, item.location]),
+      [],
+      ["ledger_id", "stock", "movement", "quantity", "unit", "evidence_ref", "readiness"],
+      ...stockLedger.map((item) => [
+        item.id,
+        item.stockName,
+        item.movementType,
+        item.quantity,
+        item.unitLabel,
+        item.evidenceRef,
+        item.readinessStatus,
+      ]),
     ];
     downloadTextFile(
       "lumbung-bersama-manifest-logistik.csv",
@@ -2141,6 +3316,36 @@ function StokLogistikView({
             </div>
           ))}
         </div>
+        <div className="mt-5 grid gap-3">
+          <h4 className="text-sm font-black uppercase text-[#7A4E2D]">Stock ledger</h4>
+          {stockLedger.slice(0, 5).map((entry) => (
+            <div key={entry.id} className={`rounded-[12px] border p-3 ${innerClass}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-black">{entry.stockName}</p>
+                <span className="rounded-[8px] bg-[#FFF3D8] px-2 py-1 text-[11px] font-black text-[#7A4E2D]">
+                  {entry.movementType}
+                </span>
+              </div>
+              <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
+                {formatInteger(entry.quantity)} {entry.unitLabel} - {entry.readinessStatus}
+              </p>
+              <p className={`mt-1 text-xs font-bold ${mutedClass}`}>Evidence: {entry.evidenceRef}</p>
+            </div>
+          ))}
+          {stockLedger.length === 0 ? (
+            <p className={`text-sm font-semibold ${mutedClass}`}>Belum ada ledger stok dari tabel prefixed.</p>
+          ) : null}
+        </div>
+        <div className="mt-5 grid gap-3">
+          <h4 className="text-sm font-black uppercase text-[#7A4E2D]">Media evidence metadata</h4>
+          {mediaEvidence.slice(0, 3).map((item) => (
+            <div key={item.id} className={`rounded-[12px] border p-3 ${innerClass}`}>
+              <p className="font-black">{item.redactedLabel}</p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{item.caption}</p>
+              <p className="mt-2 text-xs font-black text-[#D79A2B]">{item.verificationStatus}</p>
+            </div>
+          ))}
+        </div>
         <button
           type="button"
           onClick={exportManifest}
@@ -2158,17 +3363,27 @@ function PasarMitraView({
   innerClass,
   mutedClass,
   buyers,
+  buyerRequirements,
+  mediaEvidence,
   reload,
   setPanelMessage,
   requestConfirm,
 }: ViewClassProps & {
   buyers: BuyerMatch[];
+  buyerRequirements: BuyerRequirement[];
+  mediaEvidence: MediaEvidence[];
   reload: () => Promise<void>;
   setPanelMessage: (message: string, tone?: ToastTone) => void;
   requestConfirm: (config: ConfirmConfig) => void;
 }) {
-  const [selectedBuyer, setSelectedBuyer] = useState(buyers[0]?.buyer ?? "");
-  const selected = buyers.find((item) => item.buyer === selectedBuyer) ?? buyers[0];
+  const [selectedBuyerId, setSelectedBuyerId] = useState(buyers[0]?.id ?? "");
+  const selected = buyers.find((item) => item.id === selectedBuyerId) ?? buyers[0];
+  const selectedRequirement = selected
+    ? buyerRequirements.find((item) => item.productName.toLowerCase() === selected.need.toLowerCase())
+    : null;
+  const requirementEvidence = selectedRequirement
+    ? mediaEvidence.filter((item) => item.relatedRecordId === selectedRequirement.id).slice(0, 2)
+    : [];
 
   async function approveBuyer(buyer: BuyerMatch) {
     const response = await fetch(`/api/buyer-matches/${encodeURIComponent(buyer.id)}/approve`, {
@@ -2176,30 +3391,30 @@ function PasarMitraView({
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPanelMessage(payload.message ?? payload.error ?? `${buyer.buyer}: approval gagal.`, "error");
+      setPanelMessage(payload.message ?? payload.error ?? `${buyer.buyer}: readiness gagal diperbarui.`, "error");
       return;
     }
     await reload();
-    setPanelMessage(`${buyer.buyer}: approval tersimpan di Postgres.`, "success");
+    setPanelMessage(`${buyer.buyer}: readiness tersimpan di Postgres.`, "success");
   }
 
   async function createBuyerScript(buyer: BuyerMatch) {
     const script = [
-      `Halo ${buyer.buyer}, kami dari koperasi ingin menawarkan ${buyer.need}.`,
-      `Alasan match: ${buyer.reason}`,
-      "Catatan: grade/kualitas dan jadwal pengiriman tetap diverifikasi pengurus sebelum komitmen transaksi.",
+      `Halo calon mitra, kami dari koperasi ingin memvalidasi minat untuk kebutuhan ${buyer.need}.`,
+      `Konteks match: ${buyer.reason}`,
+      "Catatan: draft ini berbasis archetype buyer. Nama counterparty, grade/kualitas, dan jadwal pengiriman harus diverifikasi pengurus sebelum ada komitmen transaksi.",
     ].join("\n");
 
     try {
       await navigator.clipboard.writeText(script);
-      setPanelMessage(`${buyer.buyer}: script WA buyer disalin ke clipboard.`, "success");
+      setPanelMessage(`${buyer.buyer}: draft outreach disalin ke clipboard.`, "success");
     } catch {
       downloadTextFile(
         `lumbung-bersama-script-buyer-${buyer.id}.txt`,
         script,
         "text/plain;charset=utf-8",
       );
-      setPanelMessage(`${buyer.buyer}: clipboard tidak tersedia, script WA diunduh sebagai TXT.`, "warning");
+      setPanelMessage(`${buyer.buyer}: clipboard tidak tersedia, draft outreach diunduh sebagai TXT.`, "warning");
     }
   }
 
@@ -2208,16 +3423,16 @@ function PasarMitraView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <h2 className="text-2xl font-black">Matching buyer yang bisa diaudit</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Sistem memberi alasan match dan status risiko. Kontak buyer tetap perlu approval pengurus agar tidak ada janji penjualan palsu.
+          Sistem memberi alasan match dan status risiko memakai archetype. Nama counterparty dan kontak buyer tetap harus diverifikasi pengurus agar tidak ada janji penjualan palsu.
         </p>
         <div className="mt-5 space-y-3">
           {buyers.map((buyer) => (
             <button
-              key={buyer.buyer}
+              key={buyer.id}
               type="button"
-              onClick={() => setSelectedBuyer(buyer.buyer)}
+              onClick={() => setSelectedBuyerId(buyer.id)}
               className={`w-full rounded-[14px] border p-4 text-left transition focus-visible:lb-focus ${
-                selected?.buyer === buyer.buyer ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+                selected?.id === buyer.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2227,6 +3442,7 @@ function PasarMitraView({
                 </span>
               </div>
               <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>{buyer.need}</p>
+              <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(buyer)}</p>
             </button>
           ))}
         </div>
@@ -2235,34 +3451,57 @@ function PasarMitraView({
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         {selected ? (
           <>
-            <p className="text-sm font-black text-[#D79A2B]">Detail outreach</p>
+            <p className="text-sm font-black text-[#D79A2B]">Detail readiness archetype</p>
             <h3 className="mt-2 text-3xl font-black">{selected.buyer}</h3>
             <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
               <p className="text-sm font-black">Alasan match</p>
               <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{selected.reason}</p>
               <p className="mt-4 text-sm font-black">Status: {selected.status}</p>
+              <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(selected)}</p>
             </div>
+            {selectedRequirement ? (
+              <div className={`mt-4 rounded-[14px] border p-4 ${innerClass}`}>
+                <p className="text-sm font-black">Requirement operasional</p>
+                <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                  {formatInteger(selectedRequirement.requiredQuantity)} {selectedRequirement.unitLabel} - {selectedRequirement.qualitySpec}
+                </p>
+                <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>
+                  {selectedRequirement.packagingSpec}. Target: {selectedRequirement.targetWindow}.
+                </p>
+                <p className="mt-3 text-xs font-black text-[#D79A2B]">{selectedRequirement.sourceLabel}</p>
+                {requirementEvidence.length > 0 ? (
+                  <div className="mt-3 grid gap-2">
+                    {requirementEvidence.map((item) => (
+                      <div key={item.id} className="rounded-[10px] bg-black/5 p-3">
+                        <p className="text-xs font-black">{item.redactedLabel}</p>
+                        <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.caption}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() =>
                   requestConfirm({
-                    title: `Setujui outreach ${selected.buyer}?`,
-                    message: "Status buyer match akan ditandai approved. Kontak buyer tetap harus memakai script dan syarat kualitas yang sudah dicek pengurus.",
-                    confirmLabel: "Setujui outreach",
+                    title: `Setujui readiness ${selected.buyer}?`,
+                    message: "Status match akan ditandai siap review pengurus. Ini bukan komitmen penjualan dan bukan bukti buyer bernama.",
+                    confirmLabel: "Setujui readiness",
                     onConfirm: () => approveBuyer(selected),
                   })
                 }
                 className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
               >
-                Setujui outreach
+                Setujui readiness
               </button>
               <button
                 type="button"
                 onClick={() => createBuyerScript(selected)}
                 className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
               >
-                Buat script WA
+                Buat draft outreach
               </button>
             </div>
           </>

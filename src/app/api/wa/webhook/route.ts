@@ -6,6 +6,8 @@ import {
 } from "@/lib/commodity-intelligence";
 import { formatFormalWaReply } from "@/lib/formal-replies";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
+import { ensureOperatorQueueForWaMessage } from "@/lib/wa-operator-queue";
+import { getWaSetupStatus, maskPhoneForDisplay, normalizeWaDisplayName } from "../status";
 
 export const runtime = "nodejs";
 
@@ -31,6 +33,17 @@ type WhatsAppWebhookPayload = {
   }>;
 };
 
+type WaMessageRow = {
+  id: string;
+  cooperativeId: string;
+  providerMessageId: string | null;
+  sender: string;
+  message: string;
+  intent: string;
+  module: string;
+  status: string;
+};
+
 function safeEqual(left: string, right: string) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -47,6 +60,8 @@ function verifySignature(rawBody: string, request: Request) {
         {
           error: "WHATSAPP_APP_SECRET_REQUIRED",
           message: "Webhook produksi wajib mengisi WHATSAPP_APP_SECRET.",
+          status: "setup-required",
+          setup: getWaSetupStatus(),
         },
         { status: 503 },
       ),
@@ -105,9 +120,25 @@ function extractMessages(payload: WhatsAppWebhookPayload) {
 function messageText(message: WhatsAppMessage) {
   if (message.type === "text" && message.text?.body) return message.text.body;
   if (message.type === "image") return message.image?.caption || "[gambar dari WhatsApp]";
-  if (message.type === "document") return message.document?.caption || `[dokumen: ${message.document?.filename ?? "tanpa nama"}]`;
-  if (message.type === "audio") return `[voice-note:${message.audio?.id ?? "tanpa-id"}]`;
+  if (message.type === "document") return message.document?.caption || "[dokumen dari WhatsApp]";
+  if (message.type === "audio") return "[voice-note dari WhatsApp]";
   return `[pesan:${message.type ?? "unknown"}]`;
+}
+
+function senderLabel(message: WhatsAppMessage & { contactName?: string; waId?: string }) {
+  const name = normalizeWaDisplayName(message.contactName);
+  if (name) return name;
+
+  const waId = message.waId || message.from;
+  return waId ? `Warga WhatsApp ${maskPhoneForDisplay(waId)}` : "Warga WhatsApp";
+}
+
+function queueSource(message: WhatsAppMessage) {
+  if (message.type === "audio") return "WhatsApp voice note";
+  if (message.type === "image") return "WhatsApp image";
+  if (message.type === "document") return "WhatsApp document";
+  if (message.type === "text") return "WhatsApp text";
+  return "WhatsApp webhook";
 }
 
 export async function GET(request: Request) {
@@ -116,12 +147,15 @@ export async function GET(request: Request) {
   const verifyToken = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
   const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  const setup = getWaSetupStatus();
 
   if (!expectedToken) {
     return Response.json(
       {
         error: "WHATSAPP_VERIFY_TOKEN_REQUIRED",
         message: "Isi WHATSAPP_VERIFY_TOKEN sebelum mendaftarkan webhook.",
+        status: "setup-required",
+        setup,
       },
       { status: 503 },
     );
@@ -131,7 +165,7 @@ export async function GET(request: Request) {
     return new Response(challenge, { status: 200 });
   }
 
-  return Response.json({ error: "WEBHOOK_VERIFICATION_FAILED" }, { status: 403 });
+  return Response.json({ error: "WEBHOOK_VERIFICATION_FAILED", status: "ready", setup }, { status: 403 });
 }
 
 export async function POST(request: Request) {
@@ -140,23 +174,46 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = verifySignature(rawBody, request);
   if (!signature.ok) return signature.response!;
+  const setup = getWaSetupStatus();
 
-  const payload = JSON.parse(rawBody) as WhatsAppWebhookPayload;
+  let payload: WhatsAppWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as WhatsAppWebhookPayload;
+  } catch {
+    return Response.json(
+      { error: "INVALID_WEBHOOK_JSON", message: "Payload webhook bukan JSON valid.", setup },
+      { status: 400 },
+    );
+  }
   const inboundMessages = extractMessages(payload);
 
   if (!inboundMessages.length) {
-    return Response.json({ received: true, stored: 0 });
+    return Response.json({ received: true, stored: 0, queued: 0, setup });
   }
 
+  const cooperativeId =
+    process.env.WEBHOOK_COOPERATIVE_ID?.trim() ||
+    process.env.DEFAULT_COOPERATIVE_ID?.trim() ||
+    "kop-wanasari";
   const cooperative = await queryOne<{ id: string; province: string }>(
-    "SELECT id, province FROM cooperatives ORDER BY created_at ASC LIMIT 1",
+    "SELECT id, province FROM cooperatives WHERE id = $1 LIMIT 1",
+    [cooperativeId],
   );
 
   if (!cooperative) {
-    return Response.json({ error: "COOPERATIVE_NOT_FOUND" }, { status: 404 });
+    return Response.json(
+      {
+        error: "COOPERATIVE_NOT_FOUND",
+        message: "WEBHOOK_COOPERATIVE_ID atau DEFAULT_COOPERATIVE_ID belum cocok dengan data koperasi.",
+        status: "setup-required",
+        setup,
+      },
+      { status: 404 },
+    );
   }
 
   let stored = 0;
+  let queued = 0;
   for (const inbound of inboundMessages) {
     const text = messageText(inbound);
     const intent = selectIntent(text);
@@ -184,13 +241,23 @@ export async function POST(request: Request) {
         ],
       });
 
-    await queryOne(
-      `INSERT INTO wa_messages (id, cooperative_id, sender, message, intent, module, bot_reply, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    const inserted = await queryOne<WaMessageRow>(
+      `INSERT INTO wa_messages (id, cooperative_id, provider_message_id, sender, message, intent, module, bot_reply, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (provider_message_id) WHERE provider_message_id IS NOT NULL DO NOTHING
+       RETURNING id,
+         cooperative_id AS "cooperativeId",
+         provider_message_id AS "providerMessageId",
+         sender,
+         message,
+         intent,
+         module,
+         status`,
       [
         newId("wa"),
         cooperative.id,
-        inbound.contactName || inbound.waId || inbound.from || "Warga WhatsApp",
+        inbound.id || null,
+        senderLabel(inbound),
         text,
         needsTranscription ? "voice-note" : intent.label,
         needsTranscription ? "Suara Warga" : intent.module,
@@ -200,8 +267,20 @@ export async function POST(request: Request) {
           : "Masuk webhook, menunggu verifikasi operator",
       ],
     );
-    stored += 1;
+    if (inserted) {
+      stored += 1;
+      const queue = await ensureOperatorQueueForWaMessage({
+        waMessageId: inserted.id,
+        providerMessageId: inserted.providerMessageId,
+        cooperativeId: inserted.cooperativeId,
+        sender: inserted.sender,
+        source: queueSource(inbound),
+        message: inserted.message,
+        module: inserted.module,
+      });
+      if (queue) queued += 1;
+    }
   }
 
-  return Response.json({ received: true, stored });
+  return Response.json({ received: true, stored, queued, setup });
 }

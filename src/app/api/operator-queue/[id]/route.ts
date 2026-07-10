@@ -1,4 +1,4 @@
-import { requireAuthenticatedRequest } from "@/lib/auth";
+import { requireAuthenticatedRequest, requireRole } from "@/lib/auth";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
@@ -11,6 +11,13 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
+  const roleResponse = requireRole(auth.user, ["admin", "manager", "operator"]);
+  if (roleResponse) return roleResponse;
+  const cooperativeId = auth.user.cooperativeId;
+
+  if (!cooperativeId) {
+    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+  }
 
   const { id } = await context.params;
   const body = (await request.json().catch(() => ({}))) as { status?: string };
@@ -20,8 +27,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     `UPDATE operator_queue
      SET status = $2, updated_at = now()
      WHERE id = $1
+       AND cooperative_id = $3
      RETURNING id, sender, source, summary, status, module, updated_at AS "updatedAt"`,
-    [id, status],
+    [id, status, cooperativeId],
   );
 
   if (!row) {
@@ -35,6 +43,13 @@ export async function POST(request: Request, context: RouteContext) {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
+  const roleResponse = requireRole(auth.user, ["admin", "manager", "operator"]);
+  if (roleResponse) return roleResponse;
+  const cooperativeId = auth.user.cooperativeId;
+
+  if (!cooperativeId) {
+    return Response.json({ error: "COOPERATIVE_SCOPE_REQUIRED" }, { status: 409 });
+  }
 
   const { id } = await context.params;
   const body = (await request.json().catch(() => ({}))) as { action?: string };
@@ -45,8 +60,11 @@ export async function POST(request: Request, context: RouteContext) {
     summary: string;
     module: string;
   }>(
-    "SELECT id, cooperative_id, sender, summary, module FROM operator_queue WHERE id = $1",
-    [id],
+    `SELECT id, cooperative_id, sender, summary, module
+     FROM operator_queue
+     WHERE id = $1
+       AND cooperative_id = $2`,
+    [id, cooperativeId],
   );
 
   if (!queue) {
@@ -55,7 +73,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const reply =
     body.action === "follow-up"
-      ? `Pak/Bu ${queue.sender}, koperasi perlu melengkapi data untuk catatan ${queue.id}: foto barang, lokasi, dan waktu yang bisa dicek petugas.`
+      ? `Halo ${queue.sender}, koperasi perlu melengkapi data untuk catatan ${queue.id}: foto barang, lokasi, dan waktu yang bisa dicek petugas.`
       : `Catatan ${queue.id} sudah diterima koperasi dan sedang diproses pengurus.`;
 
   const message = await queryOne(
@@ -70,7 +88,9 @@ export async function POST(request: Request, context: RouteContext) {
       "follow-up",
       queue.module,
       reply,
-      process.env.WHATSAPP_BUSINESS_TOKEN ? "Siap dikirim" : "Menunggu env WhatsApp",
+      process.env.WHATSAPP_BUSINESS_TOKEN
+        ? "Draft follow-up tersimpan; env WhatsApp tersedia untuk pengiriman terpisah"
+        : "Draft follow-up tersimpan; pengiriman live menunggu env WhatsApp",
     ],
   );
 

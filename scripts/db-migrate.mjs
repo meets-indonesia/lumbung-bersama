@@ -2,10 +2,13 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { loadLocalEnv } from "./load-local-env.mjs";
 
 const { Client } = pg;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = path.join(root, "db", "schema.sql");
+
+await loadLocalEnv(root);
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL belum diisi. Contoh: postgresql://user:password@localhost:5432/lumbung_bersama");
