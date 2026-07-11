@@ -170,6 +170,8 @@ function routeAgent(text, payloadType, recentMessages = []) {
   if (!normalized || welcomeTriggers.has(normalized)) return null;
 
   const historyAgent = inferAgentFromHistory(recentMessages);
+  if (historyAgent && isContextualFollowUp(text)) return historyAgent;
+
   const [best] = agentRouter
     .map((agent) => ({ agent, score: scoreAgent(agent, normalized) }))
     .sort((left, right) => right.score - left.score);
@@ -181,12 +183,13 @@ function routeAgent(text, payloadType, recentMessages = []) {
   return best?.score ? best.agent : null;
 }
 
-function isOutOfScopeMessage(text, payloadType) {
+function isOutOfScopeMessage(text, payloadType, recentMessages = []) {
   if (payloadType !== "text") return false;
   const normalized = normalizeRouterText(text);
   if (!normalized || welcomeTriggers.has(normalized) || closeTriggers.has(normalized) || normalized === "operator" || normalized === "panggil operator") {
     return false;
   }
+  if (inferAgentFromHistory(recentMessages) && isContextualFollowUp(text)) return false;
   return !/\b(koperasi|kopdes|lumbung|desa|warga|komoditas|produk|panen|beras|padi|gabah|sawit|tbs|cpo|kopi|cabai|singkong|jagung|kakao|lada|sagu|rumput laut|harga|jual|buyer|pembeli|offtaker|stok|stock|gerai|gudang|restock|pickup|barang|pinjam|pinjaman|pembiayaan|modal|simpan|keuangan|angsuran|pupuk|benih|nota|bukti|dokumen|pdf|foto|gambar|ocr|laporan|aksi|integrasi|wa|catatan|status|kemitraan|transaksi|umkm)\b/i.test(
     normalized,
   );
@@ -469,6 +472,7 @@ function isTerseFollowUp(text) {
   const normalized = normalizeRouterText(text);
   if (!normalized) return false;
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  if (isContextualFollowUp(text)) return true;
   return wordCount <= 8 && (
     Boolean(extractVolumeHint(text)) ||
     Boolean(extractAreaHintFromKnownWords(text)) ||
@@ -477,6 +481,20 @@ function isTerseFollowUp(text) {
     hasPickupHint(text) ||
     hasTargetPriceHint(text)
   );
+}
+
+function isAffirmativeFollowUp(text) {
+  const normalized = normalizeRouterText(text);
+  return /^(ya|iya|y|boleh|ya boleh|iya boleh|oke|ok|siap|sip|lanjut|lanjutkan|coba|silakan|gas|setuju|betul|benar)(\s+(boleh|lanjut|saja|ya|dong|pak|bu))?$/i.test(
+    normalized,
+  );
+}
+
+function isContextualFollowUp(text) {
+  const normalized = normalizeRouterText(text);
+  if (!normalized || closeTriggers.has(normalized) || welcomeTriggers.has(normalized)) return false;
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  return isAffirmativeFollowUp(text) || (wordCount <= 5 && /^(buat|susun|lanjut|coba|boleh|iya|ya|oke|siap)\b/i.test(normalized));
 }
 
 function conversationText(messageText, recentMessages = []) {
@@ -654,6 +672,53 @@ function priceGuidance(commodityName, areaHint) {
   return dataBackedPriceGuidance(commodityName, areaHint);
 }
 
+function lastBotReplyText(recentMessages = []) {
+  const found = recentMessages.find((item) => String(item.botReply ?? "").trim());
+  return String(found?.botReply ?? "");
+}
+
+function followUpActionAnswer({ agent, messageText, recentMessages, context }) {
+  if (!isAffirmativeFollowUp(messageText)) return "";
+  const lastReply = normalizeRouterText(lastBotReplyText(recentMessages));
+  const commodity = context.commodityName && context.commodityName !== "komoditas ini" ? context.commodityName : "produk tersebut";
+  const area = context.areaHint ? ` di ${context.areaHint}` : "";
+  const volume = context.volumeHint ? ` untuk volume ${context.volumeHint}` : "";
+
+  if ((agent.id === "4" || agent.id === "3") && /\b(kalimat nego|kalimat negonya|bahan negosiasi|bahan nego|buyer|pembeli)\b/i.test(lastReply)) {
+    return [
+      "Siap. Ini draft singkat yang bisa dikirim ke buyer:",
+      "",
+      `Pak/Bu, untuk ${commodity}${area}${volume}, kami bisa lanjut diskusi harga setelah kualitas dan syarat ambilnya jelas.`,
+      "Agar posisinya adil, mohon konfirmasi target harga, grade/kadar air yang diminta, jadwal pickup, volume final, dan pola pembayaran.",
+      "Dari sisi koperasi, kami tidak langsung menurunkan harga sebelum ongkos angkut, sortasi, dan risiko kualitas dihitung.",
+      "",
+      "Kalau buyer minta harga lebih rendah, balas begini:",
+      `Kami terbuka negosiasi, tetapi penyesuaian harga perlu diimbangi kepastian volume, pickup, pembayaran, dan standar kualitas ${commodity}.`,
+      "",
+      "Mau saya buat versi yang lebih tegas atau versi lebih halus?",
+    ].join("\n");
+  }
+
+  if (agent.id === "1" && /\b(buyer matching|matching|buyer|pembeli)\b/i.test(lastReply)) {
+    return [
+      "Siap. Untuk lanjut ke buyer matching, data yang saya pakai sekarang:",
+      `Produk: ${commodity}${area}${volume}.`,
+      "Langkah paling aman: pastikan grade/kadar air, foto batch, tanggal siap jual, lokasi pickup, lalu cocokkan ke buyer yang kebutuhan dan syarat kualitasnya sesuai.",
+      "Mau saya susun bahan penawaran singkat untuk buyer?",
+    ].join("\n");
+  }
+
+  if (agent.id === "2" && /\b(restock|pickup|stok|gudang)\b/i.test(lastReply)) {
+    return [
+      "Siap. Untuk rencana stok/pickup, saya perlu susun dari barang, jumlah, lokasi gudang/gerai, tanggal siap, dan bukti stok.",
+      `Yang terbaca sekarang: ${commodity}${area}${volume}.`,
+      "Kalau sudah benar, kirim tanggal pickup dan lokasi lengkap agar bisa masuk tindak lanjut operator.",
+    ].join("\n");
+  }
+
+  return "";
+}
+
 async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", messageText, recentMessages = [] }) {
   const normalized = normalizeRouterText(messageText);
   const context = buildConversationContext({ messageText, payloadType, recentMessages });
@@ -673,6 +738,9 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
       "Mohon tunggu maksimal 24 jam kerja. Sambil menunggu, kirim detail tambahan seperti lokasi, produk, jumlah, foto, atau dokumen pendukung kalau ada.",
     ].join("\n");
   }
+
+  const followUpAnswer = followUpActionAnswer({ agent, messageText, recentMessages, context });
+  if (followUpAnswer) return followUpAnswer;
 
   const answerLines = [];
   if (agent.id === "4") {
@@ -862,7 +930,7 @@ function classifyIntent(text, payloadType, recentMessages = []) {
     };
   }
 
-  if (isOutOfScopeMessage(text, payloadType)) {
+  if (isOutOfScopeMessage(text, payloadType, recentMessages)) {
     return {
       intent: "Di luar scope koperasi",
       module: "WA Intake / Suara Warga",
