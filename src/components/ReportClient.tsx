@@ -460,7 +460,7 @@ const reportRoleRows = [
   ["Staff/Admin Logistik", "Pemenuhan pesanan", "Mengatur pickup, kurir, status pengiriman, dan bukti serah terima."],
   ["Kasir", "Sinyal POS", "Menampilkan agregat transaksi saja, tanpa detail pelanggan."],
   ["Kurir", "Pengiriman", "Memperbarui tahap pengiriman tanpa data penerima publik."],
-  ["Pembaca laporan", "Akses baca", "Melihat contoh agregat tanpa data pribadi."],
+  ["Pembaca laporan", "Akses baca", "Melihat agregat terbatas tanpa data pribadi."],
 ] as const;
 
 const reportApprovalStages = [
@@ -676,7 +676,7 @@ export function ReportClient() {
     { label: "Draft penawaran", item: signalSpine?.offerPackDraft, empty: "Draft penawaran belum tersedia." },
     { label: "Skenario modal kerja", item: signalSpine?.workingCapitalScenario, empty: "Skenario modal kerja belum tersedia." },
     { label: "Kesehatan koperasi", item: signalSpine?.cooperativeHealthGate, empty: "Indikator kesehatan koperasi belum tersedia." },
-    { label: "Data contoh", item: signalSpine?.demoFixture, empty: "Data contoh belum tersedia." },
+    { label: "Template bukti", item: signalSpine?.demoFixture, empty: "Template bukti belum tersedia." },
   ];
   const signalActionGroups: Array<{ label: string; rows: SignalSpineItem[]; empty: string }> = [
     { label: "Antrean tindak lanjut", rows: managerActionQueue, empty: "Belum ada tindak lanjut dari layanan." },
@@ -983,7 +983,7 @@ export function ReportClient() {
       reportRow(
         "bukti-agregat-data-awal",
         "data awal",
-        signalSpine?.demoFixture ? signalItemSummary(signalSpine.demoFixture) : "Data contoh belum tersedia.",
+        signalSpine?.demoFixture ? signalItemSummary(signalSpine.demoFixture) : "Template bukti belum tersedia.",
         signalItemSource(signalSpine?.demoFixture, "Bukti agregat"),
         {
           confidence: signalSpineStatus === "ready" ? "sampel awal" : "perlu aktivasi",

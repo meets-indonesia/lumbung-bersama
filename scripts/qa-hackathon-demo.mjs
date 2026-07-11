@@ -395,7 +395,7 @@ function assertProtectedGate(label, response, payload, allowedSetupErrors = ["OP
 }
 
 async function assertPublicPages() {
-  await expectText("/", "Koperasi Opportunity");
+  await expectText("/", "Peta Potensi Desa");
   await expectText("/login", "Login operator");
   await expectText("/peta-unggulan", "Peta Unggulan");
   await expectRedirect("/peta-potensi", "/peta-unggulan");

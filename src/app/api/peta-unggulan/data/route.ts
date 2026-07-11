@@ -1,4 +1,5 @@
 import { dbRequiredResponse, isDatabaseConfigured, queryRows } from "@/lib/postgres";
+import { getHackathonDashboardEvidence } from "@/lib/hackathon-dashboard-evidence";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,7 @@ type AreaCount = {
 export async function GET() {
   if (!isDatabaseConfigured()) return dbRequiredResponse();
 
-  const [regions, villages, commodities, assets, areaCounts, commodityCoverage] = await Promise.all([
+  const [regions, villages, commodities, assets, areaCounts, commodityCoverage, sharedEvidence] = await Promise.all([
     queryRows(
       "SELECT id, label, status, color, village_code AS \"villageCode\", keywords FROM map_regions ORDER BY label ASC",
     ),
@@ -50,6 +51,7 @@ export async function GET() {
               COUNT(CASE WHEN area_level = 4 AND source_level = 'direct-village' THEN 1 END)::text AS "directVillageProfiles"
        FROM regional_commodity_profiles`,
     ).catch(() => []),
+    getHackathonDashboardEvidence(true).catch(() => null),
   ]);
 
   return Response.json({
@@ -64,6 +66,19 @@ export async function GET() {
       note:
         "Kode wilayah nasional tersedia sebagai fondasi. Komoditas peta mengecualikan inherited-province-baseline; data operasional tetap berasal dari WA/operator atau sumber resmi yang diimpor.",
     },
+    sharedEvidence: sharedEvidence
+      ? {
+          status: sharedEvidence.status,
+          mode: sharedEvidence.mode,
+          tablePrefix: sharedEvidence.tablePrefix,
+          schemaScope: sharedEvidence.schemaScope,
+          productRows: sharedEvidence.tables.productRows,
+          areaRows: sharedEvidence.tables.areaRows,
+          evidenceSummary: "evidenceSummary" in sharedEvidence ? sharedEvidence.evidenceSummary : null,
+          caveat:
+            "Agregat eksplorasi dibawa ke peta sebagai ringkasan kategori/area tanpa PII, bukan klaim data operasional resmi atau buyer bernama.",
+        }
+      : null,
     regions,
     villages: villages.map((village) => ({
       ...village,

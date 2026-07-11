@@ -19,12 +19,12 @@ export function PublicHeader() {
 
   return (
     <header className="sticky inset-x-0 top-0 z-40 border-b border-[#E7DED1]/80 bg-[#F8F5F0]/92 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem] lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-2 focus-visible:lb-focus" aria-label="Lumbung Bersama">
           <img
             alt="Lumbung Bersama"
             src={stitchAssets.landingLogo}
-            className="h-16 w-auto max-w-[min(48vw,13rem)] object-contain drop-shadow-[0_12px_26px_rgba(122,78,45,0.18)] sm:h-[4.5rem] sm:max-w-[15.5rem]"
+            className="h-10 w-auto max-w-[min(44vw,10rem)] object-contain drop-shadow-[0_10px_20px_rgba(122,78,45,0.14)] sm:h-12 sm:max-w-[11.5rem]"
           />
         </Link>
         <nav className="hidden items-center gap-6 text-sm font-bold text-[#5B6871] lg:flex xl:gap-8">

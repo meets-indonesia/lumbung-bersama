@@ -12,7 +12,6 @@ import {
   MapPinned,
   Network,
   ShieldCheck,
-  Sparkles,
   Warehouse,
 } from "lucide-react";
 import { PublicHeader } from "@/components/PublicHeader";
@@ -25,8 +24,6 @@ import {
   nationalDataSources,
   stockItems,
 } from "@/lib/pilot-data";
-
-const mvpName = "Lumbung Bersama - Koperasi Opportunity & Offtaker Radar";
 
 function publicStatusLabel(value: string) {
   if (/ready|implemented/i.test(value)) return "Aktif";
@@ -181,28 +178,13 @@ export default function Home() {
         <PublicHeader />
         <div className="lb-landing-grain" aria-hidden="true" />
 
-        <section className="relative isolate overflow-hidden bg-[#F8F5F0] px-4 py-10 sm:px-6 lg:px-8 lg:py-0">
-          <div className="absolute inset-0 z-0" aria-hidden="true">
-            <img
-              alt=""
-              src={stitchAssets.heroVillage}
-              className="h-full w-full scale-105 object-cover opacity-70"
-            />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,248,234,0.96)_0%,rgba(255,248,234,0.82)_43%,rgba(255,248,234,0.12)_100%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#FFF8EA] to-transparent" />
+        <section className="relative isolate overflow-hidden bg-[#FFF8EA] px-4 py-10 sm:px-6 lg:px-8 lg:py-0">
+          <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_18%_18%,rgba(215,154,43,0.16),transparent_25rem),radial-gradient(circle_at_75%_8%,rgba(47,125,50,0.12),transparent_26rem),linear-gradient(180deg,#FFF8EA_0%,#FFFCF5_72%,#FFF8EA_100%)]" aria-hidden="true">
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#FFF8EA] to-transparent" />
           </div>
-          <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-5rem)] max-w-7xl flex-col items-center lg:flex-row">
-            <div className="w-full py-10 text-center lg:w-[52%] lg:py-20 lg:text-left">
-              <img
-                alt="Lumbung Bersama"
-                src={stitchAssets.landingLogo}
-                className="mx-auto mb-5 h-auto w-[min(390px,88vw)] object-contain drop-shadow-[0_24px_54px_rgba(31,41,51,0.18)] lg:mx-0 lg:w-[430px]"
-              />
-              <p className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#E7DED1] bg-white/82 px-3 py-2 text-xs font-black text-[#7A4E2D] shadow-[0_12px_30px_rgba(122,78,45,0.08)]">
-                <Sparkles size={14} strokeWidth={2.2} aria-hidden="true" />
-                {mvpName}
-              </p>
-              <h1 className="text-4xl font-extrabold leading-[1.03] text-[#172027] sm:text-5xl lg:text-7xl">
+          <div className="relative z-10 mx-auto grid min-h-[620px] max-w-7xl items-center gap-8 lg:min-h-[740px] lg:grid-cols-[0.92fr_1.08fr]">
+            <div className="py-8 text-center lg:py-16 lg:text-left">
+              <h1 className="text-4xl font-extrabold leading-[1.04] text-[#172027] sm:text-5xl lg:text-6xl">
                 Transformasi Digital <br />
                 <span className="text-[#C92A2A]">Koperasi Desa</span>
               </h1>
@@ -210,7 +192,7 @@ export default function Home() {
                 Mengubah potensi desa menjadi aksi koperasi berbasis data,
                 rekomendasi terjelaskan, dan bukti yang bisa diaudit.
               </p>
-              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+              <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
                 <PrimaryCta href="/login?next=/dashboard">Masuk Dashboard</PrimaryCta>
                 <Link
                   href="/peta-unggulan"
@@ -222,34 +204,14 @@ export default function Home() {
                   </span>
                 </Link>
               </div>
-              <div className="mx-auto mt-8 flex max-w-xl items-start justify-center gap-2 text-left text-sm font-semibold leading-6 text-[#4F5B63] lg:mx-0 lg:justify-start">
-                <CheckCircle2 size={20} strokeWidth={2.2} className="text-[#2F7D32]" aria-hidden="true" />
-                Platform ini dibangun untuk keputusan koperasi yang aman, transparan, dan dapat dipertanggungjawabkan.
-              </div>
             </div>
 
-            <div className="relative hidden min-h-[calc(100dvh-5rem)] w-full self-end lg:block lg:w-[48%]">
-              <div className="absolute bottom-0 right-0 top-10 h-[calc(100%-2.5rem)] w-[88%] rounded-t-[2.5rem] bg-[#D6D7D4]/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)]" aria-hidden="true" />
+            <div className="relative hidden min-h-[540px] w-full self-end lg:block">
               <img
                 alt="Visual kepemimpinan koperasi desa dari referensi Stitch"
                 src={stitchAssets.heroLeader}
-                className="relative z-10 mx-auto block h-[calc(100dvh-3rem)] min-h-[680px] w-full origin-bottom scale-[1.08] object-contain object-bottom"
+                className="relative z-10 mx-auto block h-auto max-h-[640px] min-h-0 w-auto max-w-full origin-bottom object-contain object-bottom drop-shadow-[0_30px_62px_rgba(31,41,51,0.16)]"
               />
-              {[
-                ["Data Terintegrasi", "bg-[#2F7D32]/20 text-[#2F7D32]", "translate-x-4 top-28"],
-                ["AI Terjelaskan", "bg-[#1D5D8F]/20 text-[#1D5D8F]", "-translate-x-12 top-60"],
-                ["Keputusan Koperasi", "bg-[#D79A2B]/20 text-[#7A4E2D]", "top-[25rem] translate-x-1"],
-              ].map(([label, tone, position]) => (
-                <div
-                  key={label}
-                  className={`lb-soft-float absolute right-0 z-20 flex h-28 w-28 flex-col items-center justify-center rounded-full border border-white/45 bg-white/38 p-4 text-center shadow-[0_20px_54px_rgba(31,41,51,0.18)] backdrop-blur-md ${position}`}
-                >
-                  <div className={`mb-1 grid h-10 w-10 place-items-center rounded-full text-xs font-black ${tone}`}>
-                    {label === "AI Terjelaskan" ? "AI" : <CheckCircle2 size={22} strokeWidth={2.2} aria-hidden="true" />}
-                  </div>
-                  <p className="text-[9px] font-black leading-3 text-[#172027]">{label}</p>
-                </div>
-              ))}
             </div>
           </div>
         </section>
@@ -267,21 +229,21 @@ export default function Home() {
                 satu narasi.
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {mvpFlow.map((step, index) => {
                 const Icon = step.icon;
                 return (
                   <article
                     key={step.title}
-                    className={`lb-view-reveal lb-spotlight-card rounded-[1.5rem] p-1.5 ${index % 2 ? "xl:mt-10" : ""}`}
+                    className="lb-view-reveal lb-spotlight-card rounded-[1.5rem] p-1.5"
                     style={{ animationDelay: `${index * 70}ms` }}
                   >
-                    <div className="h-full rounded-[1.15rem] bg-[#FFF8EA] p-5">
+                    <div className="flex h-full min-h-[200px] flex-col rounded-[1.15rem] bg-[#FFF8EA] p-5">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-mono text-xs font-black text-[#7A4E2D]">{step.step}</span>
                         <Icon size={22} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
                       </div>
-                      <h3 className="mt-10 text-xl font-black leading-tight">{step.title}</h3>
+                      <h3 className="mt-8 text-xl font-black leading-tight">{step.title}</h3>
                       <p className="mt-3 text-sm font-semibold leading-7 text-[#53606A]">{step.copy}</p>
                     </div>
                   </article>
@@ -398,11 +360,11 @@ export default function Home() {
                 Outreach hanya dilakukan saat stok siap.
               </h2>
             </div>
-            <div className="mt-10 grid gap-5 lg:grid-cols-[1fr_0.82fr_1fr]">
+            <div className="mt-10 grid gap-5 lg:grid-cols-3">
               <div className="lb-view-reveal lb-bezel rounded-[2rem] p-2">
-                <div className="h-full rounded-[1.55rem] bg-[#FFFCF5] p-5">
+                <div className="h-full min-h-[300px] rounded-[1.55rem] bg-[#FFFCF5] p-5">
                   <BarChart3 size={26} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
-                  <h3 className="mt-5 text-2xl font-black">Requirement buyer</h3>
+                  <h3 className="mt-5 text-2xl font-black">Syarat buyer</h3>
                   <div className="mt-5 grid gap-3">
                     {buyerMatches.slice(0, 3).map((item) => (
                       <div key={item.buyer} className="rounded-[16px] bg-[#FFF8EA] p-4">
@@ -413,18 +375,18 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div className="lb-view-reveal rounded-[2rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_70px_rgba(31,41,51,0.22)] [--lb-delay:100ms]">
+              <div className="lb-view-reveal min-h-[300px] rounded-[2rem] bg-[#172027] p-6 text-[#FFF8EA] shadow-[0_24px_70px_rgba(31,41,51,0.22)] [--lb-delay:100ms]">
                 <Layers3 size={28} strokeWidth={2.1} className="text-[#D79A2B]" aria-hidden="true" />
-                <p className="mt-8 text-5xl font-black leading-none">Tanpa janji buyer palsu</p>
+                <p className="mt-8 text-3xl font-black leading-[1.05] sm:text-4xl">Tanpa janji buyer palsu</p>
                 <p className="mt-5 text-sm font-semibold leading-7 text-[#C9D0D4]">
                   Landing, dashboard, dan laporan memakai tipe kebutuhan buyer dan status kesiapan.
                   Tidak ada nama buyer palsu atau janji pembelian.
                 </p>
               </div>
               <div className="lb-view-reveal lb-bezel rounded-[2rem] p-2 [--lb-delay:160ms]">
-                <div className="h-full rounded-[1.55rem] bg-[#FFFCF5] p-5">
+                <div className="h-full min-h-[300px] rounded-[1.55rem] bg-[#FFFCF5] p-5">
                   <Warehouse size={26} strokeWidth={2.1} className="text-[#2F7D32]" aria-hidden="true" />
-                  <h3 className="mt-5 text-2xl font-black">Stock ledger</h3>
+                  <h3 className="mt-5 text-2xl font-black">Ledger stok</h3>
                   <div className="mt-5 grid gap-3">
                     {stockItems.slice(0, 3).map((item) => (
                       <div key={item.name} className="flex items-center justify-between gap-3 rounded-[16px] bg-[#FFF8EA] p-4">
@@ -451,13 +413,13 @@ export default function Home() {
                 operasional MVP disimpan di ruang kerja aplikasi dengan ID tim.
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-5 md:grid-cols-3">
               {guardrails.map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <article
                     key={item.title}
-                    className="lb-view-reveal rounded-[1.5rem] border border-[#E7DED1] bg-[#FFF8EA] p-5"
+                    className="lb-view-reveal min-h-[245px] rounded-[1.5rem] border border-[#E7DED1] bg-[#FFF8EA] p-5"
                     style={{ animationDelay: `${index * 90}ms` }}
                   >
                     <Icon size={24} strokeWidth={2.1} className="text-[#C92A2A]" aria-hidden="true" />
@@ -477,14 +439,14 @@ export default function Home() {
               </div>
               <StatusBadge tone="warning">Berlabel sumber</StatusBadge>
             </div>
-            <div className="mt-5 grid gap-3 md:grid-cols-5">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {nationalDataSources.slice(0, 5).map((source) => (
                 <a
                   key={source.id}
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-[18px] bg-[#FFFCF5] p-4 text-sm transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:bg-white focus-visible:lb-focus"
+                  className="min-h-[132px] rounded-[18px] bg-[#FFFCF5] p-4 text-sm transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:bg-white focus-visible:lb-focus"
                 >
                   <p className="font-black">{source.name}</p>
                   <p className="mt-2 font-semibold leading-6 text-[#53606A]">{publicStatusLabel(source.status)}</p>
@@ -529,7 +491,7 @@ export default function Home() {
               {faqItems.map((item, index) => (
                 <article
                   key={item.question}
-                  className="lb-view-reveal rounded-[1.5rem] border border-[#E7DED1] bg-[#FFFCF5] p-6"
+                  className="lb-view-reveal min-h-[190px] rounded-[1.5rem] border border-[#E7DED1] bg-[#FFFCF5] p-6"
                   style={{ animationDelay: `${index * 70}ms` }}
                 >
                   <h3 className="text-xl font-black">{item.question}</h3>

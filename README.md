@@ -234,6 +234,8 @@ Key API endpoints:
 
 ## Demo Flow
 
+Detailed presenter runbook: [`docs/38-demo-video-wa-agent-runbook.md`](docs/38-demo-video-wa-agent-runbook.md).
+
 1. Start at `/dashboard` after login.
 2. Show `/api/hackathon/signal-spine` as the safe adapter layer: Signal Snapshot Adapter -> Evidence Ledger -> Pre-Offtaker Readiness Gate -> Offer Pack -> Manager Action Queue.
 3. Open `/peta-unggulan` to inspect wilayah, commodity, source, and caveat signals.

@@ -73,7 +73,7 @@ export default async function ModuleDetailPage({ params }: ModulePageProps) {
             <div className="mt-6 rounded-[18px] bg-[#F4EBDD] p-5">
               <div className="flex items-center gap-2 text-[#7A4E2D]">
                 <MessageCircle size={20} strokeWidth={2.2} aria-hidden="true" />
-                <p className="font-extrabold">WA command contoh</p>
+                <p className="font-extrabold">Shortcut WA</p>
               </div>
               <p className="mt-3 text-xl font-black text-[#1F2933]">
                 {featureModule.waCommand}

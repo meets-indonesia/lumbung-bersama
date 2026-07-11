@@ -35,7 +35,7 @@ export default async function ModulesPage() {
             Flow MVP
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
-            Fokus demo: peta potensi sampai laporan aksi.
+            Fokus kerja: peta potensi sampai laporan aksi.
           </h1>
           <p className="mt-5 max-w-3xl text-base font-semibold leading-8 text-[#53606A]">
             Modul pendukung tetap tersedia, tetapi presentasi utama sebaiknya

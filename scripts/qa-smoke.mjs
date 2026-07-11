@@ -682,7 +682,7 @@ async function assertNoOverclaimText() {
 async function run() {
   await startServerIfNeeded();
 
-  await expectText("/", "Koperasi Opportunity");
+  await expectText("/", "Transformasi Digital");
   await expectText("/login", "Login operator");
   await expectText("/peta-unggulan", "Peta Unggulan");
   await expectRedirect("/peta-potensi", "/peta-unggulan");

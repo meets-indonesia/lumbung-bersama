@@ -1468,7 +1468,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 />
               </span>
               <div className={`lb-sidebar-copy min-w-0 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
-                <p className="truncate text-sm font-black text-[#FFF8EA]">Lumbung Bersama</p>
+                <p className={isDark ? "truncate text-sm font-black text-[#FFF8EA]" : "truncate text-sm font-black text-[#172027]"}>Lumbung Bersama</p>
                 <p className="mt-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#D79A2B]">Ringkasan Operator</p>
               </div>
             </div>
@@ -1499,7 +1499,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
             </div>
           </div>
 
-          <div className={`lb-sidebar-info mx-4 mt-5 rounded-[8px] border border-[#26323B] bg-[#0B1013] p-3 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
+          <div className={`lb-sidebar-info mx-4 mt-5 rounded-[8px] border p-3 ${sidebarCollapsed ? "lg:hidden" : ""} ${innerClass}`}>
             <p className="text-xs font-black uppercase tracking-[0.14em] text-[#D79A2B]">Login aktif</p>
             <p className="mt-2 truncate text-sm font-semibold">{cooperative.name}</p>
             <p className={`mt-1 text-xs font-normal leading-5 ${mutedClass}`}>
@@ -1538,7 +1538,9 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                           sidebarCollapsed ? "lg:justify-center lg:px-2" : ""
                         } ${
                           active
-                            ? "border-[#D79A2B] bg-[#42302E] text-[#FFE5E2]"
+                            ? isDark
+                              ? "border-[#D79A2B] bg-[#42302E] text-[#FFE5E2]"
+                              : "border-[#D79A2B] bg-[#FFF3D8] text-[#172027]"
                             : isDark
                               ? "border-transparent text-[#E4BEBA] hover:bg-[#2B1C1A] hover:text-white"
                               : "border-transparent text-[#4F5D66] hover:bg-[#F3E7D5] hover:text-[#172027]"
@@ -1582,7 +1584,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,max-content)_auto_minmax(0,1fr)] sm:items-center">
                   <div className="min-w-0">
                     <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Ruang kerja operator</p>
-                    <h1 className="mt-1 truncate text-lg font-black tracking-normal text-[#FFF8EA] sm:text-xl">
+                    <h1 className={isDark ? "mt-1 truncate text-lg font-black tracking-normal text-[#FFF8EA] sm:text-xl" : "mt-1 truncate text-lg font-black tracking-normal text-[#172027] sm:text-xl"}>
                       {activeViewLabel}
                     </h1>
                   </div>
@@ -2383,9 +2385,9 @@ function SignalSpineCompactPanel({
       note: "Hanya kesiapan; tidak mengklaim integrasi live.",
     },
     {
-      label: "Contoh alur",
+      label: "Template alur",
       value: signalSpine?.demoFixture ? "Tersedia" : ready ? "Belum ada" : statusLabel,
-      note: "Sampel alur tidak ditampilkan sebagai aktor nyata.",
+      note: "Template alur tidak ditampilkan sebagai aktor nyata.",
     },
   ];
   const gateRows = [
@@ -3384,10 +3386,10 @@ function OverviewView({
       <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#D79A2B]">Command Center Koperasi</p>
-          <h2 className="mt-1 text-2xl font-black text-[#FFF8EA]">Ringkasan Operator</h2>
+          <h2 className={isDark ? "mt-1 text-2xl font-black text-[#FFF8EA]" : "mt-1 text-2xl font-black text-[#172027]"}>Ringkasan Operator</h2>
         </div>
         <div className="text-left lg:text-right">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#CFC3B2]/55">Status sistem</p>
+          <p className={`text-[11px] font-black uppercase tracking-[0.22em] ${isDark ? "text-[#CFC3B2]/55" : "text-[#5B6871]"}`}>Status sistem</p>
           <p className={`mt-1 flex items-center gap-2 text-xs font-black ${systemReady ? "text-[#88D982]" : "text-[#D79A2B]"} lg:justify-end`}>
             <span className={`h-2 w-2 rounded-full ${systemReady ? "bg-[#88D982] shadow-[0_0_8px_#88d982]" : "bg-[#D79A2B]"}`} />
             {systemStatus}
@@ -3417,21 +3419,25 @@ function OverviewView({
           return (
             <article
               key={metric.label}
-              className="border border-[#1F2933] bg-[#172027] p-4 transition-colors hover:bg-[#2B1C1A]"
+              className={`border p-4 transition-colors ${
+                isDark
+                  ? "border-[#1F2933] bg-[#172027] hover:bg-[#2B1C1A]"
+                  : "border-[#E7DED1] bg-[#FFFCF5] hover:bg-[#FFF3D8]"
+              }`}
               style={{ borderTopColor: tone, borderTopWidth: 2 }}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <Icon size={19} strokeWidth={2.2} style={{ color: tone }} aria-hidden="true" />
-                <span className="rounded-[3px] bg-[#1F2933] px-2 py-1 text-[10px] font-black text-[#CFC3B2]">
+                <span className={`rounded-[3px] px-2 py-1 text-[10px] font-black ${isDark ? "bg-[#1F2933] text-[#CFC3B2]" : "bg-[#F2E6D4] text-[#7A4E2D]"}`}>
                   {kpiLabels[index] ?? "Metrik"}
                 </span>
               </div>
-              <h3 className="text-xs font-black text-[#CFC3B2]">{metric.label}</h3>
+              <h3 className={`text-xs font-black ${mutedClass}`}>{metric.label}</h3>
               <div className="mt-2 flex items-baseline gap-2">
-                <p className="font-mono text-3xl font-black tabular-nums text-[#FFF8EA]">{metric.value}</p>
-                <p className="text-[10px] font-black uppercase text-[#CFC3B2]/45">{metric.note}</p>
+                <p className={isDark ? "font-mono text-3xl font-black tabular-nums text-[#FFF8EA]" : "font-mono text-3xl font-black tabular-nums text-[#172027]"}>{metric.value}</p>
+                <p className={`text-[10px] font-black uppercase ${isDark ? "text-[#CFC3B2]/45" : "text-[#5B6871]"}`}>{metric.note}</p>
               </div>
-              <div className="mt-4 h-1 overflow-hidden rounded-full bg-[#1F2933]">
+              <div className={`mt-4 h-1 overflow-hidden rounded-full ${isDark ? "bg-[#1F2933]" : "bg-[#EFE2CF]"}`}>
                 <div className="h-full" style={{ width: `${Math.min(100, 35 + index * 18)}%`, backgroundColor: tone }} />
               </div>
             </article>
@@ -3477,39 +3483,39 @@ function OverviewView({
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
+        <article className={`rounded-[4px] border p-4 ${panelClass}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Papan bukti</p>
-              <h2 className="mt-1 text-lg font-black text-[#FFF8EA]">Sumber data yang sedang dibaca</h2>
+              <h2 className="mt-1 text-lg font-black">Sumber data yang sedang dibaca</h2>
             </div>
-            <span className="w-fit rounded-[4px] border border-[#26323B] bg-[#0B1013] px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]">
+            <span className={`w-fit rounded-[4px] border px-2.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.12em] ${innerClass} ${mutedClass}`}>
               tanpa PII
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {evidenceCards.map((card) => (
-              <div key={card.label} className="border-l-4 border-[#D79A2B] bg-[#172027] p-3">
+              <div key={card.label} className={`border-l-4 border-[#D79A2B] p-3 ${innerClass}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#CFC3B2]/55">{card.label}</p>
+                  <p className={`font-mono text-[10px] font-black uppercase tracking-[0.12em] ${mutedClass}`}>{card.label}</p>
                   <span className={`font-mono text-xs font-black ${card.toneClass}`}>{card.value}</span>
                 </div>
-                <p className="mt-2 text-sm font-black leading-5 text-[#FFF8EA]">{card.detail}</p>
-                <p className="mt-2 text-[11px] font-semibold leading-5 text-[#CFC3B2]/60">{card.source}</p>
+                <p className="mt-2 text-sm font-black leading-5">{card.detail}</p>
+                <p className={`mt-2 text-[11px] font-semibold leading-5 ${mutedClass}`}>{card.source}</p>
               </div>
             ))}
           </div>
         </article>
 
-        <article className="rounded-[4px] border border-[#26323B] bg-[#101820] p-4">
+        <article className={`rounded-[4px] border p-4 ${panelClass}`}>
             <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Brief operator</p>
           <div className="mt-4 space-y-3">
             {commandFacts.map(([label, value, note]) => (
-              <div key={label} className="grid grid-cols-[120px_1fr] gap-3 border-b border-[#26323B] pb-3 last:border-b-0 last:pb-0">
-                <p className="text-[11px] font-black uppercase tracking-[0.1em] text-[#CFC3B2]/45">{label}</p>
+              <div key={label} className="grid grid-cols-[120px_1fr] gap-3 border-b border-current/10 pb-3 last:border-b-0 last:pb-0">
+                <p className={`text-[11px] font-black uppercase tracking-[0.1em] ${mutedClass}`}>{label}</p>
                 <div>
-                  <p className="font-black text-[#FFF8EA]">{value}</p>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-[#CFC3B2]/60">{note}</p>
+                  <p className="font-black">{value}</p>
+                  <p className={`mt-1 text-xs font-semibold leading-5 ${mutedClass}`}>{note}</p>
                 </div>
               </div>
             ))}
@@ -3593,9 +3599,9 @@ function OverviewView({
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div data-tour="work-queue">
           <ManagedTablePanel
-            panelClass="border-[#1F2933] bg-[#172027] text-[#F8F4EA]"
-            innerClass="border-[#1F2933] bg-[#111A20] text-[#F8F4EA]"
-            mutedClass="text-[#CFC3B2]"
+            panelClass={panelClass}
+            innerClass={innerClass}
+            mutedClass={mutedClass}
             title="Antrian Kerja Operator"
             description="Cari, filter, dan paginasi antrean operasional. Tampilan ini memakai ID/sumber, bukan data pribadi warga."
             sourceLabel="Sumber: data operasional dashboard - keputusan tetap direview manusia"
@@ -3614,7 +3620,7 @@ function OverviewView({
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-[4px] border border-[#1F2933] bg-[#172027] p-4">
+          <div className={`rounded-[4px] border p-4 ${panelClass}`}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-black text-[#D79A2B]">
                 <BarChart3 size={16} strokeWidth={2.2} aria-hidden="true" />
@@ -3626,7 +3632,7 @@ function OverviewView({
                   await reload();
                   setPanelMessage("Intel operasional disegarkan.", "success");
                 }}
-                className="rounded-[4px] border border-[#1F2933] p-2 text-[#CFC3B2] focus-visible:lb-focus"
+                className={`rounded-[4px] border p-2 focus-visible:lb-focus ${innerClass}`}
                 aria-label="Segarkan intel operasional"
               >
                 <RefreshCcw size={16} strokeWidth={2.2} aria-hidden="true" />
@@ -3634,22 +3640,22 @@ function OverviewView({
             </div>
             <div className="mt-4 space-y-3">
               {[topCommodity, secondCommodity].filter(Boolean).map((profile, index) => (
-                <div key={`${profile?.commodity}-${index}`} className={`border-l-4 bg-[#111A20] p-3 ${index === 0 ? "border-[#D79A2B]" : "border-[#1D5D8F]"}`}>
+                <div key={`${profile?.commodity}-${index}`} className={`border-l-4 p-3 ${innerClass} ${index === 0 ? "border-[#D79A2B]" : "border-[#1D5D8F]"}`}>
                   <div className="mb-1 flex items-start justify-between gap-3">
                     <span className={`text-[10px] font-black ${index === 0 ? "text-[#D79A2B]" : "text-[#80CFFF]"}`}>
                       {index === 0 ? "Top Commodity" : "Rising Demand"}
                     </span>
-                    <span className="text-[10px] font-black text-[#88D982]">{profile?.confidence}</span>
+                    <span className="text-[10px] font-black text-[#2F7D32]">{profile?.confidence}</span>
                   </div>
-                  <h3 className="font-black text-[#FFF8EA]">{profile?.commodity}</h3>
+                  <h3 className="font-black">{profile?.commodity}</h3>
                   <div className="mt-2 flex items-center justify-between gap-3">
-                    <span className="text-[11px] font-semibold text-[#CFC3B2]/60">{profile?.sourceLevel}</span>
+                    <span className={`text-[11px] font-semibold ${mutedClass}`}>{profile?.sourceLevel}</span>
                     <div className="flex gap-1">
                       {Array.from({ length: 4 }).map((_, barIndex) => (
                         <span
                           key={barIndex}
                           className="h-1.5 w-4"
-                          style={{ backgroundColor: barIndex <= index + 1 ? (index === 0 ? "#D79A2B" : "#1D5D8F") : "#1F2933" }}
+                          style={{ backgroundColor: barIndex <= index + 1 ? (index === 0 ? "#D79A2B" : "#1D5D8F") : isDark ? "#1F2933" : "#E7DED1" }}
                         />
                       ))}
                     </div>
@@ -3657,10 +3663,10 @@ function OverviewView({
                 </div>
               ))}
               {prefixedDbStatus ? (
-                <div className="border-l-4 border-[#88D982] bg-[#111A20] p-3">
+                <div className={`border-l-4 border-[#2F7D32] p-3 ${innerClass}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-black text-[#FFF8EA]">Tabel data tim</p>
+                      <p className="font-black">Tabel data tim</p>
                       <p className="mt-2 font-mono text-xs font-semibold text-[#D79A2B]">
                         {prefixedDbStatus.prefix}
                       </p>
@@ -3669,7 +3675,7 @@ function OverviewView({
                       {prefixedDbStatus.status === "ready" ? "Siap" : "Perlu aktivasi"}
                     </StatusBadge>
                   </div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-[#CFC3B2]">
+                  <p className={`mt-2 text-xs font-semibold leading-5 ${mutedClass}`}>
                     {publicSetupMessage(prefixedDbStatus.message, "Status tabel data tim perlu dicek di server.")}
                   </p>
                   <div className="mt-3 grid gap-2">
@@ -3688,21 +3694,21 @@ function OverviewView({
             <button
               type="button"
               onClick={() => setActiveView("lumbung-data")}
-              className="mt-4 w-full border border-[#1F2933] py-3 text-xs font-black text-[#CFC3B2] hover:bg-[#2B1C1A] focus-visible:lb-focus"
+              className={`mt-4 w-full border py-3 text-xs font-black focus-visible:lb-focus ${innerClass}`}
             >
               Lihat Analisis Lengkap
             </button>
           </div>
 
-          <div className="rounded-[4px] border border-[#1F2933] bg-[#172027] p-4">
-            <h2 className="mb-3 text-xs font-black uppercase tracking-[0.14em] text-[#CFC3B2]/55">Sistem Feed</h2>
+          <div className={`rounded-[4px] border p-4 ${panelClass}`}>
+            <h2 className={`mb-3 text-xs font-black uppercase tracking-[0.14em] ${mutedClass}`}>Sistem Feed</h2>
             <div className="space-y-3">
               {systemFeed.map((item, index) => (
                 <div key={item} className="flex gap-3 text-xs">
                   <span className={`mt-1 h-2 w-2 rounded-full ${index === 0 ? "bg-[#88D982]" : "bg-[#D79A2B]"}`} />
                   <div>
-                    <p className="font-black text-[#FFF8EA]">{item}</p>
-                    <p className="mt-1 font-semibold text-[#CFC3B2]/45">{index === 0 ? "Via buyer matching lite" : "Via laporan aksi"}</p>
+                    <p className="font-black">{item}</p>
+                    <p className={`mt-1 font-semibold ${mutedClass}`}>{index === 0 ? "Via buyer matching lite" : "Via laporan aksi"}</p>
                   </div>
                 </div>
               ))}
@@ -4701,7 +4707,7 @@ function LumbungDataView({
                     onChange={(event) => setQuickInput(event.target.value)}
                     rows={4}
                     className={`min-h-28 rounded-[14px] border px-4 py-3 text-sm font-semibold outline-none focus-visible:lb-focus ${innerClass}`}
-                    placeholder="Contoh: Panen padi 5 kuintal minggu depan, butuh cek stok dan buyer awal."
+                    placeholder="Format: Panen padi 5 kuintal minggu depan, butuh cek stok dan buyer awal."
                   />
                   <div className="grid gap-2">
                     <label htmlFor="lumbung-quick-intent" className={`text-xs font-black ${mutedClass}`}>
@@ -5397,9 +5403,9 @@ function LumbungDataView({
             ))}
           </div>
           <div className={`rounded-[14px] border p-4 ${innerClass}`}>
-            <p className="text-sm font-black">Contoh produk terdeteksi</p>
+            <p className="text-sm font-black">Produk terdeteksi</p>
             <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-              {selectedBuyerDetail.productSnapshot.productExamples.slice(0, 6).join(", ") || "Contoh produk belum tersedia."}
+              {selectedBuyerDetail.productSnapshot.productExamples.slice(0, 6).join(", ") || "Produk belum tersedia."}
             </p>
           </div>
           <p className={`rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass} ${mutedClass}`}>
@@ -7211,7 +7217,7 @@ function ModuleView({
         <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
           <div className="flex items-center gap-2">
             <MessageCircle size={18} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
-            <p className="font-black">WA command contoh</p>
+            <p className="font-black">Shortcut WA</p>
           </div>
           <p className="mt-3 text-xl font-black">{activeFeatureModule.waCommand}</p>
         </div>

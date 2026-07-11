@@ -110,7 +110,7 @@ function configuredLoginAccounts() {
   const adminCooperativeId = process.env.ADMIN_COOPERATIVE_ID?.trim() || "kop-wanasari";
   const juryEmail = process.env.JURY_EMAIL?.trim().toLowerCase();
   const juryPasswordHash = process.env.JURY_PASSWORD_HASH?.trim();
-  const juryName = process.env.JURY_NAME?.trim() || "Juri Demo";
+  const juryName = process.env.JURY_NAME?.trim() || "Juri Penilai";
   const juryCooperativeId = process.env.JURY_COOPERATIVE_ID?.trim() || adminCooperativeId;
 
   const accounts: ConfiguredLoginAccount[] = [];
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
       {
         error: "ADMIN_AUTH_NOT_CONFIGURED",
         message:
-          "Login operator belum aktif di server ini. Hubungi operator teknis untuk mengaktifkan akun demo.",
+          "Login operator belum aktif di server ini. Hubungi operator teknis untuk mengaktifkan akun operator.",
       },
       { status: 503 },
     );

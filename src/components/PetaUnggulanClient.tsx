@@ -72,7 +72,55 @@ type OpportunityAnalysis = {
     firstActions: string[];
     risk: string;
     waScript: string;
+    evidenceNotes?: string[];
   };
+  provider?: {
+    configured: boolean;
+    used: boolean;
+    label: string;
+    model: string | null;
+    errorCode?: string | null;
+  };
+  message?: string;
+  error?: string;
+};
+
+type SharedEvidence = {
+  status: string;
+  mode?: string;
+  tablePrefix?: string;
+  schemaScope?: {
+    label?: string;
+    description?: string;
+    notPrimaryReference?: boolean;
+  };
+  productRows?: Array<{
+    productCategory: string;
+    rows: number;
+    cooperatives?: number;
+    inventoryRows?: number;
+    stockTotal?: string;
+  }>;
+  areaRows?: Array<{
+    province: string;
+    villages?: number;
+    commodityRows?: number;
+    commodities?: number;
+    cooperatives?: number;
+  }>;
+  evidenceSummary?: {
+    totalAggregateRows?: number;
+    aggregateGroups?: Array<{
+      id: string;
+      status: string;
+      rows: number;
+    }>;
+  } | null;
+  caveat?: string;
+};
+
+type PetaDataPayload = {
+  sharedEvidence?: SharedEvidence | null;
   message?: string;
   error?: string;
 };
@@ -264,6 +312,23 @@ function getDataModeLabel(source: DrillData["source"] | undefined) {
   return "Memuat sumber";
 }
 
+function getSharedEvidenceStatusLabel(state: "loading" | "ready" | "setup" | "error", evidence: SharedEvidence | null) {
+  if (state === "loading") return "Memuat evidence";
+  if (state === "setup") return "Evidence belum aktif";
+  if (state === "error") return "Evidence perlu cek";
+  if (evidence?.status === "ready") return "Evidence agregat aktif";
+  if (evidence?.status === "query-error") return "Evidence parsial";
+  return "Evidence terbaca";
+}
+
+function formatEvidenceTotal(evidence: SharedEvidence | null) {
+  const total = evidence?.evidenceSummary?.totalAggregateRows;
+  if (typeof total === "number" && total > 0) return `${formatNumber(total)} baris agregat`;
+  const groups = evidence?.evidenceSummary?.aggregateGroups?.length ?? 0;
+  if (groups) return `${groups} grup agregat`;
+  return "agregat tanpa PII";
+}
+
 function getSourceLevelLabel(sourceLevel: string | undefined) {
   if (!sourceLevel) return "Belum ada profil";
   if (sourceLevel.startsWith("bps-direct")) return "BPS direct";
@@ -360,6 +425,9 @@ export function PetaUnggulanClient() {
   const [analysisState, setAnalysisState] = useState<"idle" | "loading" | "ready" | "setup" | "error">("idle");
   const [analysisResult, setAnalysisResult] = useState<OpportunityAnalysis | null>(null);
   const [analysisNote, setAnalysisNote] = useState("");
+  const [sharedEvidence, setSharedEvidence] = useState<SharedEvidence | null>(null);
+  const [sharedEvidenceState, setSharedEvidenceState] = useState<"loading" | "ready" | "setup" | "error">("loading");
+  const [sharedEvidenceNote, setSharedEvidenceNote] = useState("");
   const [message, setMessage] = useState("Pilih provinsi di peta untuk mulai drill-down.");
 
   const loadDrill = useCallback(
@@ -408,6 +476,46 @@ export function PetaUnggulanClient() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [drillData, loadDrill]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSharedEvidence() {
+      setSharedEvidenceState("loading");
+      setSharedEvidenceNote("");
+
+      try {
+        const response = await fetch("/api/peta-unggulan/data", { cache: "no-store" });
+        const payload = (await response.json().catch(() => ({}))) as PetaDataPayload;
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setSharedEvidence(null);
+          setSharedEvidenceState(response.status === 503 ? "setup" : "error");
+          setSharedEvidenceNote(payload.message ?? payload.error ?? "Evidence eksplorasi belum bisa dibaca.");
+          return;
+        }
+
+        setSharedEvidence(payload.sharedEvidence ?? null);
+        setSharedEvidenceState(payload.sharedEvidence ? "ready" : "setup");
+        setSharedEvidenceNote(
+          payload.sharedEvidence?.caveat ??
+            "Evidence eksplorasi dibaca sebagai agregat kategori dan wilayah tanpa data personal.",
+        );
+      } catch (error) {
+        if (cancelled) return;
+        setSharedEvidence(null);
+        setSharedEvidenceState("error");
+        setSharedEvidenceNote(error instanceof Error ? error.message : "Evidence eksplorasi gagal dimuat.");
+      }
+    }
+
+    void loadSharedEvidence();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -643,6 +751,15 @@ export function PetaUnggulanClient() {
   const commodityEvidenceLabel = selectedCommodity
     ? `${getSourceLevelLabel(selectedCommodity.sourceLevel)} - ${selectedCommodity.confidence || "keyakinan belum ada"}`
     : "Belum memilih komoditas";
+  const sharedEvidenceLabel = getSharedEvidenceStatusLabel(sharedEvidenceState, sharedEvidence);
+  const sharedEvidenceTotalLabel = formatEvidenceTotal(sharedEvidence);
+  const topProductEvidence = sharedEvidence?.productRows?.[0];
+  const topAreaEvidence = sharedEvidence?.areaRows?.[0];
+  const providerModeLabel = analysisResult?.provider?.used
+    ? `AI aktif: ${analysisResult.provider.label}${analysisResult.provider.model ? ` / ${analysisResult.provider.model}` : ""}`
+    : analysisResult?.provider?.configured
+      ? `AI fallback: ${analysisResult.provider.errorCode ?? "provider tidak mengembalikan output valid"}`
+      : "Aturan terjelaskan berbasis data";
 
   function chooseSearchArea(area: AreaSearchResult) {
     const viewport = getAreaViewport(area, getAreaViewport({ code: getProvinceCode(area.code), level: 1 }));
@@ -673,6 +790,11 @@ export function PetaUnggulanClient() {
 
   async function runOpportunityAnalysis() {
     if (!selected) return;
+    if (!selected.code && !selectedCommodity) {
+      setAnalysisState("setup");
+      setAnalysisNote("Pilih wilayah atau komoditas terlebih dahulu agar skor peluang memakai konteks peta yang tepat.");
+      return;
+    }
     setAnalysisState("loading");
     setAnalysisNote("");
     setAnalysisResult(null);
@@ -683,6 +805,9 @@ export function PetaUnggulanClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           villageCode: selected.level === 4 ? selected.code : undefined,
+          areaCode: selected.code || undefined,
+          areaLevel: selected.level,
+          areaName: selected.name,
           commodity: (selectedCommodity?.commodity ?? commodityFilter) || undefined,
           selectedLayers: ["cooperative", "warehouse", "umkm"],
         }),
@@ -864,6 +989,10 @@ export function PetaUnggulanClient() {
               {dataModeLabel}
             </span>
             <span className="inline-flex items-center gap-1 rounded-[9px] border border-white/10 bg-black/20 px-2 py-1">
+              <Database size={12} strokeWidth={2.1} aria-hidden="true" />
+              {sharedEvidenceLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-white/10 bg-black/20 px-2 py-1">
               <Layers3 size={12} strokeWidth={2.1} aria-hidden="true" />
               {boundaryState === "loading" ? "Memuat polygon" : `${formatNumber(boundaryCount)} polygon`}
             </span>
@@ -958,6 +1087,29 @@ export function PetaUnggulanClient() {
             <span>Area aktif</span>
             <span className="max-w-[240px] truncate font-medium text-[#F4F0E8]">{selected?.name ?? "Indonesia"}</span>
           </div>
+          <div className="rounded-[10px] border border-white/10 bg-black/20 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span>Sumber eksplorasi</span>
+              <span className="font-medium text-[#F4F0E8]">{sharedEvidenceLabel}</span>
+            </div>
+            <p className="mt-1 text-[#858B8D]">{sharedEvidenceState === "ready" ? sharedEvidenceTotalLabel : sharedEvidenceNote || "Menunggu evidence agregat."}</p>
+          </div>
+          {sharedEvidenceState === "ready" ? (
+            <div className="grid gap-2 rounded-[10px] border border-[#D79A2B]/24 bg-[#D79A2B]/10 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span>Kategori produk</span>
+                <span className="max-w-[230px] truncate text-right font-medium text-[#F4D7A2]">
+                  {topProductEvidence ? `${topProductEvidence.productCategory} (${formatNumber(topProductEvidence.rows)})` : "Belum ada baris"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Area komoditas</span>
+                <span className="max-w-[230px] truncate text-right font-medium text-[#F4D7A2]">
+                  {topAreaEvidence ? `${topAreaEvidence.province} (${formatNumber(topAreaEvidence.commodityRows)})` : "Belum ada baris"}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
         {boundarySource ? (
           <a
@@ -1014,6 +1166,10 @@ export function PetaUnggulanClient() {
                   <div className="flex items-center justify-between gap-3">
                     <span>Komoditas</span>
                     <span className="max-w-[230px] truncate text-right font-medium text-[#D2D6D6]">{commodityEvidenceLabel}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Evidence eksplorasi</span>
+                    <span className="max-w-[230px] truncate text-right font-medium text-[#D2D6D6]">{sharedEvidenceLabel}</span>
                   </div>
                 </div>
               </div>
@@ -1103,9 +1259,12 @@ export function PetaUnggulanClient() {
                             : "Analisis belum berhasil"}
                     </p>
                     <span className="rounded-[8px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 px-2 py-1 text-[#F4D7A2]">
-                      Layanan peta
+                      {analysisResult?.provider?.used ? "AI provider" : "Layanan peta"}
                     </span>
                   </div>
+                  {analysisResult || analysisState === "ready" ? (
+                    <p className="mt-2 text-[#858B8D]">{providerModeLabel}</p>
+                  ) : null}
                   {analysisResult?.opportunity ? (
                     <div className="mt-3 space-y-2">
                       <p className="font-medium text-[#F4D7A2]">{analysisResult.opportunity.title}</p>
@@ -1115,6 +1274,13 @@ export function PetaUnggulanClient() {
                           <li key={action}>{action}</li>
                         ))}
                       </ul>
+                      {analysisResult.opportunity.evidenceNotes?.length ? (
+                        <div className="rounded-[10px] border border-white/10 bg-white/[0.045] p-2 text-[#858B8D]">
+                          {analysisResult.opportunity.evidenceNotes.slice(0, 2).map((note) => (
+                            <p key={note}>{note}</p>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <p className="mt-2">{analysisNote}</p>
