@@ -88,6 +88,20 @@ services:
       WA_PERSONAL_COOPERATIVE_ID: ${WA_PERSONAL_COOPERATIVE_ID:-kop-wanasari}
       WA_PERSONAL_OCR_ENABLED: ${WA_PERSONAL_OCR_ENABLED:-1}
       WA_PERSONAL_OCR_LANG: ${WA_PERSONAL_OCR_LANG:-ind+eng}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.2}
+      OPENAI_WIRE_API: ${OPENAI_WIRE_API:-responses}
+      AI_PROVIDER_TIMEOUT_MS: ${AI_PROVIDER_TIMEOUT_MS:-12000}
+      HACKATHON_SHARED_DATABASE_URL: ${HACKATHON_SHARED_DATABASE_URL:-}
+      HACKATHON_SHARED_DB_SSL: ${HACKATHON_SHARED_DB_SSL:-require}
+      HACKATHON_TABLE_PREFIX: ${HACKATHON_TABLE_PREFIX:-anak_sarengklek_}
+      DB_CONNECTION: ${DB_CONNECTION:-}
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-}
+      DB_USERNAME: ${DB_USERNAME:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
     volumes:
       - lumbung_bersama_wa_auth:/tmp/wa-personal-auth
       - lumbung_bersama_wa_state:/tmp/wa-personal-state

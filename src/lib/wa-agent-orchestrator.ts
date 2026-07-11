@@ -94,14 +94,17 @@ function fallbackLinesForScope(input: OrchestratedWaReplyInput, toolSummary: Age
     "Data minimum: wilayah/kabupaten, komoditas/produk, grade/kualitas, volume, satuan, tanggal siap, dan bukti bila ada.";
 
   if (toolSummary.scope === "harga") {
+    const hasNumericPrice = evidence.some((line) => /Rp\d/i.test(line));
     return evidence.length
       ? [
           "Saya cek harga dari data transaksi, inventaris, atau sinyal harga yang tersedia.",
           ...evidence,
-          "Harga final belum boleh dikunci sebelum grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini jelas.",
+          hasNumericPrice
+            ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data; harga final tetap perlu grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini."
+            : "Data yang tersedia belum memuat harga satuan eksplisit, jadi saya tidak mengeluarkan angka harga/kg dan tidak membuat ticket operator untuk pertanyaan informasional.",
         ]
       : [
-          "Saya belum menemukan angka harga yang cocok di data untuk komoditas/wilayah ini.",
+          "Saya belum menemukan produk/harga/sinyal harga yang cocok di data untuk komoditas/wilayah ini.",
           "Kirim wilayah lebih spesifik, grade/kualitas, volume, dan satuan agar saya cek lagi dari data koperasi.",
         ];
   }

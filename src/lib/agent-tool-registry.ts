@@ -340,6 +340,59 @@ async function sharedInventoryPriceEvidence(commodity: string, areaHint: string)
   });
 }
 
+async function sharedProductAvailabilityEvidence(commodity: string, areaHint: string) {
+  if (!isHackathonSharedDbConfigured()) return [];
+
+  const columns = await hackathonColumns("inventaris_produk");
+  const productColumn = pickColumn(columns, ["nama_produk", "produk", "nama_barang", "nama_item", "komoditas", "nama_komoditas"]);
+  const stockColumn = pickColumn(columns, ["stok", "stock", "jumlah_stok", "quantity", "qty", "jumlah"]);
+  const cooperativeColumn = columns.has("koperasi_ref") ? "koperasi_ref" : null;
+
+  if (!productColumn) return [];
+
+  const productExpr = textExpression(productColumn, "Produk tanpa nama");
+  const stockExpr = numericExpression(stockColumn);
+  const areaFilter = cooperativeColumn
+    ? `AND (
+         $2::text = ''
+         OR EXISTS (
+           SELECT 1
+           FROM referensi_koperasi_wilayah rkw
+           JOIN referensi_wilayah rw ON rw.kode_wilayah = rkw.kode_wilayah
+           WHERE rkw.koperasi_ref = inventaris_produk.${quoteIdentifier(cooperativeColumn)}
+             AND (
+               rw.provinsi ILIKE $3
+               OR rw.kab_kota ILIKE $3
+               OR rw.kecamatan ILIKE $3
+             )
+         )
+       )`
+    : "";
+
+  const rows = await queryHackathonRows<{
+    productName: string;
+    rows: number;
+    stockTotal: string;
+  }>(
+    `SELECT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama') AS "productName",
+            COUNT(*)::int AS rows,
+            COALESCE(SUM(${stockExpr}), 0)::text AS "stockTotal"
+     FROM inventaris_produk
+     WHERE LOWER(${productExpr}) ~* $1
+       ${areaFilter}
+     GROUP BY 1
+     ORDER BY COUNT(*) DESC, COALESCE(SUM(${stockExpr}), 0) DESC
+     LIMIT 4`,
+    [commodityPattern(commodity), areaHint, `%${areaHint}%`],
+  ).catch(() => []);
+
+  return rows.map((row) => {
+    const stockTotal = safeAmount(row.stockTotal);
+    const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
+    return `Shared DB inventaris: ${row.productName}; ${row.rows} baris cocok; ${stockText}; kolom harga satuan tidak tersedia pada skema ini.`;
+  });
+}
+
 async function sharedTransactionPriceEvidence(commodity: string, areaHint: string) {
   if (!isHackathonSharedDbConfigured()) return [];
 
@@ -423,13 +476,14 @@ async function sharedTransactionPriceEvidence(commodity: string, areaHint: strin
 }
 
 async function buildDataBackedPriceEvidence(input: RunToolsInput, commodity: string, areaHint: string) {
-  const [localEvidence, inventoryEvidence, transactionEvidence] = await Promise.all([
+  const [localEvidence, inventoryEvidence, productEvidence, transactionEvidence] = await Promise.all([
     localPriceEvidence(input, commodity, areaHint),
     sharedInventoryPriceEvidence(commodity, areaHint).catch(() => []),
+    sharedProductAvailabilityEvidence(commodity, areaHint).catch(() => []),
     sharedTransactionPriceEvidence(commodity, areaHint).catch(() => []),
   ]);
 
-  return [...transactionEvidence, ...inventoryEvidence, ...localEvidence].slice(0, 8);
+  return [...transactionEvidence, ...inventoryEvidence, ...productEvidence, ...localEvidence].slice(0, 8);
 }
 
 async function priceContextTool(input: RunToolsInput, scope: AgentToolScope): Promise<AgentToolResult> {
@@ -444,8 +498,8 @@ async function priceContextTool(input: RunToolsInput, scope: AgentToolScope): Pr
     dataEvidence.length
       ? hasNumericPrice
         ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data."
-        : "Data yang tersedia berupa sinyal harga, belum angka harga satuan eksplisit."
-      : "Belum ada harga/price_signal yang cocok di data untuk komoditas dan wilayah ini.",
+        : "Data yang tersedia belum memuat harga satuan eksplisit, sehingga agent tidak mengeluarkan angka harga/kg."
+      : "Belum ada produk/harga/price_signal yang cocok di data untuk komoditas dan wilayah ini.",
     `Input wajib: ${priceContext.requiredInputs.slice(0, 4).join(", ")}.`,
     `Caveat: ${priceContext.caveat}`,
   ], "Tidak boleh mengunci harga, floor price, atau negosiasi final tanpa sumber harga resmi/operator.");

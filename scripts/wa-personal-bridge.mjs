@@ -961,6 +961,48 @@ async function sharedInventoryPriceEvidence(commodityName, areaHint) {
   });
 }
 
+async function sharedProductAvailabilityEvidence(commodityName, areaHint) {
+  const columns = await sharedColumns("inventaris_produk");
+  const productColumn = pickColumn(columns, ["nama_produk", "produk", "nama_barang", "nama_item", "komoditas", "nama_komoditas"]);
+  const stockColumn = pickColumn(columns, ["stok", "stock", "jumlah_stok", "quantity", "qty", "jumlah"]);
+  const cooperativeColumn = columns.has("koperasi_ref") ? "koperasi_ref" : null;
+  if (!productColumn) return [];
+
+  const productExpr = textExpression(productColumn, "Produk tanpa nama");
+  const stockExpr = numericExpression(stockColumn);
+  const areaFilter = cooperativeColumn
+    ? `AND (
+         $2::text = ''
+         OR EXISTS (
+           SELECT 1
+           FROM referensi_koperasi_wilayah rkw
+           JOIN referensi_wilayah rw ON rw.kode_wilayah = rkw.kode_wilayah
+           WHERE rkw.koperasi_ref = inventaris_produk.${quoteIdentifier(cooperativeColumn)}
+             AND (rw.provinsi ILIKE $3 OR rw.kab_kota ILIKE $3 OR rw.kecamatan ILIKE $3)
+         )
+       )`
+    : "";
+
+  const rows = await sharedQueryRows(
+    `SELECT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama') AS "productName",
+            COUNT(*)::int AS rows,
+            COALESCE(SUM(${stockExpr}), 0)::text AS "stockTotal"
+     FROM inventaris_produk
+     WHERE LOWER(${productExpr}) ~* $1
+       ${areaFilter}
+     GROUP BY 1
+     ORDER BY COUNT(*) DESC, COALESCE(SUM(${stockExpr}), 0) DESC
+     LIMIT 4`,
+    [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
+  );
+
+  return rows.map((row) => {
+    const stockTotal = safeAmount(row.stockTotal);
+    const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
+    return `Shared DB inventaris: ${row.productName}; ${row.rows} baris cocok; ${stockText}; kolom harga satuan tidak tersedia pada skema ini.`;
+  });
+}
+
 async function sharedTransactionPriceEvidence(commodityName, areaHint) {
   const columns = await sharedColumns("transaksi_penjualan");
   const productColumn = pickColumn(columns, ["nama_produk", "produk", "nama_barang", "nama_item", "komoditas", "nama_komoditas"]);
@@ -1020,28 +1062,29 @@ async function sharedTransactionPriceEvidence(commodityName, areaHint) {
 }
 
 async function dataBackedPriceGuidance(commodityName, areaHint) {
-  const [localEvidence, inventoryEvidence, transactionEvidence] = await Promise.all([
+  const [localEvidence, inventoryEvidence, productEvidence, transactionEvidence] = await Promise.all([
     localPriceEvidence(commodityName, areaHint),
     sharedInventoryPriceEvidence(commodityName, areaHint).catch(() => []),
+    sharedProductAvailabilityEvidence(commodityName, areaHint).catch(() => []),
     sharedTransactionPriceEvidence(commodityName, areaHint).catch(() => []),
   ]);
-  const evidence = [...transactionEvidence, ...inventoryEvidence, ...localEvidence].slice(0, 6);
+  const evidence = [...transactionEvidence, ...inventoryEvidence, ...productEvidence, ...localEvidence].slice(0, 6);
 
   if (!evidence.length) {
     return [
-      "Saya belum menemukan angka harga yang cocok di data untuk komoditas/wilayah ini.",
+      "Saya cek data operasional, shared DB, dan sinyal peta, tetapi belum menemukan produk/wilayah yang cocok.",
       "Kirim wilayah lebih spesifik, grade/kualitas, volume, satuan, dan lokasi pickup agar saya cek ulang dari data koperasi.",
-      "Saya tidak akan mengarang harga jika data harga tidak tersedia.",
+      "Saya tidak membuat ticket operator untuk pertanyaan harga informasional.",
     ];
   }
 
   const hasNumericPrice = evidence.some((line) => /Rp\d/i.test(line));
   return [
-    "Saya cek dari data transaksi, inventaris, atau sinyal harga yang tersedia.",
+    `Saya cek ${commodityName}${areaHint ? ` untuk area ${areaHint}` : ""} dari data transaksi, inventaris, dan sinyal peta yang tersedia.`,
     ...evidence,
     hasNumericPrice
       ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data. Harga final tetap perlu grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini."
-      : "Data yang tersedia baru berupa sinyal harga, belum angka harga satuan eksplisit. Saya perlu wilayah, grade, volume, dan sumber hari ini untuk angka final.",
+      : "Data yang tersedia belum memuat harga satuan eksplisit, jadi saya tidak mengeluarkan angka harga/kg. Pertanyaan ini dijawab otomatis tanpa membuat ticket operator.",
   ];
 }
 

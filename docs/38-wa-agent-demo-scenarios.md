@@ -28,6 +28,27 @@ Use these prompts for the hackathon video/live demo. They are designed to hit re
 | 11 | `Tolong buat ringkasan laporan aksi untuk stok dan buyer minggu ini` | Report agent summarizes as action material and keeps decisions human-reviewed. | Yes | operator queue, agent runs, stock ledger, buyer readiness |
 | 12 | `terima kasih` | Bot closes politely and says user can type `menu` later. | No | WA close trigger |
 
+## Prompt Yang Aman Untuk Direkam
+
+Pakai prompt ini agar video demo menampilkan jawaban yang memang punya basis data saat ini.
+
+| Agent | Prompt | Yang Harus Terlihat |
+|---|---|---|
+| Welcome/router | `menu` | Salam Kopdes Lumbung Bersama dan pilihan agent. |
+| Peta potensi | `Apa potensi kopi di Wanasari?` | Jawaban memakai komoditas Wanasari, volume 120 kg, sinyal harga, peluang sortasi/pengeringan, dan risiko kadar air. |
+| Harga/sinyal | `Cek sinyal harga kopi kering di Wanasari` | Jawaban otomatis tanpa ticket. Jika tidak ada angka harga/kg, bot menyebut bukti inventaris/sinyal harga dan alasan tidak mengarang angka. |
+| Stok | `Stok beras medium di gerai masih ada?` | Jawaban memakai stok operasional: beras medium, 28 karung, status stok aman. |
+| Restock | `Beras medium di gerai habis, minta restock 20 karung` | Ticket dibuat karena ini aksi operasional. Bot menyebut tindak lanjut maksimal 24 jam. |
+| Buyer matching | `Mau jual kopi kering 120 kg grade A di Wanasari` | Ticket dibuat karena ada potensi transaksi/outreach. Bot meminta foto, grade, lokasi pickup, dan tidak membuat nama buyer palsu. |
+| Negosiasi | `Buyer minta harga kopi lebih rendah, bantu bahan nego` | Ticket/approval komersial dibuat; bot memberi bahan cek dan tidak mengunci floor price final. |
+| Pinjaman siap review | `Saya ajukan pinjaman pupuk Rp1.000.000 untuk musim tanam, bayar setelah panen kopi` | Bot menjawab "Siap masuk review komite", bukan disetujui otomatis. |
+| Pinjaman ditahan | `Mau pinjam Rp50.000.000 untuk kebutuhan pribadi, belum ada usaha dan belum tahu cara bayar` | Bot menjawab "Perlu revisi sebelum review komite" dan menjelaskan alasan. |
+| Dokumen/OCR | Kirim foto/PDF dengan caption `Bukti timbang kopi Wanasari` | Bot memisahkan hasil baca OCR/PDF dari rekomendasi agent, lalu membuat review evidence. |
+| Laporan | `Tolong buat ringkasan laporan aksi untuk stok dan buyer minggu ini` | Bot menyiapkan bahan laporan aksi dan menandai keputusan tetap human-reviewed. |
+| Penutup | `terima kasih` | Bot menutup percakapan dengan sopan. |
+
+Hindari prompt harga seperti `Harga beras per kilo di Lampung` untuk klaim angka final, kecuali connector harga resmi sudah diberi API key atau data DB memang memiliki field harga satuan. Saat ini shared DB siap dibaca tetapi transaksi tidak memuat item/kuantitas produk, jadi bot akan menjawab dengan evidence produk/stok/sinyal dan tidak mengarang angka.
+
 ## Negative Scope Check
 
 Prompt: `Siapa presiden Amerika sekarang?`
