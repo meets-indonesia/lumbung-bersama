@@ -54,8 +54,13 @@ services:
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-v23.0}
+      WA_PERSONAL_ADAPTER_ENABLED: ${WA_PERSONAL_ADAPTER_ENABLED:-1}
+      WA_PERSONAL_STATE_DIR: ${WA_PERSONAL_STATE_DIR:-/tmp/wa-personal-state}
+      WA_PERSONAL_OCR_ENABLED: ${WA_PERSONAL_OCR_ENABLED:-0}
     ports:
       - "127.0.0.1:3080:3000"
+    volumes:
+      - lumbung_bersama_wa_state:/tmp/wa-personal-state
     depends_on:
       lumbung-bersama-db:
         condition: service_healthy
@@ -66,5 +71,33 @@ services:
       retries: 5
       start_period: 40s
 
+  lumbung-bersama-wa-personal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumbung-bersama-wa-personal
+    restart: unless-stopped
+    command: ["node", "/app/scripts/wa-personal-bridge.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://lumbung_bersama:${LUMBUNG_DB_PASSWORD}@lumbung-bersama-db:5432/lumbung_bersama
+      WA_PERSONAL_ADAPTER_ENABLED: ${WA_PERSONAL_ADAPTER_ENABLED:-1}
+      WA_PERSONAL_AUTH_DIR: ${WA_PERSONAL_AUTH_DIR:-/tmp/wa-personal-auth}
+      WA_PERSONAL_STATE_DIR: ${WA_PERSONAL_STATE_DIR:-/tmp/wa-personal-state}
+      WA_PERSONAL_MEDIA_DIR: ${WA_PERSONAL_MEDIA_DIR:-/tmp/wa-media}
+      WA_PERSONAL_COOPERATIVE_ID: ${WA_PERSONAL_COOPERATIVE_ID:-kop-wanasari}
+      WA_PERSONAL_OCR_ENABLED: ${WA_PERSONAL_OCR_ENABLED:-0}
+      WA_PERSONAL_OCR_LANG: ${WA_PERSONAL_OCR_LANG:-ind+eng}
+    volumes:
+      - lumbung_bersama_wa_auth:/tmp/wa-personal-auth
+      - lumbung_bersama_wa_state:/tmp/wa-personal-state
+      - lumbung_bersama_wa_media:/tmp/wa-media
+    depends_on:
+      lumbung-bersama-db:
+        condition: service_healthy
+
 volumes:
   lumbung_bersama_pgdata:
+  lumbung_bersama_wa_auth:
+  lumbung_bersama_wa_state:
+  lumbung_bersama_wa_media:

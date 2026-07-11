@@ -1,55 +1,17 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import QRCode from "qrcode";
 import { requireAuthenticatedRequest } from "@/lib/auth";
+import { readWaPersonalBridgeState, waPersonalRuntimeStatus } from "@/lib/wa-personal-state";
 import { getWaSetupStatus } from "../../status";
 
 export const runtime = "nodejs";
-
-type BridgeStateFile = {
-  status?: string;
-  qr?: string | null;
-  updatedAt?: string;
-  connectedAt?: string | null;
-  lastDisconnect?: string | null;
-  capabilities?: {
-    qrPairing?: boolean;
-    mediaDownload?: boolean;
-    pdfTextExtraction?: boolean;
-    imageOcr?: boolean;
-  };
-};
-
-function stateFilePath() {
-  return path.resolve(process.cwd(), process.env.WA_PERSONAL_STATE_DIR || ".wa-personal-state", "status.json");
-}
-
-function publicStatus(state: BridgeStateFile | null, enabled: boolean) {
-  if (!enabled) return "disabled";
-  if (!state?.status) return "waiting-for-bridge";
-  if (state.status === "qr" && state.qr) return "qr";
-  if (state.status === "connected") return "connected";
-  if (state.status === "logged-out") return "logged-out";
-  return "disconnected";
-}
-
-async function readBridgeState() {
-  try {
-    const raw = await readFile(stateFilePath(), "utf8");
-    return JSON.parse(raw) as BridgeStateFile;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: Request) {
   const auth = await requireAuthenticatedRequest(request);
   if (auth.response) return auth.response;
 
   const setup = getWaSetupStatus();
-  const enabled = setup.personalPairing.status === "available";
-  const state = await readBridgeState();
-  const status = publicStatus(state, enabled);
+  const state = await readWaPersonalBridgeState();
+  const status = waPersonalRuntimeStatus(state, setup.personalPairing.status === "available");
   const qrImage =
     status === "qr" && state?.qr
       ? await QRCode.toDataURL(state.qr, {

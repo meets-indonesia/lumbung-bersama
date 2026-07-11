@@ -1,12 +1,22 @@
 import { integrationChecks } from "@/lib/demo-data";
 import { getAiProviderStatus } from "@/lib/ai-provider";
 import { isDatabaseConfigured, queryOne } from "@/lib/postgres";
+import { readWaPersonalBridgeState, waPersonalRuntimeStatus } from "@/lib/wa-personal-state";
 import { getWaSetupStatus } from "@/app/api/wa/status";
 
 export const runtime = "nodejs";
 
-function getPublicWaStatus() {
+async function getPublicWaStatus() {
   const setup = getWaSetupStatus();
+  const personalState = await readWaPersonalBridgeState();
+  const personalStatus = waPersonalRuntimeStatus(personalState, setup.personalPairing.status === "available");
+  const personalMessage =
+    personalStatus === "connected"
+      ? "WA personal testing terhubung. Pesan teks, foto, dan PDF masuk ke meja verifikasi."
+      : personalStatus === "qr"
+        ? "QR pairing WA personal siap discan."
+        : setup.personalPairing.message;
+
   return {
     status: setup.status,
     cloudApi: {
@@ -18,12 +28,12 @@ function getPublicWaStatus() {
           : "Kanal WhatsApp resmi perlu aktivasi sebelum live send/webhook.",
     },
     personalBridge: {
-      status: setup.personalPairing.status,
+      status: personalStatus,
       adapter: setup.personalPairing.adapter,
       command: setup.personalPairing.command,
-      message: setup.personalPairing.message,
-      capabilities: setup.personalPairing.capabilities,
-      activationRequired: setup.personalPairing.status !== "available",
+      message: personalMessage,
+      capabilities: personalState?.capabilities ?? setup.personalPairing.capabilities,
+      activationRequired: personalStatus === "disabled",
     },
   };
 }
@@ -84,7 +94,7 @@ export async function GET() {
       "WhatsApp send token",
       "WhatsApp phone number",
     ],
-    setup: getPublicWaStatus(),
+    setup: await getPublicWaStatus(),
   };
   const ai = getAiProviderStatus();
 
