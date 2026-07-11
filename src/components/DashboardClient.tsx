@@ -994,6 +994,98 @@ type ConfirmConfig = {
   onConfirm: () => Promise<void> | void;
 };
 
+function DashboardLoadingSkeleton({
+  panelClass,
+  innerClass,
+  mutedClass,
+}: {
+  panelClass: string;
+  innerClass: string;
+  mutedClass: string;
+}) {
+  const pulseClass = "animate-pulse rounded-full bg-current/10";
+  const cardItems = ["Ringkasan", "Antrean", "Stok", "Buyer"];
+
+  return (
+    <section aria-busy="true" aria-label="Dashboard sedang memuat" className="grid gap-5">
+      <div className={`rounded-[16px] border p-4 sm:p-5 ${panelClass}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <div className={`h-3 w-28 ${pulseClass}`} />
+            <div className={`h-8 w-72 max-w-full ${pulseClass}`} />
+            <div className={`h-3 w-[min(520px,90vw)] max-w-full ${pulseClass}`} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className={`h-10 w-32 ${pulseClass}`} />
+            <div className={`h-10 w-28 ${pulseClass}`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cardItems.map((item, index) => (
+          <div key={item} className={`rounded-[14px] border p-4 ${panelClass}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-3">
+                <div className={`h-3 w-20 ${pulseClass}`} />
+                <div className={`h-7 ${index === 0 ? "w-24" : "w-16"} ${pulseClass}`} />
+              </div>
+              <div className={`h-10 w-10 rounded-[12px] ${pulseClass}`} />
+            </div>
+            <div className={`mt-5 h-2 w-full ${pulseClass}`} />
+            <div className={`mt-3 h-2 w-2/3 ${pulseClass}`} />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
+        <div className={`rounded-[16px] border p-4 sm:p-5 ${panelClass}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-3">
+              <div className={`h-4 w-40 ${pulseClass}`} />
+              <div className={`h-3 w-56 max-w-full ${pulseClass}`} />
+            </div>
+            <div className={`h-9 w-24 ${pulseClass}`} />
+          </div>
+          <div className="mt-5 grid gap-3">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className={`h-4 w-48 max-w-full ${pulseClass}`} />
+                    <div className={`h-3 w-72 max-w-full ${pulseClass}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className={`h-8 w-20 ${pulseClass}`} />
+                    <div className={`h-8 w-20 ${pulseClass}`} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={`rounded-[16px] border p-4 sm:p-5 ${panelClass}`}>
+          <div className="space-y-3">
+            <div className={`h-4 w-36 ${pulseClass}`} />
+            <div className={`h-3 w-64 max-w-full ${pulseClass}`} />
+          </div>
+          <div className="mt-6 grid h-56 grid-cols-6 items-end gap-2">
+            {[62, 38, 78, 52, 88, 66].map((height, index) => (
+              <div key={`${height}-${index}`} className="flex h-full items-end">
+                <div className="w-full animate-pulse rounded-t-[10px] bg-current/10" style={{ height: `${height}%` }} />
+              </div>
+            ))}
+          </div>
+          <div className={`mt-5 h-3 w-2/3 ${pulseClass}`} />
+        </div>
+      </div>
+
+      <p className={`sr-only ${mutedClass}`}>Dashboard sedang menyiapkan data operasional.</p>
+    </section>
+  );
+}
+
 export function DashboardClient({ initialUser }: { initialUser: DashboardUser }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [activeView, setActiveView] = useState(initialDashboardView);
@@ -1871,12 +1963,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 onRetry={loadDashboard}
               />
             ) : dataStatus === "loading" ? (
-              <section className={`rounded-[16px] border p-5 ${panelClass}`}>
-                <p className="text-xl font-black">Memuat data operasional</p>
-                <p className={`mt-2 text-sm font-semibold ${mutedClass}`}>
-                  Dashboard sedang menyiapkan ringkasan koperasi, antrean kerja, stok, buyer, dan laporan.
-                </p>
-              </section>
+              <DashboardLoadingSkeleton panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} />
             ) : activeView === "overview" ? (
               <OverviewView
                 panelClass={panelClass}
