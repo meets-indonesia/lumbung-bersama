@@ -538,7 +538,7 @@ type ReportPeriod = {
   lockedAt?: string | null;
 };
 
-type DashboardData = {
+export type DashboardData = {
   source: "application-db";
   cooperative: CooperativeInfo | null;
   metrics: MetricItem[];
@@ -1081,12 +1081,18 @@ function DashboardLoadingSkeleton({
         </div>
       </div>
 
-      <p className={`sr-only ${mutedClass}`}>Dashboard sedang menyiapkan data operasional.</p>
+      <p className={`sr-only ${mutedClass}`}>Ruang kerja sedang disiapkan.</p>
     </section>
   );
 }
 
-export function DashboardClient({ initialUser }: { initialUser: DashboardUser }) {
+export function DashboardClient({
+  initialUser,
+  initialDashboardData = null,
+}: {
+  initialUser: DashboardUser;
+  initialDashboardData?: DashboardData | null;
+}) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [activeView, setActiveView] = useState(initialDashboardView);
   const [query, setQuery] = useState("");
@@ -1094,7 +1100,7 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(initialDashboardData);
   const [hackathonSummary, setHackathonSummary] = useState<HackathonMvpSummary | null>(null);
   const [hackathonDataQuality, setHackathonDataQuality] = useState<HackathonDataQuality | null>(null);
   const [hackathonOpportunityScores, setHackathonOpportunityScores] = useState<HackathonOpportunityScores | null>(null);
@@ -1115,11 +1121,11 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
   const [profileMessage, setProfileMessage] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "scope" | "error">("loading");
-  const [dataError, setDataError] = useState("");
-  const [, setPanelMessage] = useState(
-    "Memuat data operasional.",
+  const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "setup" | "scope" | "error">(
+    initialDashboardData ? "ready" : "loading",
   );
+  const [dataError, setDataError] = useState("");
+  const [, setPanelMessage] = useState("");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -1427,13 +1433,15 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadDashboard();
+      if (!initialDashboardData) {
+        void loadDashboard();
+      }
       void loadHackathonSummary();
       void loadSignalSpine();
       void loadNotifications();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [initialDashboardData]);
 
   useEffect(() => {
     const welcomeSeen = window.localStorage.getItem(WELCOME_STORAGE_KEY);
