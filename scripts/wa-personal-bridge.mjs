@@ -34,7 +34,7 @@ const cooperativeId =
   "kop-wanasari";
 const ocrEnabled = process.env.WA_PERSONAL_OCR_ENABLED === "1";
 const ocrLang = process.env.WA_PERSONAL_OCR_LANG || "ind+eng";
-const welcomeTriggers = new Set(["halo", "hai", "hi", "hello", "menu", "bantuan", "help", "start", "mulai"]);
+const welcomeTriggers = new Set(["halo", "hai", "hi", "hello", "menu", "bantuan", "help", "start", "mulai", "kembali", "back"]);
 
 const agentRouter = [
   {
@@ -65,7 +65,7 @@ const agentRouter = [
     id: "4",
     name: "Agen Harga dan Negosiasi",
     module: "Market Price Check & Negotiation Agent",
-    keywords: ["harga", "berapa", "price", "nego", "tawar", "margin", "floor price", "cabai", "beras", "kopi"],
+    keywords: ["harga", "berapa", "price", "nego", "tawar", "margin", "floor price", "cabai", "beras", "kopi", "sawit", "tbs", "cpo"],
     prompt: "Tanyakan harga, risiko harga, atau bahan negosiasi.",
     bot: "Saya arahkan ke Agen Harga dan Negosiasi. Jawaban akan memakai sinyal yang tersedia dan menandai caveat bila sumber harga belum lengkap.",
   },
@@ -176,11 +176,136 @@ function buildUnknownReply() {
   ].join("\n");
 }
 
+function quickActions() {
+  return [
+    "",
+    "Tombol cepat:",
+    "[MENU] kembali ke daftar agent",
+    "[PUAS] jawaban cukup",
+    "[TIDAK] minta operator cek manual",
+  ].join("\n");
+}
+
+function extractCommodityName(text) {
+  const normalized = normalizeRouterText(text);
+  const known = [
+    "sawit",
+    "tbs",
+    "cpo",
+    "kopi",
+    "beras",
+    "padi",
+    "cabai",
+    "singkong",
+    "jagung",
+    "rumput laut",
+    "kakao",
+    "lada",
+    "sagu",
+  ];
+  return known.find((item) => normalized.includes(item)) ?? "komoditas ini";
+}
+
+function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }) {
+  const normalized = normalizeRouterText(messageText);
+  const commodityName = extractCommodityName(messageText);
+
+  if (normalized === "puas") {
+    return "Terima kasih. Saya catat layanan ini sudah cukup. Ketik MENU jika ingin membuka agent lain.";
+  }
+
+  if (normalized === "tidak" || normalized === "tidak puas") {
+    return [
+      "Baik, saya teruskan sebagai perlu tindak lanjut operator.",
+      `Nomor antrean: ${queueId}`,
+      "Mohon tulis koreksi atau data tambahan yang perlu dicek.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "4") {
+    const livePriceUnavailable =
+      "Jawaban harga: feed harga real-time belum tersambung di runtime WA ini, jadi saya tidak akan mengarang angka.";
+    const decisionLine =
+      `Untuk ${commodityName}, status operasionalnya: perlu cek harga sumber lokal/resmi hari ini sebelum nego.`;
+    const needed =
+      "Data yang perlu dikirim: lokasi/kabupaten, tanggal harga, kualitas/grade, volume, satuan, dan ongkos angkut.";
+    const next =
+      "Saya sudah buat case harga di dashboard agar operator mengisi angka referensi, batas bawah nego, dan caveat sumber.";
+    return [livePriceUnavailable, decisionLine, needed, next, `Nomor antrean: ${queueId}`, quickActions()].join("\n");
+  }
+
+  if (agent.id === "1") {
+    return [
+      `Jawaban potensi: ${commodityName} bisa dinilai sebagai peluang awal bila ada bukti pasokan, aset koperasi/gudang, dan pembeli/kanal serap.`,
+      "Saya sudah buat case peta potensi untuk cek sumber wilayah, komoditas, risiko, dan aksi berikutnya.",
+      `Nomor antrean: ${queueId}`,
+      "Kirim nama desa/kecamatan dan volume pasokan agar analisisnya lebih tajam.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "2") {
+    return [
+      "Jawaban stok: saya catat laporan stok/panen ini sebagai open case.",
+      "Operator perlu cek volume, satuan, lokasi gudang/pickup, dan bukti timbang sebelum status stok dikunci.",
+      `Nomor antrean: ${queueId}`,
+      "Kirim format: komoditas, jumlah, satuan, lokasi, tanggal siap, foto bila ada.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "3") {
+    return [
+      `Jawaban buyer: saya bisa bantu siapkan buyer archetype untuk ${commodityName}, tetapi tidak membuat nama buyer palsu.`,
+      "Kesiapan minimal: volume tersedia, grade/kualitas, kemasan, harga indikatif, lokasi pickup, dan approval pengurus.",
+      `Nomor antrean: ${queueId}`,
+      "Kirim volume dan kualitas produk agar script outreach bisa dibuat.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "5") {
+    return [
+      "Jawaban pembiayaan: pengajuan sudah masuk sebagai readiness, bukan persetujuan otomatis.",
+      "Yang dicek: tujuan pinjaman, nominal, rencana bayar, bukti usaha/panen, dan kelengkapan dokumen.",
+      `Nomor antrean: ${queueId}`,
+      "Kirim nominal, tujuan, dan rencana pembayaran agar checklist komite lengkap.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "6") {
+    return [
+      "Jawaban dokumen: file/bukti sudah diterima dan dicoba dibaca otomatis jika format mendukung.",
+      mediaNote ? `Hasil baca awal: ${mediaNote}` : "Untuk foto, OCR aktif; untuk PDF text-based, teks akan diekstrak.",
+      `Nomor antrean: ${queueId}`,
+      "Operator tetap mengecek hasil OCR/PDF sebelum data dikunci.",
+      quickActions(),
+    ].join("\n");
+  }
+
+  if (agent.id === "7") {
+    return [
+      "Jawaban laporan: saya sudah buat bahan laporan aksi dari pesan ini.",
+      "Format laporan akan memuat ringkasan, evidence/source, gap verifikasi, buyer/stock/readiness, dan keputusan pending.",
+      `Nomor antrean: ${queueId}`,
+      quickActions(),
+    ].join("\n");
+  }
+
+  return [
+    agent.bot,
+    `Nomor antrean: ${queueId}`,
+    "Data ini sudah masuk dashboard operator untuk ditindaklanjuti.",
+    quickActions(),
+  ].join("\n");
+}
+
 function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }) {
   const lines = [
-    agent.bot,
+    buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }),
     "",
-    `Nomor antrean: ${queueId}`,
     `Modul dashboard: ${agent.module}`,
   ];
 
@@ -188,15 +313,7 @@ function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }
     lines.push(`Analisis file: ${mediaNote || "File diterima dan menunggu review operator."}`);
   }
 
-  if (messageText) {
-    lines.push(`Ringkasan masuk: ${summarize(messageText)}`);
-  }
-
-  lines.push(
-    "",
-    "Data ini sudah masuk dashboard operator. Operator/pengurus tetap memverifikasi sebelum data dikunci atau ditindaklanjuti.",
-    "Ketik menu untuk melihat pilihan agent lain.",
-  );
+  lines.push("", `Ringkasan masuk: ${summarize(messageText)}`);
 
   return lines.join("\n");
 }
@@ -255,6 +372,17 @@ function summarize(text) {
 }
 
 function classifyIntent(text, payloadType) {
+  const normalized = normalizeRouterText(text);
+  if (normalized === "puas" || normalized === "tidak" || normalized === "tidak puas") {
+    return {
+      intent: "Feedback layanan",
+      module: "WA Intake / Suara Warga",
+      bot: "Feedback layanan dicatat.",
+      agent: agentRouter[0],
+      responseType: "agent",
+    };
+  }
+
   const routedAgent = routeAgent(text, payloadType);
   if (routedAgent) {
     return {
