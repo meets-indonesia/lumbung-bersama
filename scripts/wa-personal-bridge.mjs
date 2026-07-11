@@ -199,7 +199,7 @@ function aiConfig() {
   return {
     apiKey,
     baseUrl: (process.env.OPENAI_BASE_URL || process.env.AI_BASE_URL || "https://xai.hashmicro.co/v1").replace(/\/+$/, ""),
-    model: process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5.2",
+    model: process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5.5-medium",
     wireApi: process.env.OPENAI_WIRE_API || process.env.AI_WIRE_API || "responses",
     timeoutMs: Number(process.env.AI_PROVIDER_TIMEOUT_MS ?? 12000),
   };

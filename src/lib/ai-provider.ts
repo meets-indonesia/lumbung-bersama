@@ -64,7 +64,7 @@ type ProviderConfig = {
 };
 
 const DEFAULT_BASE_URL = "https://xai.hashmicro.co/v1";
-const DEFAULT_MODEL = "gpt-5.2";
+const DEFAULT_MODEL = "gpt-5.5-medium";
 const MAX_OUTPUT_CHARS = 720;
 const MAX_NEXT_ACTION_CHARS = 280;
 
