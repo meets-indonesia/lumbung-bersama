@@ -132,16 +132,20 @@ function normalizeRouterText(value) {
 }
 
 function menuText() {
-  const items = agentRouter.map((agent) => `${agent.id}. ${agent.name}`).join("\n");
   return [
     "Selamat datang di Kopdes Lumbung Bersama.",
-    "Saya asisten WA untuk menjawab pertanyaan operasional, membaca bukti, dan mencatat kebutuhan yang perlu tindak lanjut.",
+    "Saya bisa bantu cek potensi desa, stok, harga, buyer, pembiayaan, dokumen, dan laporan aksi koperasi.",
     "",
-    "Pilih agent dengan angka, atau langsung tulis kebutuhan Anda.",
-    items,
+    "Ketik langsung kebutuhan Anda, atau pilih angka:",
+    "1. Peta potensi desa",
+    "2. Stok dan gudang",
+    "3. Buyer matching",
+    "4. Harga dan negosiasi",
+    "5. Pembiayaan readiness",
+    "6. Baca bukti/dokumen",
+    "7. Laporan aksi",
     "",
-    "Contoh: harga sawit di Banyuasin, mau jual kopi 1 ton, baca nota PDF ini, ajukan pinjaman pupuk 1 juta.",
-    "Pertanyaan informatif dijawab otomatis. Pembiayaan, negosiasi final, buyer outreach, koreksi data, dan bukti media masuk tindak lanjut operator.",
+    "Contoh: potensi kopi di Wanasari, stok beras medium, mau jual kopi 120 kg, ajukan pinjaman pupuk 1 juta, atau baca nota PDF.",
   ].join("\n");
 }
 
@@ -184,13 +188,6 @@ function shouldShowMenu(text, payloadType) {
   if (payloadType !== "text") return false;
   const normalized = normalizeRouterText(text);
   return !normalized || welcomeTriggers.has(normalized);
-}
-
-function quickActions() {
-  return [
-    "",
-    "Gunakan tombol cepat bila muncul. Jika tidak muncul, balas: menu, operator, puas, atau tidak.",
-  ].join("\n");
 }
 
 function aiConfig() {
@@ -254,13 +251,15 @@ async function finalizeReplyWithAi({ agent, messageText, payloadType, reviewMode
     "Jika fallback menyebut data tidak tersedia, jangan mengarang angka.",
     "Jangan tampilkan nomor WA, credential, raw media path, buyer bernama tidak terverifikasi, atau data pribadi.",
     "Jangan menyetujui pinjaman, deal final, floor price final, atau buyer outreach otomatis.",
-    "Format WA rapi dengan spasi antar bagian. Maksimal 1700 karakter.",
+    "Jangan tampilkan label internal seperti Agent, Modul dashboard, Status, Ringkasan masuk, Catatan, Queue ID, Nomor antrean, atau WA Inbox.",
+    "Format WA natural: sapaan singkat, jawaban utama, langkah berikutnya, lalu satu pertanyaan lanjutan yang spesifik. Maksimal 1300 karakter.",
     "",
-    `Agent: ${agent?.name ?? "WA Intake"}`,
-    `Modul: ${agent?.module ?? "WA Intake / Suara Warga"}`,
-    `Payload: ${payloadType}`,
-    `Review mode: ${reviewMode}`,
-    `Queue ID: ${queueId ?? "tidak ada"}`,
+    "Konteks internal, jangan ditulis di jawaban:",
+    `- Rute kemampuan: ${agent?.name ?? "WA Intake"}`,
+    `- Modul internal: ${agent?.module ?? "WA Intake / Suara Warga"}`,
+    `- Payload: ${payloadType}`,
+    `- Review mode: ${reviewMode}`,
+    `- Queue: ${queueId ? "ada tindak lanjut" : "tidak ada"}`,
     `Pesan user: ${messageText}`,
     "",
     "Fallback/data evidence:",
@@ -392,26 +391,10 @@ function reviewPolicy(agent, payloadType, messageText) {
   return { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" };
 }
 
-function queueLine(queueId, policy) {
-  if (policy.shouldQueue) return queueId ? `Nomor antrean: ${queueId}` : "Nomor antrean sedang dibuat.";
-  return "Riwayat chat tersimpan di WA Inbox. Tidak dibuat antrean operator karena skenario ini dijawab otomatis.";
-}
-
-function formatSections(sections) {
-  return sections
-    .map((section) => {
-      const lines = section.lines.map((line) => String(line ?? "").trim()).filter(Boolean);
-      if (!lines.length) return "";
-      return [section.title, ...lines].filter(Boolean).join("\n");
-    })
-    .filter(Boolean)
-    .join("\n\n");
-}
-
 function closingLine(closed = false) {
   return closed
-    ? "Terima kasih. Percakapan saya tutup sebagai selesai. Ketik menu bila nanti membutuhkan bantuan lagi."
-    : "Ada lagi yang bisa saya bantu?";
+    ? "Terima kasih. Kalau nanti perlu cek stok, harga, buyer, pembiayaan, atau dokumen lagi, ketik menu saja."
+    : "Ada lagi yang ingin dicek?";
 }
 
 function financeReadinessLines(messageText) {
@@ -425,22 +408,22 @@ function financeReadinessLines(messageText) {
 
   if (riskyPurpose || (!productivePurpose && hasAmount)) {
     return [
-      "Status awal: Perlu revisi sebelum review komite.",
-      "Alasan: tujuan pembiayaan belum terkait usaha/komoditas produktif atau rencana bayar belum jelas.",
+      "Pengajuan ini perlu revisi dulu sebelum masuk review komite.",
+      "Alasannya: tujuan pembiayaan belum terkait usaha/komoditas produktif atau rencana bayar belum jelas.",
       "Lengkapi tujuan produktif, nominal wajar, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
     ];
   }
 
   if (hasAmount && productivePurpose && repayment) {
     return [
-      "Status awal: Siap masuk review komite.",
-      "Alasan: nominal, tujuan produktif, dan rencana bayar sudah terbaca dari pesan.",
+      "Pengajuan ini sudah cukup siap untuk masuk review komite.",
+      "Nominal, tujuan produktif, dan rencana bayar sudah terbaca dari pesan.",
       "Data yang tetap diminta: bukti usaha/panen, status anggota terverifikasi, dan catatan pengurus.",
     ];
   }
 
   return [
-    "Status awal: Data belum lengkap.",
+    "Datanya belum lengkap untuk review komite.",
     "Kirim nominal, tujuan penggunaan, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
   ];
 }
@@ -449,7 +432,7 @@ function priceGuidance(commodityName, areaHint) {
   return dataBackedPriceGuidance(commodityName, areaHint);
 }
 
-async function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text", messageText }) {
+async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", messageText }) {
   const normalized = normalizeRouterText(messageText);
   const commodityName = extractCommodityName(messageText);
   const areaHint = extractAreaHint(messageText);
@@ -460,72 +443,103 @@ async function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType =
   }
 
   if (normalized === "operator" || normalized === "panggil operator") {
-    return formatSections([
-      { title: "Operator", lines: ["Saya buat antrean operator untuk percakapan ini.", queueLine(queueId, policy), policy.slaText] },
-      { title: "Ringkasan masuk", lines: [summarize(messageText)] },
-      { title: "Catatan", lines: [closingLine(false), quickActions()] },
-    ]);
+    return [
+      "Baik, saya teruskan ke pengurus/operator.",
+      "Mohon tunggu maksimal 24 jam kerja. Sambil menunggu, kirim detail tambahan seperti lokasi, produk, jumlah, foto, atau dokumen pendukung kalau ada.",
+    ].join("\n");
   }
 
   const answerLines = [];
   if (agent.id === "4") {
     answerLines.push(...(await priceGuidance(commodityName, areaHint)));
-    if (policy.shouldQueue) answerLines.push("Karena pesan ini mengarah ke negosiasi/jual-beli, saya buat antrean approval komersial.");
-    return formatSections([
-      { title: "Cek harga", lines: answerLines },
-      { title: "Status", lines: [queueLine(queueId, policy), `Modul dashboard: ${agent.module}`, policy.slaText] },
-      { title: "Ringkasan masuk", lines: [summarize(messageText)] },
-      { title: "Catatan", lines: [closingLine(false), quickActions()] },
-    ]);
+    if (/\b(nego|negosiasi|tawar|lebih rendah|buyer minta|deal)\b/i.test(normalized)) {
+      answerLines.push("Untuk negosiasi, jangan langsung turunkan harga. Pakai grade/kadar air, volume, ongkos pickup, dan target margin sebagai batas diskusi.");
+      answerLines.push("Minta buyer menyebut target harga, syarat kualitas, jadwal ambil, dan pola pembayaran dulu agar pengurus bisa menilai posisi tawarnya.");
+    }
+    if (policy.shouldQueue) {
+      answerLines.push("Karena ini mengarah ke keputusan komersial, saya teruskan ke pengurus untuk review maksimal 24 jam kerja.");
+    }
+    answerLines.push("Data apa yang sudah ada: grade/kadar air, volume final, lokasi pickup, dan target harga buyer?");
+    return ["Halo, saya cek dulu dari data yang ada.", ...answerLines].join("\n");
   }
 
   if (agent.id === "1") {
-    answerLines.push(`Potensi ${commodityName} dinilai dari pasokan, aset koperasi/gudang, sinyal buyer, dan risiko harga.`);
-    answerLines.push("Kirim desa/kecamatan, volume, musim panen, grade/kualitas, dan bukti pasokan agar analisis wilayah lebih tajam.");
+    const rows = await localCommodityRows(commodityName, areaHint);
+    if (rows.length) {
+      const main = rows[0];
+      answerLines.push(`Saya lihat ${main.commodity} di ${main.villageName}, ${main.regency} punya potensi yang cukup kuat.`);
+      answerLines.push(`Datanya mencatat volume ${main.quantity}, demand ${main.demand}, dan sinyal harga ${main.priceSignal}.`);
+      answerLines.push(`Arah produk yang paling masuk akal: ${main.opportunity}.`);
+      answerLines.push(`Risiko utama yang harus dibereskan: ${main.risk}`);
+      if (main.villageSummary) answerLines.push(`Konteks wilayah: ${main.villageSummary}`);
+      answerLines.push("Langkah berikutnya: cek grade/kadar air, foto batch, tanggal siap jual, dan lokasi pickup. Setelah itu baru cocokkan ke buyer yang relevan.");
+      answerLines.push("Kopi ini sudah ada grade atau kadar airnya berapa?");
+    } else {
+      answerLines.push(`Saya belum menemukan data ${commodityName} yang spesifik untuk wilayah itu.`);
+      answerLines.push("Kirim desa/kecamatan, volume, musim panen, grade/kualitas, dan bukti pasokan agar saya bisa cek lebih tajam.");
+    }
   }
 
   if (agent.id === "2") {
-    answerLines.push("Saya cek konteks stok dari pesan ini.");
-    answerLines.push("Jika hanya pertanyaan stok, riwayatnya disimpan. Jika stok habis, restock, barang masuk/keluar, atau pickup, kasus masuk tindak lanjut operator.");
-    answerLines.push("Data minimal: komoditas, jumlah, satuan, lokasi gerai/gudang, tanggal siap, dan bukti bila ada.");
+    const stocks = await stockEvidenceRows(messageText);
+    if (stocks.length) {
+      answerLines.push("Saya cek stok operasional yang tersedia.");
+      for (const stock of stocks.slice(0, 3)) {
+        answerLines.push(`${stock.name}: ${stock.unit} di ${stock.location}, status ${stock.state}.`);
+      }
+    } else {
+      answerLines.push("Saya belum menemukan stok yang cocok dari pesan ini.");
+    }
+    if (policy.shouldQueue) {
+      answerLines.push("Karena ini menyangkut stok habis/restock/pickup/barang masuk-keluar, saya teruskan ke operator untuk tindak lanjut maksimal 24 jam kerja.");
+    }
+    answerLines.push("Kalau mau saya cek lebih tepat, kirim nama barang, jumlah, satuan, lokasi gerai/gudang, dan tanggal kebutuhan.");
   }
 
   if (agent.id === "3") {
-    answerLines.push(`Untuk menjual ${commodityName}, alur aman adalah cek harga dulu, lalu buyer matching setelah volume dan kualitas jelas.`);
-    answerLines.push("Saya tidak membuat nama buyer palsu. Buyer tetap berupa tipe kebutuhan/archetype sampai pengurus menyetujui outreach.");
-    answerLines.push("Kirim volume, grade, lokasi pickup, foto barang, dan harga indikatif agar case bisa dinilai.");
+    const buyers = await buyerEvidenceRows(commodityName);
+    answerLines.push(`Untuk ${commodityName}, alur aman adalah cek grade dan kesiapan stok dulu, baru dicocokkan ke buyer archetype.`);
+    if (buyers.length) {
+      for (const buyer of buyers.slice(0, 2)) {
+        answerLines.push(`${buyer.buyer}: kebutuhan ${buyer.need}, skor cocok ${buyer.matchScore}/100. ${buyer.reason}`);
+      }
+    } else {
+      answerLines.push("Saya belum menemukan buyer archetype yang cukup spesifik dari data lokal untuk pesan ini.");
+    }
+    answerLines.push("Saya tidak menyebut buyer bernama atau mengirim outreach otomatis sebelum pengurus menyetujui.");
+    if (policy.shouldQueue) answerLines.push("Saya teruskan ke pengurus untuk review komersial maksimal 24 jam kerja.");
+    answerLines.push("Kirim volume, grade, foto barang, lokasi pickup, dan target waktu jual agar matching-nya lebih presisi.");
   }
 
   if (agent.id === "5") {
-    answerLines.push("Pembiayaan masuk sebagai readiness, bukan persetujuan otomatis.");
+    answerLines.push("Saya cek pengajuan ini sebagai readiness pembiayaan, bukan persetujuan otomatis.");
     answerLines.push(...financeReadinessLines(messageText));
-    answerLines.push("Keputusan tetap menunggu review pengurus/komite.");
+    answerLines.push("Saya teruskan ke pengurus/komite untuk review maksimal 24 jam kerja bila datanya sudah cukup.");
+    answerLines.push("Kalau ada, kirim bukti usaha/panen, status anggota, dan rencana bayar yang lebih rinci.");
   }
 
   if (agent.id === "6") {
-    answerLines.push("File/bukti diterima dan saya baca otomatis bila format mendukung.");
-    answerLines.push(mediaNote ? `Hasil baca awal: ${mediaNote}` : "Untuk foto, OCR aktif; untuk PDF text-based, teks akan diekstrak.");
-    answerLines.push("Hasil baca otomatis dipisahkan dari keputusan operasional agar tidak tercampur dengan rekomendasi agent.");
+    answerLines.push("Bukti sudah saya terima.");
+    answerLines.push(mediaNote ? `Hasil baca awal: ${mediaNote}` : "Kalau file berupa foto atau PDF text-based, saya baca sebagai evidence awal.");
+    answerLines.push("Hasil baca ini belum menjadi keputusan final; operator tetap perlu memverifikasi bukti dan konteksnya.");
+    answerLines.push("Bukti ini terkait stok, penjualan, pembiayaan, atau koreksi data?");
   }
 
   if (agent.id === "7") {
-    answerLines.push("Saya siapkan kebutuhan ini sebagai bahan laporan aksi.");
-    answerLines.push("Isi laporan: ringkasan, evidence/source, gap verifikasi, buyer action, stock/readiness gap, dan status keputusan.");
+    answerLines.push("Saya bisa bantu susun bahan laporan aksi dari case, evidence, gap verifikasi, stok/readiness, buyer action, dan status keputusan.");
+    answerLines.push("Untuk laporan minggu ini, bagian yang paling penting biasanya: stok yang perlu restock, buyer yang menunggu approval, pembiayaan yang perlu komite, dan bukti dokumen yang belum diverifikasi.");
+    if (policy.shouldQueue) answerLines.push("Saya teruskan permintaan laporan ini ke operator agar bahan final bisa dicek sebelum dipakai.");
+    answerLines.push("Mau fokus laporan untuk stok, buyer, pembiayaan, atau semuanya?");
   }
 
   if (!answerLines.length) answerLines.push(agent.bot);
 
-  return formatSections([
-    { title: agent.name, lines: answerLines },
-    { title: "Status", lines: [queueLine(queueId, policy), `Modul dashboard: ${agent.module}`, policy.slaText] },
-    { title: "Ringkasan masuk", lines: [summarize(messageText)] },
-    { title: "Catatan", lines: [closingLine(false), quickActions()] },
-  ]);
+  return ["Halo, saya cek ya.", ...answerLines].join("\n");
 }
 
-async function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }) {
+async function buildAgentReply({ agent, mediaNote, payloadType, messageText }) {
   const lines = [
-    await buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }),
+    await buildOperationalAnswer({ agent, mediaNote, payloadType, messageText }),
   ];
 
   return lines.join("\n");
@@ -776,7 +790,7 @@ async function extractMessage(message, downloadContentFromMessage, providerMessa
   const parts = [
     text,
     extracted.text ? `Isi terbaca: ${extracted.text}` : "",
-    extracted.note ? `Catatan media: ${extracted.note}` : "",
+    extracted.note ? `Info media: ${extracted.note}` : "",
   ].filter(Boolean);
 
   return {
@@ -904,8 +918,74 @@ async function localPriceEvidence(commodityName, areaHint) {
 
   return rows.map(
     (row) =>
-      `Peta/local: ${row.commodity} di ${row.villageName}, ${row.regency}, ${row.province}; volume ${row.quantity}; sinyal harga "${row.priceSignal}"; supply ${row.supply}; demand ${row.demand}; risiko ${row.risk}`,
+      `${row.commodity} di ${row.villageName}, ${row.regency}: volume ${row.quantity}; demand ${row.demand}; sinyal harga ${row.priceSignal}; kondisi pasokan ${row.supply}; risiko ${row.risk}.`,
   );
+}
+
+async function localCommodityRows(commodityName, areaHint) {
+  return queryRows(
+    `SELECT villages.name AS "villageName",
+            villages.district,
+            villages.regency,
+            villages.province,
+            villages.summary AS "villageSummary",
+            village_commodities.name AS commodity,
+            village_commodities.quantity,
+            village_commodities.price_signal AS "priceSignal",
+            village_commodities.supply,
+            village_commodities.demand,
+            village_commodities.opportunity,
+            village_commodities.risk
+     FROM village_commodities
+     JOIN villages ON villages.code = village_commodities.village_code
+     WHERE ($1::text = '' OR LOWER(village_commodities.name) ~* $2)
+       AND (
+         $3::text = ''
+         OR villages.name ILIKE $4
+         OR villages.district ILIKE $4
+         OR villages.regency ILIKE $4
+         OR villages.province ILIKE $4
+       )
+     ORDER BY villages.updated_at DESC
+     LIMIT 4`,
+    [commodityName === "komoditas ini" ? "" : commodityName, commodityPattern(commodityName), areaHint, `%${areaHint}%`],
+  ).catch(() => []);
+}
+
+async function stockEvidenceRows(text) {
+  const commodityName = extractCommodityName(text);
+  const rows = await queryRows(
+    `SELECT name, unit, state, location, restock_requested AS "restockRequested"
+     FROM stock_items
+     WHERE cooperative_id = $1
+       AND ($2::text = 'komoditas ini' OR name ILIKE $3)
+     ORDER BY updated_at DESC
+     LIMIT 5`,
+    [cooperativeId, commodityName, `%${commodityName}%`],
+  ).catch(() => []);
+
+  if (rows.length || commodityName !== "komoditas ini") return rows;
+
+  return queryRows(
+    `SELECT name, unit, state, location, restock_requested AS "restockRequested"
+     FROM stock_items
+     WHERE cooperative_id = $1
+     ORDER BY updated_at DESC
+     LIMIT 5`,
+    [cooperativeId],
+  ).catch(() => []);
+}
+
+async function buyerEvidenceRows(commodityName) {
+  return queryRows(
+    `SELECT buyer, need, match_score AS "matchScore", reason, status
+     FROM buyer_matches
+     WHERE cooperative_id = $1
+       AND ($2::text = 'komoditas ini' OR need ILIKE $3 OR reason ILIKE $3)
+     ORDER BY match_score DESC
+     LIMIT 3`,
+    [cooperativeId, commodityName, `%${commodityName}%`],
+  ).catch(() => []);
 }
 
 async function sharedInventoryPriceEvidence(commodityName, areaHint) {
@@ -984,22 +1064,21 @@ async function sharedProductAvailabilityEvidence(commodityName, areaHint) {
     : "";
 
   const rows = await sharedQueryRows(
-    `SELECT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama') AS "productName",
-            COUNT(*)::int AS rows,
+    `SELECT COUNT(*)::int AS rows,
+            COUNT(DISTINCT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama'))::int AS "productTypes",
             COALESCE(SUM(${stockExpr}), 0)::text AS "stockTotal"
      FROM inventaris_produk
      WHERE LOWER(${productExpr}) ~* $1
        ${areaFilter}
-     GROUP BY 1
-     ORDER BY COUNT(*) DESC, COALESCE(SUM(${stockExpr}), 0) DESC
-     LIMIT 4`,
+     LIMIT 1`,
     [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
   );
 
-  return rows.map((row) => {
+  return rows.filter((row) => Number(row.rows) > 0).map((row) => {
     const stockTotal = safeAmount(row.stockTotal);
+    const areaText = areaHint ? ` di ${areaHint}` : "";
     const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
-    return `Shared DB inventaris: ${row.productName}; ${row.rows} baris cocok; ${stockText}; kolom harga satuan tidak tersedia pada skema ini.`;
+    return `Shared DB mencatat ${row.rows} baris inventaris terkait ${commodityName}${areaText} dari ${row.productTypes} tipe produk; ${stockText}; skema ini belum punya harga satuan.`;
   });
 }
 
@@ -1072,19 +1151,18 @@ async function dataBackedPriceGuidance(commodityName, areaHint) {
 
   if (!evidence.length) {
     return [
-      "Saya cek data operasional, shared DB, dan sinyal peta, tetapi belum menemukan produk/wilayah yang cocok.",
-      "Kirim wilayah lebih spesifik, grade/kualitas, volume, satuan, dan lokasi pickup agar saya cek ulang dari data koperasi.",
-      "Saya tidak membuat ticket operator untuk pertanyaan harga informasional.",
+      `Saya cek data koperasi untuk ${commodityName}${areaHint ? ` di ${areaHint}` : ""}, tetapi belum ada sinyal yang cukup spesifik.`,
+      "Agar saya bisa cek lebih tajam, kirim wilayah/kabupaten, grade atau kualitas, volume, satuan, dan lokasi pickup.",
     ];
   }
 
   const hasNumericPrice = evidence.some((line) => /Rp\d/i.test(line));
   return [
-    `Saya cek ${commodityName}${areaHint ? ` untuk area ${areaHint}` : ""} dari data transaksi, inventaris, dan sinyal peta yang tersedia.`,
+    `Saya cek ${commodityName}${areaHint ? ` di ${areaHint}` : ""} dari data peta, inventaris, dan transaksi yang tersedia.`,
     ...evidence,
     hasNumericPrice
-      ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data. Harga final tetap perlu grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini."
-      : "Data yang tersedia belum memuat harga satuan eksplisit, jadi saya tidak mengeluarkan angka harga/kg. Pertanyaan ini dijawab otomatis tanpa membuat ticket operator.",
+      ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia. Untuk transaksi final tetap cek grade, volume, pickup, ongkos angkut, dan tanggal sumber."
+      : "Belum ada harga satuan yang bisa dipakai, jadi saya tidak akan mengarang harga/kg. Yang bisa dipakai sekarang adalah sinyal demand, stok, grade, dan risiko kualitas.",
   ];
 }
 
@@ -1114,8 +1192,8 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
         : { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" };
   const status =
     policy.shouldQueue
-      ? "Masuk bridge personal; menunggu tindak lanjut operator"
-      : "Dijawab otomatis; riwayat tersimpan di WA Inbox";
+      ? "Menunggu tindak lanjut operator"
+      : "Dijawab otomatis";
   const source = payloadType === "text" ? "WA personal bridge" : `WA personal bridge ${payloadType}`;
   const botReply = [
     classified.bot,
@@ -1206,21 +1284,17 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
     classified.responseType === "menu"
       ? menuText()
       : classified.responseType === "out-of-scope"
-        ? formatSections([
-            {
-              title: "Di Luar Scope",
-              lines: [
-                "Mohon maaf, saya hanya bisa membantu topik Lumbung Bersama/koperasi desa: potensi komoditas, harga koperasi, stok, buyer readiness, pembiayaan readiness, dokumen, laporan, dan integrasi.",
-                "Balas menu untuk memilih agent koperasi.",
-              ],
-            },
-          ])
+        ? [
+            "Maaf, saya hanya bisa membantu kebutuhan Lumbung Bersama dan koperasi desa.",
+            "Topik yang bisa saya bantu: potensi komoditas, stok, harga/negosiasi koperasi, buyer readiness, pembiayaan, dokumen, laporan, dan integrasi WA.",
+            "Ketik menu kalau ingin pilih bantuan yang sesuai.",
+          ].join("\n")
       : classified.responseType === "unknown"
-        ? formatSections([
-            { title: "Klasifikasi", lines: ["Mohon maaf, saya belum yakin kebutuhan ini masuk ke agent mana.", "Saya buat antrean operator agar pesan ini tidak hilang.", queueLine(queueId, policy), policy.slaText] },
-            { title: "Arahkan ulang", lines: ["Anda juga bisa balas menu lalu pilih agent, atau tulis kebutuhan dengan komoditas, wilayah, volume, dan tujuan."] },
-            { title: "Catatan", lines: [closingLine(false), quickActions()] },
-          ])
+        ? [
+            "Saya belum cukup yakin kebutuhan ini masuk kategori mana.",
+            "Saya teruskan ke operator agar tidak hilang, tapi Anda juga bisa balas dengan format lebih lengkap: komoditas/produk, wilayah, jumlah, tujuan, dan bukti bila ada.",
+            "Contoh: mau jual kopi 120 kg di Wanasari, atau stok beras medium di gerai masih ada?",
+          ].join("\n")
         : await buildAgentReply({
             agent: classified.agent ?? agentRouter[0],
             queueId,

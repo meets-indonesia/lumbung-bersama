@@ -3,7 +3,6 @@ import { runScopedAgentTools, type AgentToolRunSummary } from "@/lib/agent-tool-
 import {
   buildWaOperationalReply,
   getWaReviewPolicy,
-  quickWaActionsText,
   type WaAgentDraft,
   type WaAgentIntent,
   type WaPayloadType,
@@ -38,17 +37,6 @@ function normalize(value: string) {
     .trim();
 }
 
-function formatSections(sections: Array<{ title?: string; lines: Array<string | null | undefined> }>) {
-  return sections
-    .map((section) => {
-      const lines = section.lines.map((line) => String(line ?? "").trim()).filter(Boolean);
-      if (!lines.length) return "";
-      return [section.title, ...lines].filter(Boolean).join("\n");
-    })
-    .filter(Boolean)
-    .join("\n\n");
-}
-
 export function isWaMessageOutOfScope(message: string, payloadType: WaPayloadType) {
   if (payloadType !== "text") return false;
   const normalized = normalize(message);
@@ -68,24 +56,12 @@ export function isWaMessageOutOfScope(message: string, payloadType: WaPayloadTyp
 
 function statusLines(queueId: string | null | undefined, reviewMode: string, slaText?: string) {
   if (queueId) {
-    return [`Nomor antrean: ${queueId}`, slaText ?? "Operator/pengurus menindaklanjuti maksimal 24 jam kerja."];
+    return [slaText ?? "Saya teruskan ke pengurus/operator untuk ditindaklanjuti maksimal 24 jam kerja."];
   }
   if (reviewMode === "manual-review") {
     return [slaText ?? "Butuh tindak lanjut operator/pengurus maksimal 24 jam kerja."];
   }
-  return ["Dijawab otomatis dari data yang tersedia dan tersimpan di WA Inbox."];
-}
-
-function scopeTitle(scope: AgentToolRunSummary["scope"]) {
-  if (scope === "harga") return "Cek Harga";
-  if (scope === "buyer") return "Buyer Matching";
-  if (scope === "stok") return "Stok dan Gudang";
-  if (scope === "finance") return "Pembiayaan Readiness";
-  if (scope === "document") return "Bukti dan Dokumen";
-  if (scope === "report") return "Laporan Aksi";
-  if (scope === "integration") return "Integrasi";
-  if (scope === "intake") return "WA Intake";
-  return "Peta Potensi";
+  return [];
 }
 
 function fallbackLinesForScope(input: OrchestratedWaReplyInput, toolSummary: AgentToolRunSummary) {
@@ -152,7 +128,7 @@ function fallbackLinesForScope(input: OrchestratedWaReplyInput, toolSummary: Age
   }
 
   if (toolSummary.scope === "integration") {
-    return ["Status integrasi harus dibaca dari health runtime/dashboard, bukan klaim manual.", ...evidence];
+    return ["Koneksi integrasi perlu dibaca dari runtime dan dashboard, bukan klaim manual.", ...evidence];
   }
 
   return [
@@ -171,22 +147,22 @@ function financingReadinessLines(message: string) {
 
   if (riskyPurpose || (!productivePurpose && hasAmount)) {
     return [
-      "Status awal: Perlu revisi sebelum review komite.",
-      "Alasan: tujuan pembiayaan belum terkait usaha/komoditas produktif atau rencana bayar belum jelas.",
+      "Pengajuan ini perlu revisi dulu sebelum masuk review komite.",
+      "Alasannya: tujuan pembiayaan belum terkait usaha/komoditas produktif atau rencana bayar belum jelas.",
       "Lengkapi tujuan produktif, nominal wajar, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
     ];
   }
 
   if (hasAmount && productivePurpose && repayment) {
     return [
-      "Status awal: Siap masuk review komite.",
-      "Alasan: nominal, tujuan produktif, dan rencana bayar sudah terbaca dari pesan.",
+      "Pengajuan ini sudah cukup siap untuk masuk review komite.",
+      "Nominal, tujuan produktif, dan rencana bayar sudah terbaca dari pesan.",
       "Data yang tetap diminta: bukti usaha/panen, status anggota terverifikasi, dan catatan pengurus.",
     ];
   }
 
   return [
-    "Status awal: Data belum lengkap.",
+    "Datanya belum lengkap untuk review komite.",
     "Kirim nominal, tujuan penggunaan, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
   ];
 }
@@ -196,15 +172,11 @@ function buildFallbackReply(input: OrchestratedWaReplyInput, toolSummary: AgentT
   const reviewPolicy = getWaReviewPolicy(input.intent, payloadType, input.message);
 
   if (outOfScope) {
-    return formatSections([
-      {
-        title: "Di Luar Scope",
-        lines: [
-          "Mohon maaf, saya hanya bisa membantu topik Lumbung Bersama/koperasi desa: potensi komoditas, harga koperasi, stok, buyer readiness, pembiayaan readiness, dokumen, laporan, dan integrasi.",
-          "Balas menu untuk memilih agent koperasi.",
-        ],
-      },
-    ]);
+    return [
+      "Maaf, saya hanya bisa membantu kebutuhan Lumbung Bersama dan koperasi desa.",
+      "Topik yang bisa saya bantu: potensi komoditas, stok, harga/negosiasi koperasi, buyer readiness, pembiayaan, dokumen, laporan, dan integrasi WA.",
+      "Ketik menu kalau ingin pilih bantuan yang sesuai.",
+    ].join("\n");
   }
 
   const normalized = normalize(input.message);
@@ -213,17 +185,17 @@ function buildFallbackReply(input: OrchestratedWaReplyInput, toolSummary: AgentT
   }
 
   if (normalized === "operator" || normalized === "panggil operator") {
-    return formatSections([
-      { title: "Operator", lines: ["Saya teruskan percakapan ini ke operator.", ...statusLines(input.queueId, reviewPolicy.mode, reviewPolicy.slaText)] },
-      { title: "Catatan", lines: ["Ada lagi yang bisa saya bantu?", quickWaActionsText()] },
-    ]);
+    return [
+      "Baik, saya teruskan ke pengurus/operator.",
+      "Mohon tunggu maksimal 24 jam kerja. Sambil menunggu, kirim detail tambahan seperti lokasi, produk, jumlah, foto, atau dokumen pendukung kalau ada.",
+    ].join("\n");
   }
 
-  return formatSections([
-    { title: scopeTitle(toolSummary.scope), lines: fallbackLinesForScope(input, toolSummary) },
-    { title: "Status", lines: statusLines(reviewPolicy.shouldQueue ? input.queueId : null, reviewPolicy.mode, reviewPolicy.slaText) },
-    { title: "Lanjutkan", lines: ["Ada lagi yang bisa saya bantu?", quickWaActionsText()] },
-  ]);
+  const lines = ["Halo, saya cek ya.", ...fallbackLinesForScope(input, toolSummary)];
+  const status = statusLines(reviewPolicy.shouldQueue ? input.queueId : null, reviewPolicy.mode, reviewPolicy.slaText);
+  if (status.length) lines.push(...status);
+  lines.push("Kalau mau saya perdalam, kirim wilayah, produk/komoditas, volume, grade/kualitas, dan bukti bila ada.");
+  return lines.join("\n");
 }
 
 function sanitizeProviderReply(reply: string) {
