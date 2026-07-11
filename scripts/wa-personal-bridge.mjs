@@ -490,11 +490,22 @@ function isAffirmativeFollowUp(text) {
   );
 }
 
+function negotiationToneChoice(text) {
+  const normalized = normalizeRouterText(text);
+  if (/^(yang\s+)?lebih?\s*halus$|^halus(\s+(aja|saja|dong|ya))?$|^versi\s+halus$/i.test(normalized)) return "halus";
+  if (/^(yang\s+)?lebih?\s*tegas$|^tegas(\s+(aja|saja|dong|ya))?$|^versi\s+tegas$/i.test(normalized)) return "tegas";
+  return "";
+}
+
 function isContextualFollowUp(text) {
   const normalized = normalizeRouterText(text);
   if (!normalized || closeTriggers.has(normalized) || welcomeTriggers.has(normalized)) return false;
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-  return isAffirmativeFollowUp(text) || (wordCount <= 5 && /^(buat|susun|lanjut|coba|boleh|iya|ya|oke|siap)\b/i.test(normalized));
+  return (
+    Boolean(negotiationToneChoice(text)) ||
+    isAffirmativeFollowUp(text) ||
+    (wordCount <= 5 && /^(buat|susun|lanjut|coba|boleh|iya|ya|oke|siap)\b/i.test(normalized))
+  );
 }
 
 function conversationText(messageText, recentMessages = []) {
@@ -678,11 +689,36 @@ function lastBotReplyText(recentMessages = []) {
 }
 
 function followUpActionAnswer({ agent, messageText, recentMessages, context }) {
-  if (!isAffirmativeFollowUp(messageText)) return "";
   const lastReply = normalizeRouterText(lastBotReplyText(recentMessages));
   const commodity = context.commodityName && context.commodityName !== "komoditas ini" ? context.commodityName : "produk tersebut";
   const area = context.areaHint ? ` di ${context.areaHint}` : "";
   const volume = context.volumeHint ? ` untuk volume ${context.volumeHint}` : "";
+  const toneChoice = negotiationToneChoice(messageText);
+
+  if ((agent.id === "4" || agent.id === "3") && toneChoice && /\b(tegas|halus|negosiasi|nego|buyer|pembeli)\b/i.test(lastReply)) {
+    if (toneChoice === "halus") {
+      return [
+        "Siap, ini versi lebih halus:",
+        "",
+        `Pak/Bu, terima kasih atas penawarannya. Untuk ${commodity}${area}${volume}, kami perlu menjaga kualitas barang, biaya sortasi, dan ongkos pengambilan agar transaksi tetap sehat untuk kedua pihak.`,
+        "Kami terbuka menyesuaikan harga apabila volume final, standar grade/kadar air, jadwal pickup, dan pola pembayaran sudah jelas.",
+        "Boleh dibantu konfirmasi target harga, syarat kualitas, dan skema pembayarannya dulu? Setelah itu kami hitungkan ruang negosiasi yang paling aman.",
+        "",
+        "Ada bagian yang mau dibuat lebih singkat untuk langsung dikirim ke buyer?",
+      ].join("\n");
+    }
+    return [
+      "Siap, ini versi lebih tegas:",
+      "",
+      `Pak/Bu, untuk ${commodity}${area}${volume}, harga belum bisa kami turunkan sebelum grade/kadar air, volume final, ongkos pickup, dan pola pembayaran dikunci.`,
+      "Koperasi perlu menjaga batas bawah agar petani/anggota tidak rugi dan kualitas barang tetap sesuai standar.",
+      "Silakan kirim target harga, syarat kualitas, jadwal ambil, dan skema bayar. Jika angkanya masih di bawah batas aman, kami tidak bisa lanjut di harga tersebut.",
+      "",
+      "Mau saya ringkas jadi satu paragraf saja?",
+    ].join("\n");
+  }
+
+  if (!isAffirmativeFollowUp(messageText)) return "";
 
   if ((agent.id === "4" || agent.id === "3") && /\b(kalimat nego|kalimat negonya|bahan negosiasi|bahan nego|buyer|pembeli)\b/i.test(lastReply)) {
     return [
