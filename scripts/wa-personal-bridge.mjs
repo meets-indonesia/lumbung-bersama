@@ -34,6 +34,172 @@ const cooperativeId =
   "kop-wanasari";
 const ocrEnabled = process.env.WA_PERSONAL_OCR_ENABLED === "1";
 const ocrLang = process.env.WA_PERSONAL_OCR_LANG || "ind+eng";
+const welcomeTriggers = new Set(["halo", "hai", "hi", "hello", "menu", "bantuan", "help", "start", "mulai"]);
+
+const agentRouter = [
+  {
+    id: "1",
+    name: "Agen Peta Potensi Desa",
+    module: "Peta Unggulan / Komoditas Unggulan",
+    keywords: ["peta", "potensi", "desa", "wilayah", "komoditas unggulan", "unggulan desa", "umkm"],
+    prompt: "Tanyakan potensi wilayah, komoditas unggulan, atau UMKM lokal.",
+    bot: "Saya arahkan ke Agen Peta Potensi Desa. Saya akan bantu susun ringkasan potensi, komoditas, sumber, dan data yang perlu diverifikasi.",
+  },
+  {
+    id: "2",
+    name: "Agen Stok dan Gudang",
+    module: "Gerai / Stock Readiness",
+    keywords: ["stok", "gerai", "gudang", "habis", "restock", "barang masuk", "barang keluar", "panen", "kg", "kilo", "ton", "karung"],
+    prompt: "Tanyakan stok, panen, barang masuk, barang keluar, restock, atau kapasitas gudang.",
+    bot: "Saya arahkan ke Agen Stok dan Gudang. Data akan masuk antrean operator untuk cek volume, satuan, bukti, dan kesiapan stok.",
+  },
+  {
+    id: "3",
+    name: "Agen Buyer Matching",
+    module: "Buyer Matching Lite",
+    keywords: ["buyer", "pembeli", "mitra", "offtaker", "order", "pesanan", "carikan", "kontak", "outreach", "negosiasi"],
+    prompt: "Tanyakan calon pembeli, script outreach, atau kesiapan produk untuk buyer.",
+    bot: "Saya arahkan ke Agen Buyer Matching. Saya bantu buat draft kebutuhan buyer dan next action; kontak buyer tetap harus disetujui operator.",
+  },
+  {
+    id: "4",
+    name: "Agen Harga dan Negosiasi",
+    module: "Market Price Check & Negotiation Agent",
+    keywords: ["harga", "berapa", "price", "nego", "tawar", "margin", "floor price", "cabai", "beras", "kopi"],
+    prompt: "Tanyakan harga, risiko harga, atau bahan negosiasi.",
+    bot: "Saya arahkan ke Agen Harga dan Negosiasi. Jawaban akan memakai sinyal yang tersedia dan menandai caveat bila sumber harga belum lengkap.",
+  },
+  {
+    id: "5",
+    name: "Agen Pembiayaan Readiness",
+    module: "Simpan Pinjam / Financing Readiness",
+    keywords: ["pinjam", "pinjaman", "pembiayaan", "modal", "angsuran", "kredit", "komite", "bayar", "cicil", "pupuk", "benih"],
+    prompt: "Tanyakan draft pinjaman, tujuan pembiayaan, dokumen, atau kesiapan review komite.",
+    bot: "Saya arahkan ke Agen Pembiayaan Readiness. Ini hanya readiness dan checklist, bukan persetujuan otomatis.",
+  },
+  {
+    id: "6",
+    name: "Agen Bukti dan Dokumen",
+    module: "Data Verification",
+    keywords: [
+      "foto",
+      "gambar",
+      "ocr",
+      "pdf",
+      "dokumen",
+      "nota",
+      "timbangan",
+      "bukti",
+      "ktp",
+      "surat",
+      "lampiran",
+      "file",
+      "status",
+      "catatan",
+      "lb",
+      "koreksi",
+      "salah",
+      "revisi",
+    ],
+    prompt: "Kirim foto, PDF, nota, bukti timbang, atau koreksi data untuk diverifikasi.",
+    bot: "Saya arahkan ke Agen Bukti dan Dokumen. File akan dibaca otomatis jika memungkinkan dan tetap masuk review operator.",
+  },
+  {
+    id: "7",
+    name: "Agen Laporan Aksi",
+    module: "Laporan Aksi",
+    keywords: ["laporan", "ringkasan", "rapat", "export", "csv", "aksi", "keputusan", "rekomendasi"],
+    prompt: "Tanyakan ringkasan laporan, data kurang, atau keputusan aksi koperasi.",
+    bot: "Saya arahkan ke Agen Laporan Aksi. Saya bantu susun executive summary, bukti, gap, dan keputusan yang masih pending.",
+  },
+];
+
+function normalizeRouterText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\p{Letter}\p{Number}\s-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function menuText() {
+  const items = agentRouter.map((agent) => `${agent.id}. ${agent.name} - ${agent.prompt}`).join("\n");
+  return [
+    "Selamat datang di Kopdes Lumbung Bersama.",
+    "Saya asisten WA untuk mencatat kebutuhan warga, membaca bukti, dan mengarahkan ke agent koperasi.",
+    "",
+    "Pilih agent dengan angka, atau langsung tulis kebutuhan Anda:",
+    items,
+    "",
+    "Contoh: stok beras habis, carikan pembeli kopi 1 ton, baca nota PDF ini, ajukan pinjaman pupuk 1 juta.",
+    "Catatan: semua jawaban adalah draft operasional dan tetap perlu verifikasi operator.",
+  ].join("\n");
+}
+
+function scoreAgent(agent, normalizedMessage) {
+  return agent.keywords.reduce((score, keyword) => {
+    const normalizedKeyword = normalizeRouterText(keyword);
+    return normalizedKeyword && normalizedMessage.includes(normalizedKeyword)
+      ? score + Math.max(1, normalizedKeyword.split(" ").length)
+      : score;
+  }, 0);
+}
+
+function routeAgent(text, payloadType) {
+  if (payloadType !== "text") return agentRouter.find((agent) => agent.id === "6") ?? agentRouter[0];
+
+  const normalized = normalizeRouterText(text);
+  const exactChoice = normalized.match(/^(?:pilih\s*)?([1-7])$/)?.[1];
+  if (exactChoice) return agentRouter.find((agent) => agent.id === exactChoice) ?? agentRouter[0];
+  if (!normalized || welcomeTriggers.has(normalized)) return null;
+
+  const [best] = agentRouter
+    .map((agent) => ({ agent, score: scoreAgent(agent, normalized) }))
+    .sort((left, right) => right.score - left.score);
+
+  return best?.score ? best.agent : null;
+}
+
+function shouldShowMenu(text, payloadType) {
+  if (payloadType !== "text") return false;
+  const normalized = normalizeRouterText(text);
+  return !normalized || welcomeTriggers.has(normalized);
+}
+
+function buildUnknownReply() {
+  return [
+    "Mohon maaf, saya belum yakin kebutuhan ini masuk ke agent mana.",
+    "Silakan pilih angka agent atau tulis dengan lebih spesifik.",
+    "",
+    menuText(),
+  ].join("\n");
+}
+
+function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }) {
+  const lines = [
+    agent.bot,
+    "",
+    `Nomor antrean: ${queueId}`,
+    `Modul dashboard: ${agent.module}`,
+  ];
+
+  if (payloadType !== "text") {
+    lines.push(`Analisis file: ${mediaNote || "File diterima dan menunggu review operator."}`);
+  }
+
+  if (messageText) {
+    lines.push(`Ringkasan masuk: ${summarize(messageText)}`);
+  }
+
+  lines.push(
+    "",
+    "Data ini sudah masuk dashboard operator. Operator/pengurus tetap memverifikasi sebelum data dikunci atau ditindaklanjuti.",
+    "Ketik menu untuk melihat pilihan agent lain.",
+  );
+
+  return lines.join("\n");
+}
 
 await mkdir(mediaDir, { recursive: true });
 await mkdir(stateDir, { recursive: true });
@@ -89,46 +255,33 @@ function summarize(text) {
 }
 
 function classifyIntent(text, payloadType) {
-  const normalized = String(text ?? "").toLowerCase();
-  if (payloadType !== "text") {
+  const routedAgent = routeAgent(text, payloadType);
+  if (routedAgent) {
     return {
-      intent: "Kirim bukti timbang/foto/dokumen",
-      module: "Data Verification",
-      bot: "Media diterima sebagai bukti pendukung dan masuk queue operator untuk review.",
+      intent: routedAgent.name,
+      module: routedAgent.module,
+      bot: routedAgent.bot,
+      agent: routedAgent,
+      responseType: "agent",
     };
   }
-  if (/(pinjam|pembiayaan|modal|angsuran|komite|kredit)/i.test(normalized)) {
+
+  if (shouldShowMenu(text, payloadType)) {
     return {
-      intent: "Pembiayaan readiness",
-      module: "Simpan Pinjam / Financing Readiness",
-      bot: "Draft pembiayaan masuk sebagai readiness; keputusan tetap oleh pengurus/komite.",
+      intent: "Menu agent koperasi",
+      module: "WA Intake / Suara Warga",
+      bot: "Menu agent dikirim ke warga.",
+      agent: null,
+      responseType: "menu",
     };
   }
-  if (/(buyer|pembeli|mitra|pesanan|order|harga|nego)/i.test(normalized)) {
-    return {
-      intent: "Buyer matching lite",
-      module: "Buyer Matching Lite",
-      bot: "Draft kebutuhan buyer/mitra dibuat untuk review operator sebelum outreach.",
-    };
-  }
-  if (/(stok|gudang|panen|kg|kilo|ton|pickup|jemput)/i.test(normalized)) {
-    return {
-      intent: "Stok/readiness",
-      module: "Gerai / Stock Readiness",
-      bot: "Draft stok atau panen masuk queue untuk validasi volume, satuan, lokasi, dan bukti.",
-    };
-  }
-  if (/(peta|komoditas|potensi|desa|wilayah|umkm)/i.test(normalized)) {
-    return {
-      intent: "Potensi wilayah",
-      module: "Peta Unggulan / Komoditas Unggulan",
-      bot: "Draft potensi wilayah dibuat untuk dicek di peta dan sumber komoditas.",
-    };
-  }
+
   return {
-    intent: "Laporan warga",
+    intent: "Perlu klasifikasi operator",
     module: "WA Intake / Suara Warga",
-    bot: "Draft catatan warga dibuat dan masuk antrean operator untuk validasi.",
+    bot: "Pesan belum cukup jelas dan masuk antrean operator untuk klasifikasi.",
+    agent: null,
+    responseType: "unknown",
   };
 }
 
@@ -360,7 +513,22 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
     );
   }
 
-  return { waMessageId: row.id, queueId, module: row.module };
+  const reply =
+    classified.responseType === "menu"
+      ? menuText()
+      : classified.responseType === "unknown"
+        ? buildUnknownReply()
+        : buildAgentReply({
+            agent: classified.agent ?? agentRouter[0],
+            queueId,
+            mediaNote,
+            payloadType,
+            messageText: row.message,
+          });
+
+  await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, row.id]);
+
+  return { waMessageId: row.id, queueId, module: row.module, reply };
 }
 
 async function main() {
@@ -423,6 +591,9 @@ async function main() {
           mediaNote: extracted.mediaNote,
           mediaSize: extracted.mediaSize,
         });
+        if (remoteJid && result.reply) {
+          await sock.sendMessage(remoteJid, { text: result.reply }, { quoted: item });
+        }
         console.log(`Pesan masuk dicatat: ${result.queueId} -> ${result.module}`);
       } catch (error) {
         console.error(`Gagal memproses pesan WA personal: ${error instanceof Error ? error.message : "unknown error"}`);
