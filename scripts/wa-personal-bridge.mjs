@@ -1589,7 +1589,7 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
 
   await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, row.id]);
 
-  return { waMessageId: row.id, queueId, module: row.module, reply };
+  return { waMessageId: row.id, queueId, module: row.module, reply, responseType: classified.responseType };
 }
 
 function quickReplyButtons() {
@@ -1643,28 +1643,14 @@ async function sendNativeReply(sock, remoteJid, reply, quoted, helpers) {
   const message = helpers.generateWAMessageFromContent(
     remoteJid,
     {
-      viewOnceMessage: {
-        message: {
-          messageContextInfo: {
-            deviceListMetadata: {},
-            deviceListMetadataVersion: 2,
-          },
-          interactiveMessage,
-        },
-      },
+      interactiveMessage,
     },
     { userJid, quoted },
   );
   await sock.relayMessage(remoteJid, message.message, { messageId: message.key.id });
 }
 
-async function sendReply(sock, remoteJid, reply, quoted, helpers) {
-  try {
-    await sendNativeReply(sock, remoteJid, reply, quoted, helpers);
-    return;
-  } catch (error) {
-    console.warn(`Native WA buttons tidak tersedia, coba button klasik: ${error instanceof Error ? error.message : "unknown error"}`);
-  }
+async function sendVisibleReply(sock, remoteJid, reply, quoted) {
   try {
     await sock.sendMessage(
       remoteJid,
@@ -1679,6 +1665,16 @@ async function sendReply(sock, remoteJid, reply, quoted, helpers) {
   } catch (error) {
     console.warn(`Tombol WA tidak tersedia, fallback teks: ${error instanceof Error ? error.message : "unknown error"}`);
     await sock.sendMessage(remoteJid, { text: reply }, { quoted });
+  }
+}
+
+async function sendReply(sock, remoteJid, reply, quoted, helpers, options = {}) {
+  await sendVisibleReply(sock, remoteJid, reply, quoted);
+  if (options.responseType !== "menu") return;
+  try {
+    await sendNativeReply(sock, remoteJid, "Pilih agent Kopdes di bawah ini:", quoted, helpers);
+  } catch (error) {
+    console.warn(`Native WA action card tidak tersedia: ${error instanceof Error ? error.message : "unknown error"}`);
   }
 }
 
@@ -1753,6 +1749,8 @@ async function main() {
             generateWAMessageFromContent,
             proto,
             userJid: () => sock.user?.id || state.creds.me?.id || "",
+          }, {
+            responseType: result.responseType,
           });
         }
         console.log(`Pesan masuk dicatat: ${result.queueId} -> ${result.module}`);
