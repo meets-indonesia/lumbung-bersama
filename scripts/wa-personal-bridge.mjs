@@ -34,6 +34,8 @@ const cooperativeId =
   "kop-wanasari";
 const ocrEnabled = process.env.WA_PERSONAL_OCR_ENABLED === "1";
 const ocrLang = process.env.WA_PERSONAL_OCR_LANG || "ind+eng";
+const aiFinalizerEnabled = process.env.WA_PERSONAL_AI_FINALIZER_ENABLED === "1";
+const sharedEvidenceTimeoutMs = Number(process.env.WA_PERSONAL_SHARED_EVIDENCE_TIMEOUT_MS ?? 1400);
 const welcomeTriggers = new Set(["halo", "hai", "hi", "hello", "menu", "bantuan", "help", "start", "mulai", "kembali", "back"]);
 const closeTriggers = new Set(["puas", "tidak", "tidak puas", "terima kasih", "terimakasih", "makasih", "thanks", "thank you"]);
 
@@ -158,7 +160,7 @@ function scoreAgent(agent, normalizedMessage) {
   }, 0);
 }
 
-function routeAgent(text, payloadType) {
+function routeAgent(text, payloadType, recentMessages = []) {
   if (payloadType !== "text") return agentRouter.find((agent) => agent.id === "6") ?? agentRouter[0];
 
   const normalized = normalizeRouterText(text);
@@ -166,9 +168,14 @@ function routeAgent(text, payloadType) {
   if (exactChoice) return agentRouter.find((agent) => agent.id === exactChoice) ?? agentRouter[0];
   if (!normalized || welcomeTriggers.has(normalized)) return null;
 
+  const historyAgent = inferAgentFromHistory(recentMessages);
   const [best] = agentRouter
     .map((agent) => ({ agent, score: scoreAgent(agent, normalized) }))
     .sort((left, right) => right.score - left.score);
+
+  if (historyAgent && isTerseFollowUp(text) && (!best?.score || best.score <= 1)) {
+    return historyAgent;
+  }
 
   return best?.score ? best.agent : null;
 }
@@ -241,6 +248,8 @@ function sanitizeAiReply(reply) {
 }
 
 async function finalizeReplyWithAi({ agent, messageText, payloadType, reviewMode, queueId, fallbackReply }) {
+  if (!aiFinalizerEnabled) return fallbackReply;
+
   const config = aiConfig();
   if (!config) return fallbackReply;
 
@@ -348,6 +357,167 @@ function extractAreaHint(text) {
   return match?.[1]?.trim().replace(/[?.!,;:].*$/, "") || "";
 }
 
+function extractAreaHintFromKnownWords(text) {
+  const explicit = extractAreaHint(text);
+  if (explicit) return explicit;
+
+  const normalized = normalizeRouterText(text);
+  const knownAreas = ["wanasari", "sumbermulyo", "lampung", "bandung", "malang", "banyuasin", "jawa barat", "jawa timur", "sumatera selatan"];
+  const found = knownAreas.find((area) => normalized.includes(area));
+  return found ? found.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
+}
+
+function extractVolumeHint(text) {
+  const match = String(text ?? "").match(/\b\d+(?:[.,]\d+)?\s*(?:kg|kilo|kilogram|ton|kuintal|kwintal|karung|sak|dus|liter|ikat|bak|gram)\b/i);
+  return match?.[0]?.replace(/\s+/g, " ").trim() || "";
+}
+
+function extractAmountHint(text) {
+  const match = String(text ?? "").match(/\b(?:rp|rupiah)\s*\d[\d.,]*|\b\d+(?:[.,]\d+)?\s*(?:juta|ribu|jt)\b/i);
+  return match?.[0]?.replace(/\s+/g, " ").trim() || "";
+}
+
+function hasGradeHint(text) {
+  return /\b(grade|kadar air|sortasi|kering|basah|premium|medium|super|asalan|kualitas|mutu|pecah|utuh|robusta|arabika)\b/i.test(normalizeRouterText(text));
+}
+
+function hasEvidenceHint(text, payloadType = "text") {
+  return payloadType !== "text" || /\b(foto|gambar|nota|pdf|dokumen|bukti|timbangan|lampiran|file|ocr|surat)\b/i.test(normalizeRouterText(text));
+}
+
+function hasPickupHint(text) {
+  return /\b(pickup|ambil|jemput|gudang|gerai|lokasi ambil|lokasi pickup|alamat|diambil|pengiriman)\b/i.test(normalizeRouterText(text));
+}
+
+function hasTargetPriceHint(text) {
+  return /\b(target harga|harga target|floor price|batas bawah|buyer minta|minta harga|nego|negosiasi|tawar|rp|rupiah)\b/i.test(normalizeRouterText(text));
+}
+
+function hasPurposeHint(text) {
+  return /\b(pupuk|benih|bibit|panen|musim tanam|modal usaha|usaha|produksi|stok|alat tani|komoditas|kopi|padi|beras|sawit|cabai|jagung)\b/i.test(
+    normalizeRouterText(text),
+  );
+}
+
+function hasRepaymentHint(text) {
+  return /\b(bayar|cicil|angsuran|setelah panen|panen|mingguan|bulanan|tenor|rencana bayar|sumber pembayaran)\b/i.test(normalizeRouterText(text));
+}
+
+function inferAgentFromHistory(recentMessages = []) {
+  for (const item of recentMessages) {
+    const moduleName = String(item.module ?? "");
+    const intent = String(item.intent ?? "");
+    const found = agentRouter.find((agent) => moduleName === agent.module || intent === agent.name || moduleName.includes(agent.module));
+    if (found) return found;
+  }
+  return null;
+}
+
+function isTerseFollowUp(text) {
+  const normalized = normalizeRouterText(text);
+  if (!normalized) return false;
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  return wordCount <= 8 && (
+    Boolean(extractVolumeHint(text)) ||
+    Boolean(extractAreaHintFromKnownWords(text)) ||
+    hasGradeHint(text) ||
+    hasEvidenceHint(text) ||
+    hasPickupHint(text) ||
+    hasTargetPriceHint(text)
+  );
+}
+
+function conversationText(messageText, recentMessages = []) {
+  return [
+    ...recentMessages.slice().reverse().flatMap((item) => [item.message, item.botReply]),
+    messageText,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildConversationContext({ messageText, payloadType, recentMessages = [] }) {
+  const combined = conversationText(messageText, recentMessages);
+  const currentCommodity = extractCommodityName(messageText);
+  const combinedCommodity = extractCommodityName(combined);
+  const areaHint = extractAreaHintFromKnownWords(messageText) || extractAreaHintFromKnownWords(combined);
+  const volumeHint = extractVolumeHint(messageText) || extractVolumeHint(combined);
+  const amountHint = extractAmountHint(messageText) || extractAmountHint(combined);
+  return {
+    combinedText: combined,
+    hasHistory: recentMessages.length > 0,
+    commodityName: currentCommodity === "komoditas ini" ? combinedCommodity : currentCommodity,
+    areaHint,
+    volumeHint,
+    amountHint,
+    hasGrade: hasGradeHint(combined),
+    hasEvidence: hasEvidenceHint(messageText, payloadType) || hasEvidenceHint(combined),
+    hasPickup: hasPickupHint(combined),
+    hasTargetPrice: hasTargetPriceHint(combined),
+    hasPurpose: hasPurposeHint(combined),
+    hasRepayment: hasRepaymentHint(combined),
+  };
+}
+
+function fieldStatusLine(context, missingFields) {
+  const known = [];
+  if (context.commodityName && context.commodityName !== "komoditas ini") known.push(context.commodityName);
+  if (context.areaHint) known.push(context.areaHint);
+  if (context.volumeHint) known.push(context.volumeHint);
+  if (context.amountHint) known.push(context.amountHint);
+  if (context.hasGrade) known.push("kualitas/grade");
+  if (context.hasEvidence) known.push("bukti");
+
+  if (!known.length && !missingFields.length) return "";
+  if (!missingFields.length) return `Saya lihat data utamanya sudah masuk: ${known.join(", ")}.`;
+  const prefix = known.length
+    ? `Saya lihat ${context.hasHistory ? "dari chat sebelumnya " : ""}Anda sudah kirim ${known.join(", ")}.`
+    : "Datanya masih perlu dilengkapi.";
+  return `${prefix} Yang masih kurang: ${missingFields.join(", ")}.`;
+}
+
+function missingFieldsFor(agent, context) {
+  if (agent.id === "1") {
+    return [
+      context.areaHint ? "" : "wilayah/desa",
+      context.commodityName !== "komoditas ini" ? "" : "komoditas",
+      context.volumeHint ? "" : "volume atau estimasi panen",
+      context.hasGrade ? "" : "grade/kualitas",
+      context.hasEvidence ? "" : "foto atau bukti pasokan",
+    ].filter(Boolean);
+  }
+  if (agent.id === "2") {
+    return [
+      context.commodityName !== "komoditas ini" ? "" : "nama barang",
+      context.volumeHint ? "" : "jumlah dan satuan",
+      context.areaHint || context.hasPickup ? "" : "lokasi gerai/gudang",
+      context.hasEvidence ? "" : "foto stok atau bukti",
+    ].filter(Boolean);
+  }
+  if (agent.id === "3" || agent.id === "4") {
+    return [
+      context.commodityName !== "komoditas ini" ? "" : "komoditas/produk",
+      context.areaHint ? "" : "wilayah atau lokasi pickup",
+      context.volumeHint ? "" : "volume dan satuan",
+      context.hasGrade ? "" : "grade/kadar air/kualitas",
+      context.hasEvidence ? "" : "foto barang atau bukti timbang",
+      context.hasTargetPrice ? "" : "target harga atau tawaran buyer",
+    ].filter(Boolean);
+  }
+  if (agent.id === "5") {
+    return [
+      context.amountHint ? "" : "nominal",
+      context.hasPurpose ? "" : "tujuan penggunaan",
+      context.hasRepayment ? "" : "rencana bayar",
+      context.hasEvidence ? "" : "bukti usaha/panen",
+    ].filter(Boolean);
+  }
+  if (agent.id === "6") {
+    return [context.hasEvidence ? "" : "file/foto/PDF", context.commodityName !== "komoditas ini" ? "" : "konteks bukti"].filter(Boolean);
+  }
+  return [];
+}
+
 function hasManualKeyword(text) {
   const normalized = normalizeRouterText(text);
   return /\b(pinjam|pinjaman|pembiayaan|modal|komite|jual|menjual|mau jual|buyer|pembeli|offtaker|outreach|nego|negosiasi|tawar|deal|approval|setuju|koreksi|ubah|revisi|salah|hapus|restock|habis|kosong|pickup|jemput|jadwal|barang masuk|barang keluar|export|csv|operator)\b/i.test(normalized);
@@ -432,10 +602,13 @@ function priceGuidance(commodityName, areaHint) {
   return dataBackedPriceGuidance(commodityName, areaHint);
 }
 
-async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", messageText }) {
+async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", messageText, recentMessages = [] }) {
   const normalized = normalizeRouterText(messageText);
-  const commodityName = extractCommodityName(messageText);
-  const areaHint = extractAreaHint(messageText);
+  const context = buildConversationContext({ messageText, payloadType, recentMessages });
+  const commodityName = context.commodityName;
+  const areaHint = context.areaHint;
+  const missingFields = missingFieldsFor(agent, context);
+  const fieldLine = fieldStatusLine(context, missingFields);
   const policy = reviewPolicy(agent, payloadType, messageText);
 
   if (closeTriggers.has(normalized)) {
@@ -457,9 +630,10 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
       answerLines.push("Minta buyer menyebut target harga, syarat kualitas, jadwal ambil, dan pola pembayaran dulu agar pengurus bisa menilai posisi tawarnya.");
     }
     if (policy.shouldQueue) {
-      answerLines.push("Karena ini mengarah ke keputusan komersial, saya teruskan ke pengurus untuk review maksimal 24 jam kerja.");
+      answerLines.push("Kalau ini mau dipakai untuk keputusan jual-beli, saya teruskan diam-diam ke pengurus untuk review maksimal 24 jam kerja.");
     }
-    answerLines.push("Data apa yang sudah ada: grade/kadar air, volume final, lokasi pickup, dan target harga buyer?");
+    if (fieldLine) answerLines.push(fieldLine);
+    answerLines.push(missingFields.length ? "Boleh kirim data yang masih kurang itu dulu?" : "Mau saya bantu susun kalimat negonya untuk buyer?");
     return ["Halo, saya cek dulu dari data yang ada.", ...answerLines].join("\n");
   }
 
@@ -473,10 +647,12 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
       answerLines.push(`Risiko utama yang harus dibereskan: ${main.risk}`);
       if (main.villageSummary) answerLines.push(`Konteks wilayah: ${main.villageSummary}`);
       answerLines.push("Langkah berikutnya: cek grade/kadar air, foto batch, tanggal siap jual, dan lokasi pickup. Setelah itu baru cocokkan ke buyer yang relevan.");
-      answerLines.push("Kopi ini sudah ada grade atau kadar airnya berapa?");
+      if (fieldLine) answerLines.push(fieldLine);
+      answerLines.push(missingFields.length ? "Kirim yang masih kurang itu dulu ya, nanti saya tajamkan analisanya." : "Mau saya lanjutkan ke bahan buyer matching?");
     } else {
       answerLines.push(`Saya belum menemukan data ${commodityName} yang spesifik untuk wilayah itu.`);
-      answerLines.push("Kirim desa/kecamatan, volume, musim panen, grade/kualitas, dan bukti pasokan agar saya bisa cek lebih tajam.");
+      if (fieldLine) answerLines.push(fieldLine);
+      answerLines.push("Kirim data yang masih kurang agar saya bisa cek lebih tajam.");
     }
   }
 
@@ -491,9 +667,10 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
       answerLines.push("Saya belum menemukan stok yang cocok dari pesan ini.");
     }
     if (policy.shouldQueue) {
-      answerLines.push("Karena ini menyangkut stok habis/restock/pickup/barang masuk-keluar, saya teruskan ke operator untuk tindak lanjut maksimal 24 jam kerja.");
+      answerLines.push("Kalau ini restock, pickup, atau barang masuk-keluar, saya teruskan ke operator untuk tindak lanjut maksimal 24 jam kerja.");
     }
-    answerLines.push("Kalau mau saya cek lebih tepat, kirim nama barang, jumlah, satuan, lokasi gerai/gudang, dan tanggal kebutuhan.");
+    if (fieldLine) answerLines.push(fieldLine);
+    answerLines.push(missingFields.length ? "Boleh lengkapi data itu dulu?" : "Mau dibuatkan rencana restock/pickup?");
   }
 
   if (agent.id === "3") {
@@ -507,21 +684,24 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
       answerLines.push("Saya belum menemukan buyer archetype yang cukup spesifik dari data lokal untuk pesan ini.");
     }
     answerLines.push("Saya tidak menyebut buyer bernama atau mengirim outreach otomatis sebelum pengurus menyetujui.");
-    if (policy.shouldQueue) answerLines.push("Saya teruskan ke pengurus untuk review komersial maksimal 24 jam kerja.");
-    answerLines.push("Kirim volume, grade, foto barang, lokasi pickup, dan target waktu jual agar matching-nya lebih presisi.");
+    if (policy.shouldQueue) answerLines.push("Saya teruskan diam-diam ke pengurus untuk review komersial maksimal 24 jam kerja.");
+    if (fieldLine) answerLines.push(fieldLine);
+    answerLines.push(missingFields.length ? "Kirim yang masih kurang dulu supaya matching-nya presisi." : "Mau saya buatkan bahan negosiasi singkat?");
   }
 
   if (agent.id === "5") {
     answerLines.push("Saya cek pengajuan ini sebagai readiness pembiayaan, bukan persetujuan otomatis.");
     answerLines.push(...financeReadinessLines(messageText));
     answerLines.push("Saya teruskan ke pengurus/komite untuk review maksimal 24 jam kerja bila datanya sudah cukup.");
-    answerLines.push("Kalau ada, kirim bukti usaha/panen, status anggota, dan rencana bayar yang lebih rinci.");
+    if (fieldLine) answerLines.push(fieldLine);
+    answerLines.push(missingFields.length ? "Boleh lengkapi data itu dulu?" : "Kalau ada, kirim bukti usaha/panen dan status anggota.");
   }
 
   if (agent.id === "6") {
     answerLines.push("Bukti sudah saya terima.");
     answerLines.push(mediaNote ? `Hasil baca awal: ${mediaNote}` : "Kalau file berupa foto atau PDF text-based, saya baca sebagai evidence awal.");
     answerLines.push("Hasil baca ini belum menjadi keputusan final; operator tetap perlu memverifikasi bukti dan konteksnya.");
+    if (fieldLine) answerLines.push(fieldLine);
     answerLines.push("Bukti ini terkait stok, penjualan, pembiayaan, atau koreksi data?");
   }
 
@@ -537,9 +717,9 @@ async function buildOperationalAnswer({ agent, mediaNote, payloadType = "text", 
   return ["Halo, saya cek ya.", ...answerLines].join("\n");
 }
 
-async function buildAgentReply({ agent, mediaNote, payloadType, messageText }) {
+async function buildAgentReply({ agent, mediaNote, payloadType, messageText, recentMessages = [] }) {
   const lines = [
-    await buildOperationalAnswer({ agent, mediaNote, payloadType, messageText }),
+    await buildOperationalAnswer({ agent, mediaNote, payloadType, messageText, recentMessages }),
   ];
 
   return lines.join("\n");
@@ -559,8 +739,8 @@ const sharedPool = sharedDatabaseUrl
   ? new Pool({
       connectionString: sharedDatabaseUrl,
       ssl: (process.env.HACKATHON_SHARED_DB_SSL ?? process.env.PGSSLMODE) === "require" ? { rejectUnauthorized: false } : undefined,
-      max: Number(process.env.HACKATHON_SHARED_DB_POOL_MAX ?? 1),
-      connectionTimeoutMillis: Number(process.env.HACKATHON_SHARED_DB_CONNECT_TIMEOUT_MS ?? 5000),
+      max: Number(process.env.HACKATHON_SHARED_DB_POOL_MAX ?? 3),
+      connectionTimeoutMillis: Number(process.env.HACKATHON_SHARED_DB_CONNECT_TIMEOUT_MS ?? 1200),
     })
   : null;
 
@@ -608,7 +788,7 @@ function summarize(text) {
   return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
 }
 
-function classifyIntent(text, payloadType) {
+function classifyIntent(text, payloadType, recentMessages = []) {
   const normalized = normalizeRouterText(text);
   if (closeTriggers.has(normalized)) {
     return {
@@ -640,7 +820,7 @@ function classifyIntent(text, payloadType) {
     };
   }
 
-  const routedAgent = routeAgent(text, payloadType);
+  const routedAgent = routeAgent(text, payloadType, recentMessages);
   if (routedAgent) {
     return {
       intent: routedAgent.name,
@@ -813,6 +993,20 @@ async function queryRows(sql, params = []) {
   return result.rows;
 }
 
+async function recentConversationRows(sender, currentWaMessageId = null) {
+  if (!sender) return [];
+  return queryRows(
+    `SELECT id, message, bot_reply AS "botReply", intent, module, created_at AS "createdAt"
+     FROM wa_messages
+     WHERE cooperative_id = $1
+       AND sender = $2
+       AND ($3::text IS NULL OR id <> $3)
+     ORDER BY created_at DESC
+     LIMIT 8`,
+    [cooperativeId, sender, currentWaMessageId],
+  ).catch(() => []);
+}
+
 function safeAmount(value) {
   const numeric = Number(String(value ?? "0").replace(/[^0-9.-]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
@@ -867,7 +1061,7 @@ async function sharedQueryRows(sql, params = []) {
   const client = await sharedPool.connect();
   try {
     await client.query("BEGIN READ ONLY");
-    await client.query(`SET LOCAL statement_timeout = ${Number(process.env.HACKATHON_SHARED_DB_STATEMENT_TIMEOUT_MS ?? 8000)}`);
+    await client.query(`SET LOCAL statement_timeout = ${Number(process.env.HACKATHON_SHARED_DB_STATEMENT_TIMEOUT_MS ?? 1400)}`);
     const result = await client.query(sql, params);
     await client.query("COMMIT");
     return result.rows;
@@ -888,6 +1082,20 @@ async function sharedColumns(tableName) {
     [tableName],
   );
   return new Set(rows.map((row) => row.columnName));
+}
+
+async function withTimeout(promise, ms, fallback = []) {
+  let timeout = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timeout = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function localPriceEvidence(commodityName, areaHint) {
@@ -1032,13 +1240,19 @@ async function sharedInventoryPriceEvidence(commodityName, areaHint) {
     [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
   );
 
-  return rows.map((row) => {
-    const avg = safeAmount(row.avgPrice);
-    const min = safeAmount(row.minPrice);
-    const max = safeAmount(row.maxPrice);
-    const range = min && max && min !== max ? `${formatRupiah(min)}-${formatRupiah(max)}` : formatRupiah(avg || min || max);
-    return `Shared DB inventaris: ${row.productName}; harga data ${range}/${row.unitLabel}; rata-rata ${formatRupiah(avg)}; stok agregat ${safeAmount(row.stockTotal).toLocaleString("id-ID")} ${row.unitLabel}; ${row.rows} baris.`;
-  });
+  if (!rows.length) return [];
+
+  const productTypes = new Set(rows.map((row) => String(row.productName ?? "").trim()).filter(Boolean)).size;
+  const rowCount = rows.reduce((total, row) => total + Number(row.rows ?? 0), 0);
+  const stockTotal = rows.reduce((total, row) => total + safeAmount(row.stockTotal), 0);
+  const prices = rows.flatMap((row) => [safeAmount(row.minPrice), safeAmount(row.maxPrice), safeAmount(row.avgPrice)]).filter((value) => value > 0);
+  const min = prices.length ? Math.min(...prices) : 0;
+  const max = prices.length ? Math.max(...prices) : 0;
+  const range = min && max && min !== max ? `${formatRupiah(min)}-${formatRupiah(max)}` : min ? formatRupiah(min) : "";
+  const note = range
+    ? `Data eksplorasi inventaris menemukan ${rowCount} baris terkait ${commodityName} dari ${productTypes} tipe produk; rentang harga tercatat ${range}; stok agregat ${stockTotal.toLocaleString("id-ID")}.`
+    : `Data eksplorasi inventaris menemukan ${rowCount} baris terkait ${commodityName} dari ${productTypes} tipe produk; stok agregat ${stockTotal.toLocaleString("id-ID")}, tetapi harga satuan belum cukup bersih.`;
+  return [note];
 }
 
 async function sharedProductAvailabilityEvidence(commodityName, areaHint) {
@@ -1078,7 +1292,7 @@ async function sharedProductAvailabilityEvidence(commodityName, areaHint) {
     const stockTotal = safeAmount(row.stockTotal);
     const areaText = areaHint ? ` di ${areaHint}` : "";
     const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
-    return `Shared DB mencatat ${row.rows} baris inventaris terkait ${commodityName}${areaText} dari ${row.productTypes} tipe produk; ${stockText}; skema ini belum punya harga satuan.`;
+    return `Data eksplorasi mencatat ${row.rows} baris inventaris terkait ${commodityName}${areaText} dari ${row.productTypes} tipe produk; ${stockText}; harga satuan belum cukup bersih.`;
   });
 }
 
@@ -1127,27 +1341,30 @@ async function sharedTransactionPriceEvidence(commodityName, areaHint) {
     [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
   );
 
-  return rows.map((row) => {
-    const unitPrice = safeAmount(row.unitPrice);
-    const averageTransactionValue = safeAmount(row.averageTransactionValue);
-    const amountTotal = safeAmount(row.amountTotal);
-    const quantityTotal = safeAmount(row.quantityTotal);
-    const pricePart =
-      unitPrice > 0
-        ? `harga satuan terhitung ${formatRupiah(unitPrice)}/${row.unitLabel} dari total nilai/kuantitas`
-        : `rata-rata nilai transaksi ${formatRupiah(averageTransactionValue)}; kuantitas tidak cukup untuk harga per unit`;
-    return `Shared DB transaksi: ${row.productName}; ${pricePart}; total nilai ${formatRupiah(amountTotal)}; total kuantitas ${quantityTotal.toLocaleString("id-ID")} ${row.unitLabel}; ${row.transactions} transaksi.`;
-  });
+  if (!rows.length) return [];
+
+  const productTypes = new Set(rows.map((row) => String(row.productName ?? "").trim()).filter(Boolean)).size;
+  const transactions = rows.reduce((total, row) => total + Number(row.transactions ?? 0), 0);
+  const amountTotal = rows.reduce((total, row) => total + safeAmount(row.amountTotal), 0);
+  const quantityTotal = rows.reduce((total, row) => total + safeAmount(row.quantityTotal), 0);
+  const unitPrice = quantityTotal > 0 ? amountTotal / quantityTotal : 0;
+  const pricePart =
+    unitPrice > 0
+      ? `estimasi nilai per unit dari total transaksi ${formatRupiah(unitPrice)}`
+      : "kuantitas belum cukup bersih untuk estimasi harga per unit";
+  return [
+    `Data eksplorasi transaksi menemukan ${transactions} transaksi terkait ${commodityName} dari ${productTypes} tipe produk; total nilai ${formatRupiah(amountTotal)}; ${pricePart}.`,
+  ];
 }
 
 async function dataBackedPriceGuidance(commodityName, areaHint) {
   const [localEvidence, inventoryEvidence, productEvidence, transactionEvidence] = await Promise.all([
     localPriceEvidence(commodityName, areaHint),
-    sharedInventoryPriceEvidence(commodityName, areaHint).catch(() => []),
-    sharedProductAvailabilityEvidence(commodityName, areaHint).catch(() => []),
-    sharedTransactionPriceEvidence(commodityName, areaHint).catch(() => []),
+    withTimeout(sharedInventoryPriceEvidence(commodityName, areaHint).catch(() => []), sharedEvidenceTimeoutMs, []),
+    withTimeout(sharedProductAvailabilityEvidence(commodityName, areaHint).catch(() => []), sharedEvidenceTimeoutMs, []),
+    withTimeout(sharedTransactionPriceEvidence(commodityName, areaHint).catch(() => []), sharedEvidenceTimeoutMs, []),
   ]);
-  const evidence = [...transactionEvidence, ...inventoryEvidence, ...productEvidence, ...localEvidence].slice(0, 6);
+  const evidence = [...localEvidence, ...transactionEvidence, ...inventoryEvidence, ...productEvidence].slice(0, 5);
 
   if (!evidence.length) {
     return [
@@ -1176,7 +1393,8 @@ async function ensureCooperative() {
 
 async function insertInbound({ providerMessageId, sender, messageText, payloadType, mediaPath, mediaMime, mediaNote, mediaSize }) {
   await ensureCooperative();
-  const classified = classifyIntent(messageText, payloadType);
+  const recentMessages = await recentConversationRows(sender);
+  const classified = classifyIntent(messageText, payloadType, recentMessages);
   const policy =
     classified.responseType === "unknown"
       ? {
@@ -1301,6 +1519,7 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
             mediaNote,
             payloadType,
             messageText: row.message,
+            recentMessages,
           });
   const reply =
     classified.responseType === "agent"

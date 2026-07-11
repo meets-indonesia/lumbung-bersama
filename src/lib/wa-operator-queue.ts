@@ -496,13 +496,6 @@ export function displayTextForPayload(payloadType: WaPayloadType, message: strin
   return "";
 }
 
-export function quickWaActionsText() {
-  return [
-    "",
-    "Gunakan tombol cepat bila muncul. Jika tidak muncul, balas: menu, operator, puas, atau tidak.",
-  ].join("\n");
-}
-
 function extractCommodityName(message: string) {
   const normalized = normalizeIntentText(message);
   const known = ["sawit", "tbs", "cpo", "kopi", "beras", "padi", "cabai", "singkong", "jagung", "rumput laut", "kakao", "lada", "sagu"];
@@ -515,21 +508,6 @@ function extractAreaHint(message: string) {
   const normalized = message.replace(/\s+/g, " ").trim();
   const match = normalized.match(/\b(?:di|daerah|kabupaten|kecamatan|desa)\s+([A-Za-zÀ-ÖØ-öø-ÿ\s.-]{3,40})/i);
   return match?.[1]?.trim().replace(/[?.!,;:].*$/, "") || "";
-}
-
-function queueLine(queueId?: string | null) {
-  return queueId ? `Nomor antrean: ${queueId}` : "Riwayat chat tersimpan di WA Inbox. Tidak dibuat antrean operator karena skenario ini dijawab otomatis.";
-}
-
-function formatReplySections(sections: Array<{ title?: string; lines: Array<string | null | undefined> }>) {
-  return sections
-    .map((section) => {
-      const lines = section.lines.map((line) => String(line ?? "").trim()).filter(Boolean);
-      if (!lines.length) return "";
-      return [section.title, ...lines].filter(Boolean).join("\n");
-    })
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 function closingLine(closed = false) {
@@ -665,8 +643,8 @@ export function buildWaOperationalReply({
   const normalized = normalizeIntentText(message);
   const commodityName = extractCommodityName(message);
   const areaHint = extractAreaHint(message);
-  const moduleName = draft?.module ?? intent.module;
   const reviewPolicy = getWaReviewPolicy(intent, payloadType, message);
+  void queueId;
 
   if (isConversationCloseTrigger(normalized)) {
     return closingLine(true);
@@ -680,7 +658,7 @@ export function buildWaOperationalReply({
   } else if (intent.module === "Market Price Check & Negotiation Agent") {
     answerLines.push(...priceGuidanceForCommodity(commodityName, areaHint, commodityDetails));
     if (reviewPolicy.shouldQueue) {
-      answerLines.push("Karena pesan ini mengarah ke negosiasi/jual-beli, saya buat antrean approval komersial.");
+      answerLines.push("Kalau ini dipakai untuk keputusan jual-beli, saya teruskan ke pengurus untuk review maksimal 24 jam kerja.");
     }
   } else if (intent.module === "Gerai / Stock Readiness" || intent.module === "Stock Logistics / Pickup") {
     answerLines.push("Saya cek konteks stok dari pesan ini.");
@@ -708,29 +686,12 @@ export function buildWaOperationalReply({
     answerLines.push(intent.bot);
   }
 
-  return formatReplySections([
-    { title: intent.label, lines: answerLines },
-    {
-      title: "Status",
-      lines: [
-        queueLine(reviewPolicy.shouldQueue ? queueId : null),
-        `Modul dashboard: ${moduleName}`,
-        reviewPolicy.slaText,
-      ],
-    },
-    {
-      title: "Ringkasan masuk",
-      lines: [message.slice(0, SUMMARY_LIMIT)],
-    },
-    {
-      title: "Catatan",
-      lines: [
-        "Pertanyaan informatif dijawab otomatis dengan caveat. Pembiayaan, negosiasi final, outreach buyer, koreksi data, dan bukti media tetap butuh review operator.",
-        closingLine(false),
-        quickWaActionsText(),
-      ],
-    },
-  ]);
+  if (reviewPolicy.shouldQueue && reviewPolicy.slaText && !answerLines.some((line) => line.includes("24 jam"))) {
+    answerLines.push(reviewPolicy.slaText);
+  }
+
+  answerLines.push(closingLine(false));
+  return ["Halo, saya bantu cek ya.", ...answerLines].filter(Boolean).join("\n");
 }
 
 export function queueStatusForPayload(payloadType: WaPayloadType, intent?: WaAgentIntent, message = "") {

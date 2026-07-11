@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     ? setup.send.status === "ready"
       ? "Butuh tindak lanjut operator; pengiriman live belum dilakukan"
       : "Butuh tindak lanjut operator; pengiriman live menunggu kanal resmi"
-    : "Dijawab otomatis; riwayat tersimpan di WA Inbox";
+    : "Dijawab otomatis";
   const commodityProfiles = await findCommodityProfilesForMessage(message, cooperative.province).catch(() => []);
   const commodityDetails = describeCommodityProfiles(commodityProfiles);
   const preliminaryBotReply = buildWaOperationalReply({

@@ -77,7 +77,7 @@ function fallbackLinesForScope(input: OrchestratedWaReplyInput, toolSummary: Age
           ...evidence,
           hasNumericPrice
             ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data; harga final tetap perlu grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini."
-            : "Data yang tersedia belum memuat harga satuan eksplisit, jadi saya tidak mengeluarkan angka harga/kg dan tidak membuat ticket operator untuk pertanyaan informasional.",
+            : "Data yang tersedia belum memuat harga satuan eksplisit, jadi saya tidak mengeluarkan angka harga/kg untuk pertanyaan informasional.",
         ]
       : [
           "Saya belum menemukan produk/harga/sinyal harga yang cocok di data untuk komoditas/wilayah ini.",

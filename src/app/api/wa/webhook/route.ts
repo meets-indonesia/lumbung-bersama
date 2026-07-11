@@ -278,7 +278,7 @@ export async function POST(request: Request) {
         preliminaryReply,
         reviewPolicy.shouldQueue
           ? "Masuk webhook; menunggu tindak lanjut operator"
-          : "Dijawab otomatis; riwayat tersimpan di WA Inbox",
+          : "Dijawab otomatis",
       ],
     );
     if (inserted) {

@@ -331,13 +331,20 @@ async function sharedInventoryPriceEvidence(commodity: string, areaHint: string)
     [commodityPattern(commodity), areaHint, `%${areaHint}%`],
   ).catch(() => []);
 
-  return rows.map((row) => {
-    const avg = safeAmount(row.avgPrice);
-    const min = safeAmount(row.minPrice);
-    const max = safeAmount(row.maxPrice);
-    const range = min && max && min !== max ? `${formatRupiah(min)}-${formatRupiah(max)}` : formatRupiah(avg || min || max);
-    return `Shared DB inventaris: ${row.productName}; harga data ${range}/${row.unitLabel}; rata-rata ${formatRupiah(avg)}; stok agregat ${safeAmount(row.stockTotal).toLocaleString("id-ID")} ${row.unitLabel}; ${row.rows} baris.`;
-  });
+  if (!rows.length) return [];
+
+  const productTypes = new Set(rows.map((row) => String(row.productName ?? "").trim()).filter(Boolean)).size;
+  const rowCount = rows.reduce((total, row) => total + Number(row.rows ?? 0), 0);
+  const stockTotal = rows.reduce((total, row) => total + safeAmount(row.stockTotal), 0);
+  const prices = rows.flatMap((row) => [safeAmount(row.minPrice), safeAmount(row.maxPrice), safeAmount(row.avgPrice)]).filter((value) => value > 0);
+  const min = prices.length ? Math.min(...prices) : 0;
+  const max = prices.length ? Math.max(...prices) : 0;
+  const range = min && max && min !== max ? `${formatRupiah(min)}-${formatRupiah(max)}` : min ? formatRupiah(min) : "";
+  return [
+    range
+      ? `Data eksplorasi inventaris menemukan ${rowCount} baris terkait ${commodity} dari ${productTypes} tipe produk; rentang harga tercatat ${range}; stok agregat ${stockTotal.toLocaleString("id-ID")}.`
+      : `Data eksplorasi inventaris menemukan ${rowCount} baris terkait ${commodity} dari ${productTypes} tipe produk; stok agregat ${stockTotal.toLocaleString("id-ID")}, tetapi harga satuan belum cukup bersih.`,
+  ];
 }
 
 async function sharedProductAvailabilityEvidence(commodity: string, areaHint: string) {
@@ -386,11 +393,13 @@ async function sharedProductAvailabilityEvidence(commodity: string, areaHint: st
     [commodityPattern(commodity), areaHint, `%${areaHint}%`],
   ).catch(() => []);
 
-  return rows.map((row) => {
-    const stockTotal = safeAmount(row.stockTotal);
-    const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
-    return `Shared DB inventaris: ${row.productName}; ${row.rows} baris cocok; ${stockText}; kolom harga satuan tidak tersedia pada skema ini.`;
-  });
+  if (!rows.length) return [];
+
+  const rowCount = rows.reduce((total, row) => total + Number(row.rows ?? 0), 0);
+  const productTypes = new Set(rows.map((row) => String(row.productName ?? "").trim()).filter(Boolean)).size;
+  const stockTotal = rows.reduce((total, row) => total + safeAmount(row.stockTotal), 0);
+  const stockText = stockTotal > 0 ? `stok agregat ${stockTotal.toLocaleString("id-ID")}` : "stok agregat belum terisi";
+  return [`Data eksplorasi inventaris mencatat ${rowCount} baris terkait ${commodity} dari ${productTypes} tipe produk; ${stockText}; harga satuan belum cukup bersih.`];
 }
 
 async function sharedTransactionPriceEvidence(commodity: string, areaHint: string) {
@@ -462,17 +471,20 @@ async function sharedTransactionPriceEvidence(commodity: string, areaHint: strin
     [commodityPattern(commodity), areaHint, `%${areaHint}%`],
   ).catch(() => []);
 
-  return rows.map((row) => {
-    const unitPrice = safeAmount(row.unitPrice);
-    const averageTransactionValue = safeAmount(row.averageTransactionValue);
-    const amountTotal = safeAmount(row.amountTotal);
-    const quantityTotal = safeAmount(row.quantityTotal);
-    const pricePart =
-      unitPrice > 0
-        ? `harga satuan terhitung ${formatRupiah(unitPrice)}/${row.unitLabel} dari total nilai/kuantitas`
-        : `rata-rata nilai transaksi ${formatRupiah(averageTransactionValue)}; kuantitas tidak cukup untuk harga per unit`;
-    return `Shared DB transaksi: ${row.productName}; ${pricePart}; total nilai ${formatRupiah(amountTotal)}; total kuantitas ${quantityTotal.toLocaleString("id-ID")} ${row.unitLabel}; ${row.transactions} transaksi.`;
-  });
+  if (!rows.length) return [];
+
+  const productTypes = new Set(rows.map((row) => String(row.productName ?? "").trim()).filter(Boolean)).size;
+  const transactions = rows.reduce((total, row) => total + Number(row.transactions ?? 0), 0);
+  const amountTotal = rows.reduce((total, row) => total + safeAmount(row.amountTotal), 0);
+  const quantityTotal = rows.reduce((total, row) => total + safeAmount(row.quantityTotal), 0);
+  const unitPrice = quantityTotal > 0 ? amountTotal / quantityTotal : 0;
+  const pricePart =
+    unitPrice > 0
+      ? `estimasi nilai per unit dari total transaksi ${formatRupiah(unitPrice)}`
+      : "kuantitas belum cukup bersih untuk estimasi harga per unit";
+  return [
+    `Data eksplorasi transaksi menemukan ${transactions} transaksi terkait ${commodity} dari ${productTypes} tipe produk; total nilai ${formatRupiah(amountTotal)}; ${pricePart}.`,
+  ];
 }
 
 async function buildDataBackedPriceEvidence(input: RunToolsInput, commodity: string, areaHint: string) {
@@ -483,7 +495,7 @@ async function buildDataBackedPriceEvidence(input: RunToolsInput, commodity: str
     sharedTransactionPriceEvidence(commodity, areaHint).catch(() => []),
   ]);
 
-  return [...transactionEvidence, ...inventoryEvidence, ...productEvidence, ...localEvidence].slice(0, 8);
+  return [...localEvidence, ...transactionEvidence, ...inventoryEvidence, ...productEvidence].slice(0, 6);
 }
 
 async function priceContextTool(input: RunToolsInput, scope: AgentToolScope): Promise<AgentToolResult> {
