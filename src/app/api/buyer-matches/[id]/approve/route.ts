@@ -1,5 +1,5 @@
 import { requireAuthenticatedRequest, requireRole } from "@/lib/auth";
-import { dbRequiredResponse, isDatabaseConfigured, queryOne } from "@/lib/postgres";
+import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -60,6 +60,23 @@ export async function POST(request: Request, context: RouteContext) {
   if (!buyer) {
     return Response.json({ error: "BUYER_MATCH_NOT_FOUND" }, { status: 404 });
   }
+
+  await queryOne(
+    `INSERT INTO agent_runs (id, cooperative_id, agent_name, record_id, status, output, checks, explanation, next_action)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+     RETURNING id`,
+    [
+      newId("agent"),
+      cooperativeId,
+      "Agen Pasar dan Mitra",
+      id,
+      "buyer-readiness-approved",
+      `${id}: kesiapan tipe buyer disetujui untuk review outreach. Ini bukan komitmen penjualan dan bukan buyer bernama.`,
+      JSON.stringify(["Readiness stok", "Grade/kualitas", "Packaging", "Harga indikatif", "Approval pengurus"]),
+      "Approval buyer readiness dicatat dari aksi dashboard dan disimpan sebagai jejak Agent Center.",
+      "Siapkan draft outreach dan cek ulang volume, kualitas, lokasi pickup, serta batas harga sebelum kontak pihak luar.",
+    ],
+  ).catch(() => null);
 
   return Response.json({ buyer });
 }

@@ -199,7 +199,7 @@ const simkopdesRoleAccessMatrix = [
     review: "Tanpa data penerima publik",
   },
   {
-    role: "Juri/Viewer",
+    role: "Viewer audit",
     surfaces: "/dashboard, /peta-unggulan, /laporan",
     workflow: "Melihat alur sampel/agregat tanpa PII.",
     review: "Baca saja",
@@ -267,6 +267,31 @@ function initialDashboardView() {
   return requestedView && isDashboardView(requestedView) ? requestedView : "overview";
 }
 
+function agentNameForModule(moduleTitle: string) {
+  const normalized = moduleTitle.toLowerCase();
+  if (normalized.includes("buyer") || normalized.includes("pasar") || normalized.includes("negotiation") || normalized.includes("harga")) return "Agen Pasar dan Mitra";
+  if (normalized.includes("stock") || normalized.includes("stok") || normalized.includes("gerai") || normalized.includes("logistics")) return "Agen Stok dan Gudang";
+  if (normalized.includes("finance") || normalized.includes("pinjam") || normalized.includes("risk")) return "Agen Pembiayaan Readiness";
+  if (normalized.includes("laporan")) return "Agen Laporan";
+  if (normalized.includes("peta") || normalized.includes("komoditas") || normalized.includes("opportunity")) return "Agen Unggulan Desa";
+  if (normalized.includes("verification") || normalized.includes("dokumen")) return "Agen Bukti dan Dokumen";
+  return "Agen Laporan";
+}
+
+function dashboardViewForModuleTitle(moduleTitle: string) {
+  const normalized = moduleTitle.toLowerCase();
+  if (normalized.includes("peta") || normalized.includes("komoditas") || normalized.includes("opportunity")) return "peta-unggulan";
+  if (normalized.includes("buyer") || normalized.includes("pasar") || normalized.includes("negotiation") || normalized.includes("harga")) return "pasar-mitra";
+  if (normalized.includes("logistics") || normalized.includes("pickup") || normalized.includes("gudang")) return "stok-logistik";
+  if (normalized.includes("stock") || normalized.includes("stok") || normalized.includes("gerai")) return "gerai-pintar";
+  if (normalized.includes("finance") || normalized.includes("pinjam") || normalized.includes("risk")) return "simpan-pinjam";
+  if (normalized.includes("laporan")) return "laporan";
+  if (normalized.includes("integrasi") || normalized.includes("system") || normalized.includes("health")) return "integrasi";
+  if (normalized.includes("wa") || normalized.includes("whatsapp") || normalized.includes("verification") || normalized.includes("dokumen")) return "wa";
+  if (normalized.includes("agent")) return "agents";
+  return null;
+}
+
 function formatRupiah(value: string | number) {
   const numberValue = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numberValue)) return String(value);
@@ -281,6 +306,10 @@ function formatInteger(value: string | number | null | undefined) {
   const numberValue = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(numberValue)) return String(value ?? "0");
   return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(numberValue);
+}
+
+function makeClientMessageId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function formatPercentRatio(value: number | null | undefined) {
@@ -537,6 +566,7 @@ type RecentWaMessage = {
   message: string;
   intent: string;
   module: string;
+  botReply?: string;
   status: string;
   createdAt: string;
 };
@@ -1375,17 +1405,29 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
           announce(publicSetupMessage(payload.message ?? payload.error, `${id} gagal disetujui.`), "error");
           return;
         }
+        const approvedCase = queue.find((item) => item.id === id);
+        const agentName = agentNameForModule(approvedCase?.module ?? "");
+        let agentNote = "";
+        if (agentName) {
+          const agentResponse = await fetch("/api/agents/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentName, recordId: id }),
+          });
+          const agentPayload = await agentResponse.json().catch(() => ({}));
+          agentNote = agentResponse.ok ? ` Agent Center menjalankan ${agentPayload.agent ?? agentName}.` : "";
+        }
         await loadDashboard();
-        announce(`${id} disetujui dan masuk ke riwayat operasional.`, "success");
+        announce(`${id} disetujui dan masuk ke riwayat operasional.${agentNote}`, "success");
       },
     });
   }
 
   function askFarmer(id: string) {
     requestConfirm({
-      title: `Buat follow-up untuk ${id}?`,
-      message: "Sistem akan menambahkan catatan tindak lanjut WA. Pengiriman live tetap menunggu aktivasi kanal WhatsApp.",
-      confirmLabel: "Buat follow-up",
+      title: `Buat draft balasan untuk ${id}?`,
+      message: "Sistem akan menambahkan draft balasan di percakapan dashboard. Auto-reply live tetap berjalan dari bridge WA, sedangkan balasan manual live perlu kanal resmi atau pengiriman dari nomor bot.",
+      confirmLabel: "Buat draft",
       onConfirm: async () => {
         const response = await fetch(`/api/operator-queue/${encodeURIComponent(id)}`, {
           method: "POST",
@@ -1398,18 +1440,27 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
           return;
         }
         await loadDashboard();
-        announce(`${id}: follow-up tersimpan di riwayat operasional. Pengiriman live menunggu aktivasi kanal WhatsApp.`, "success");
+        setActiveView("wa");
+        setMobileSidebarOpen(false);
+        announce(`${id}: draft balasan tersimpan dan dibuka di WA Inbox.`, "success");
       },
     });
   }
 
   function openModule(moduleTitle: string) {
     const matchedFeature = featureModules.find((item) => item.title === moduleTitle);
-    if (matchedFeature?.slug === "peta-unggulan") {
+    const mappedView = dashboardViewForModuleTitle(moduleTitle) ?? (matchedFeature ? dashboardViewForFeature(matchedFeature.slug) : null);
+    if (mappedView === "peta-unggulan") {
       window.location.href = "/peta-unggulan";
       return;
     }
-    setActiveView(dashboardViewForFeature(matchedFeature?.slug ?? "lumbung-data"));
+    if (!mappedView || !isDashboardView(mappedView)) {
+      announce(`Modul ${moduleTitle} belum punya halaman operasional langsung.`, "warning");
+      return;
+    }
+    setActiveView(mappedView);
+    setMobileSidebarOpen(false);
+    announce(`Membuka modul ${moduleTitle}.`, "info");
   }
 
   const isDark = theme === "dark";
@@ -1865,7 +1916,16 @@ export function DashboardClient({ initialUser }: { initialUser: DashboardUser })
                 onStartTour={openTour}
               />
             ) : activeView === "wa" ? (
-              <WhatsAppView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} recentWa={recentWa} setPanelMessage={announce} requestConfirm={requestConfirm} />
+              <WhatsAppView
+                panelClass={panelClass}
+                innerClass={innerClass}
+                mutedClass={mutedClass}
+                recentWa={recentWa}
+                queue={queue}
+                reload={loadDashboard}
+                setPanelMessage={announce}
+                requestConfirm={requestConfirm}
+              />
             ) : activeView === "agents" ? (
               <AgentsView panelClass={panelClass} innerClass={innerClass} mutedClass={mutedClass} queue={queue} recentAgentRuns={recentAgentRuns} setPanelMessage={announce} />
             ) : activeView === "laporan" ? (
@@ -2821,6 +2881,47 @@ function DetailDrawer({
         </div>
         <div className="mt-5 grid gap-4">{children}</div>
       </aside>
+    </div>
+  );
+}
+
+function DetailModal({
+  title,
+  eyebrow,
+  children,
+  panelClass,
+  innerClass,
+  mutedClass,
+  onClose,
+}: ViewClassProps & {
+  title: string;
+  eyebrow: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="lb-modal-layer fixed inset-0 z-50 grid place-items-center bg-[#081014]/65 px-4 py-6 backdrop-blur-sm">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Tutup detail" onClick={onClose} />
+      <article className={`relative max-h-[88dvh] w-full max-w-[820px] overflow-y-auto rounded-[20px] border p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] ${panelClass}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">{eyebrow}</p>
+            <h2 className="mt-2 text-2xl font-black">{title}</h2>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+              Detail dibuka hanya saat operator perlu memeriksa alasan, bukti, caveat, dan aksi.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`shrink-0 rounded-[10px] border p-2 focus-visible:lb-focus ${innerClass}`}
+            aria-label="Tutup detail"
+          >
+            <X size={17} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">{children}</div>
+      </article>
     </div>
   );
 }
@@ -4692,9 +4793,9 @@ function LumbungDataView({
               <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-sm font-black text-[#D79A2B]">Tambah input operasional</p>
+                    <p className="text-sm font-black text-[#D79A2B]">Catat input baru</p>
                     <p className={`mt-1 max-w-2xl text-xs font-semibold leading-5 ${mutedClass}`}>
-                      Gunakan ini saat juri bertanya data masuk dari mana. Input disimpan lewat API WA intake, lalu muncul sebagai case antrean untuk diverifikasi dan dijalankan agent.
+                      Untuk percakapan lapangan yang masuk di luar WA bot. Catatan disimpan sebagai case, muncul di antrean verifikasi, lalu bisa diteruskan ke modul dan Agent Center.
                     </p>
                   </div>
                   <StatusBadge tone="service">Membuat case nyata</StatusBadge>
@@ -5444,7 +5545,7 @@ function GeraiPintarView({
       return;
     }
     await reload();
-    setPanelMessage(`${item.name}: restock masuk ke rencana operasional.`, "success");
+    setPanelMessage(`${item.name}: restock masuk ke rencana operasional dan Agent Center.`, "success");
   }
 
   function exportSupplierOrder() {
@@ -5945,7 +6046,7 @@ function PasarMitraView({
   setPanelMessage: (message: string, tone?: ToastTone) => void;
   requestConfirm: (config: ConfirmConfig) => void;
 }) {
-  const [selectedBuyerId, setSelectedBuyerId] = useState(buyers[0]?.id ?? "");
+  const [selectedBuyerId, setSelectedBuyerId] = useState("");
   const selected = buyers.find((item) => item.id === selectedBuyerId) ?? buyers[0];
   const selectedRequirement = selected
     ? buyerRequirements.find((item) => item.productName.toLowerCase() === selected.need.toLowerCase())
@@ -5964,7 +6065,7 @@ function PasarMitraView({
       return;
     }
     await reload();
-    setPanelMessage(`${buyer.buyer}: kesiapan tersimpan di catatan operasional.`, "success");
+    setPanelMessage(`${buyer.buyer}: kesiapan tersimpan dan Agent Center diperbarui.`, "success");
   }
 
   async function createBuyerScript(buyer: BuyerMatch) {
@@ -6045,7 +6146,7 @@ function PasarMitraView({
           type="button"
           onClick={() => setSelectedBuyerId(buyer.id)}
           className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${
-            selected?.id === buyer.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+            selectedBuyerId === buyer.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
           }`}
         >
           Detail
@@ -6103,7 +6204,7 @@ function PasarMitraView({
   ];
 
   return (
-    <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+    <section className="grid gap-5">
       <div className="grid gap-5">
         <ManagedTablePanel
           panelClass={panelClass}
@@ -6122,7 +6223,7 @@ function PasarMitraView({
           emptyBody="Kecocokan akan muncul setelah syarat buyer dan stok punya kesiapan yang cukup."
           pageSize={5}
           tableMinWidth={980}
-          rowClassName={(buyer) => (selected?.id === buyer.id ? "bg-[#D79A2B]/10" : "")}
+          rowClassName={(buyer) => (selectedBuyerId === buyer.id ? "bg-[#D79A2B]/10" : "")}
         />
 
         <ManagedTablePanel
@@ -6158,65 +6259,68 @@ function PasarMitraView({
         />
       </div>
 
-      <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        {selected ? (
-          <>
-            <p className="text-sm font-black text-[#D79A2B]">Detail kesiapan tipe buyer</p>
-            <h3 className="mt-2 text-3xl font-black">{selected.buyer}</h3>
-            <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
-                <p className="text-sm font-black">Alasan kecocokan</p>
-              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{selected.reason}</p>
-              <p className="mt-4 text-sm font-black">Status: {selected.status}</p>
-              <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(selected)}</p>
+      {selectedBuyerId && selected ? (
+        <DetailModal
+          title={selected.buyer}
+          eyebrow="Detail kesiapan tipe buyer"
+          panelClass={panelClass}
+          innerClass={innerClass}
+          mutedClass={mutedClass}
+          onClose={() => setSelectedBuyerId("")}
+        >
+          <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+            <p className="text-sm font-black">Alasan kecocokan</p>
+            <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>{selected.reason}</p>
+            <p className="mt-4 text-sm font-black">Status: {selected.status}</p>
+            <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>{buyerEvidenceLabel(selected)}</p>
+          </div>
+          {selectedRequirement ? (
+            <div className={`rounded-[14px] border p-4 ${innerClass}`}>
+              <p className="text-sm font-black">Syarat operasional</p>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
+                {formatInteger(selectedRequirement.requiredQuantity)} {selectedRequirement.unitLabel} - {selectedRequirement.qualitySpec}
+              </p>
+              <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>
+                {selectedRequirement.packagingSpec}. Target: {selectedRequirement.targetWindow}.
+              </p>
+              <p className="mt-3 text-xs font-black text-[#D79A2B]">{selectedRequirement.sourceLabel}</p>
+              {requirementEvidence.length > 0 ? (
+                <div className="mt-3 grid gap-2">
+                  {requirementEvidence.map((item) => (
+                    <div key={item.id} className="rounded-[10px] bg-black/5 p-3">
+                      <p className="text-xs font-black">{item.redactedLabel}</p>
+                      <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.caption}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            {selectedRequirement ? (
-              <div className={`mt-4 rounded-[14px] border p-4 ${innerClass}`}>
-                <p className="text-sm font-black">Syarat operasional</p>
-                <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-                  {formatInteger(selectedRequirement.requiredQuantity)} {selectedRequirement.unitLabel} - {selectedRequirement.qualitySpec}
-                </p>
-                <p className={`mt-2 text-xs font-bold leading-5 ${mutedClass}`}>
-                  {selectedRequirement.packagingSpec}. Target: {selectedRequirement.targetWindow}.
-                </p>
-                <p className="mt-3 text-xs font-black text-[#D79A2B]">{selectedRequirement.sourceLabel}</p>
-                {requirementEvidence.length > 0 ? (
-                  <div className="mt-3 grid gap-2">
-                    {requirementEvidence.map((item) => (
-                      <div key={item.id} className="rounded-[10px] bg-black/5 p-3">
-                        <p className="text-xs font-black">{item.redactedLabel}</p>
-                        <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.caption}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() =>
-                  requestConfirm({
-                    title: `Setujui kesiapan ${selected.buyer}?`,
-                    message: "Status kecocokan akan ditandai siap review pengurus. Ini bukan komitmen penjualan dan bukan bukti buyer bernama.",
-                    confirmLabel: "Setujui kesiapan",
-                    onConfirm: () => approveBuyer(selected),
-                  })
-                }
-                className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
-              >
-                Setujui kesiapan
-              </button>
-              <button
-                type="button"
-                onClick={() => createBuyerScript(selected)}
-                className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
-              >
-                Buat draft kontak buyer
-              </button>
-            </div>
-          </>
-        ) : null}
-      </article>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() =>
+                requestConfirm({
+                  title: `Setujui kesiapan ${selected.buyer}?`,
+                  message: "Status kecocokan akan ditandai siap review pengurus. Ini bukan komitmen penjualan dan bukan bukti buyer bernama.",
+                  confirmLabel: "Setujui kesiapan",
+                  onConfirm: () => approveBuyer(selected),
+                })
+              }
+              className="inline-flex justify-center rounded-[12px] bg-[#2F7D32] px-4 py-3 text-sm font-extrabold text-white focus-visible:lb-focus"
+            >
+              Setujui kesiapan
+            </button>
+            <button
+              type="button"
+              onClick={() => createBuyerScript(selected)}
+              className="inline-flex justify-center rounded-[12px] border border-current/15 px-4 py-3 text-sm font-extrabold focus-visible:lb-focus"
+            >
+              Buat draft kontak buyer
+            </button>
+          </div>
+        </DetailModal>
+      ) : null}
     </section>
   );
 }
@@ -6245,7 +6349,7 @@ function SimpanPinjamView({
       return;
     }
     await reload();
-    setPanelMessage(`${request.id}: paket komite tersimpan di catatan operasional.`, "success");
+    setPanelMessage(`${request.id}: paket komite tersimpan dan Agent Center diperbarui.`, "success");
   }
 
   function exportCommitteeAgenda() {
@@ -6385,31 +6489,98 @@ function SimpanPinjamView({
   );
 }
 
+function statusBucket(status: string): "open" | "closed" | "archived" {
+  const normalized = status.toLowerCase();
+  if (/(archive|arsip)/i.test(normalized)) return "archived";
+  if (/(closed|close|selesai|disetujui|approved|done|resolved)/i.test(normalized)) return "closed";
+  return "open";
+}
+
 function WhatsAppView({
   panelClass,
   innerClass,
   mutedClass,
   recentWa,
+  queue,
+  reload,
   setPanelMessage,
   requestConfirm,
 }: ViewClassProps & {
   recentWa: RecentWaMessage[];
+  queue: QueueItem[];
+  reload: () => Promise<void>;
   setPanelMessage: (message: string, tone?: ToastTone) => void;
   requestConfirm: (config: ConfirmConfig) => void;
 }) {
   const [selectedIntentId, setSelectedIntentId] = useState(waIntents[0]?.id ?? "");
-  const [message, setMessage] = useState(waIntents[0]?.sample ?? "");
+  const [message, setMessage] = useState("");
   const [recipient, setRecipient] = useState("");
+  const [activeSender, setActiveSender] = useState("");
+  const [filter, setFilter] = useState<"open" | "closed" | "archived">("open");
+  const [attachment, setAttachment] = useState<{ name: string; type: string; payloadType: "image" | "audio" | "document" } | null>(null);
   const [waLoading, setWaLoading] = useState<"inbound" | "outbound" | "">("");
   const [personalStatus, setPersonalStatus] = useState<WaPersonalStatus | null>(null);
   const [personalLoading, setPersonalLoading] = useState(true);
-  const [conversation, setConversation] = useState([
-    {
-      from: "bot",
-      text: "Silakan pilih intent atau tulis pesan warga. Respons akan dicatat ke meja verifikasi.",
-    },
-  ]);
   const selectedIntent = waIntents.find((intent) => intent.id === selectedIntentId) ?? waIntents[0];
+  const conversations = useMemo(() => {
+    const bySender = new Map<
+      string,
+      {
+        id: string;
+        sender: string;
+        latestAt: string;
+        latestText: string;
+        module: string;
+        status: string;
+        queueId?: string;
+        messages: Array<{ id: string; from: "warga" | "bot"; text: string; createdAt: string }>;
+      }
+    >();
+
+    recentWa.forEach((item) => {
+      const matchedQueue = queue.find(
+        (candidate) =>
+          candidate.sender === item.sender &&
+          (candidate.module === item.module || item.message.includes(candidate.summary.slice(0, 40))),
+      );
+      const current =
+        bySender.get(item.sender) ??
+        {
+          id: item.sender,
+          sender: item.sender,
+          latestAt: item.createdAt,
+          latestText: item.message,
+          module: item.module,
+          status: matchedQueue?.status ?? item.status,
+          queueId: matchedQueue?.id,
+          messages: [],
+        };
+
+      current.latestAt = item.createdAt > current.latestAt ? item.createdAt : current.latestAt;
+      current.latestText = item.message;
+      current.module = item.module;
+      current.status = matchedQueue?.status ?? item.status;
+      current.queueId = matchedQueue?.id ?? current.queueId;
+      current.messages.push({ id: `${item.id}-warga`, from: "warga", text: item.message, createdAt: item.createdAt });
+      if (item.botReply) {
+        current.messages.push({ id: `${item.id}-bot`, from: "bot", text: item.botReply, createdAt: item.createdAt });
+      }
+      bySender.set(item.sender, current);
+    });
+
+    return Array.from(bySender.values())
+      .map((item) => ({
+        ...item,
+        bucket: statusBucket(item.status),
+        messages: item.messages.sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+      }))
+      .sort((left, right) => right.latestAt.localeCompare(left.latestAt));
+  }, [queue, recentWa]);
+  const filteredConversations = conversations.filter((item) => item.bucket === filter);
+  const activeConversation =
+    filteredConversations.find((item) => item.id === activeSender) ??
+    filteredConversations[0] ??
+    null;
 
   async function loadPersonalStatus() {
     try {
@@ -6436,17 +6607,61 @@ function WhatsAppView({
     setMessage(intent.sample);
   }
 
-  async function sendMessage() {
-    const trimmed = message.trim();
-    if (!trimmed) {
-      setPanelMessage("WA Center butuh isi pesan dulu sebelum diproses.", "warning");
+  function attachmentType(file: File): "image" | "audio" | "document" {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("audio/")) return "audio";
+    return "document";
+  }
+
+  function chooseAttachment(file: File | null) {
+    if (!file) return;
+    setAttachment({ name: file.name, type: file.type || "application/octet-stream", payloadType: attachmentType(file) });
+    if (!message.trim()) {
+      setMessage(`Lampiran ${file.name}`);
+    }
+  }
+
+  async function updateConversationStatus(status: string) {
+    if (!activeConversation?.queueId) {
+      setPanelMessage("Percakapan ini belum punya ID antrean untuk diubah statusnya.", "warning");
       return;
     }
+    const response = await fetch(`/api/operator-queue/${encodeURIComponent(activeConversation.queueId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Status percakapan gagal diubah."), "error");
+      return;
+    }
+    await reload();
+    setPanelMessage(`${activeConversation.queueId}: status percakapan menjadi ${status}.`, "success");
+  }
+
+  async function sendMessage() {
+    const trimmed = message.trim();
+    if (!trimmed && !attachment) {
+      setPanelMessage("Chat butuh isi pesan atau lampiran sebelum diproses.", "warning");
+      return;
+    }
+    const payloadType = attachment?.payloadType ?? "text";
+    const messageWithAttachment = attachment
+      ? [trimmed, `Lampiran web: ${attachment.name} (${attachment.type})`].filter(Boolean).join("\n")
+      : trimmed;
     setWaLoading("inbound");
     const response = await fetch("/api/wa/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: trimmed, intentId: selectedIntent?.id, sender: "Warga" }),
+      body: JSON.stringify({
+        message: messageWithAttachment,
+        intentId: selectedIntent?.id,
+        sender: activeConversation?.sender ?? "Warga web",
+        payloadType,
+        caption: trimmed,
+        clientMessageId: makeClientMessageId("web-chat"),
+      }),
     });
     const payload = await response.json().catch(() => ({}));
     setWaLoading("");
@@ -6454,14 +6669,12 @@ function WhatsAppView({
       setPanelMessage(publicSetupMessage(payload.message ?? payload.error, "Pesan gagal diproses."), "error");
       return;
     }
-    const saved = payload.message as { botReply: string; module: string; intent: string };
-    setConversation((current) => [
-      ...current,
-      { from: "warga", text: trimmed },
-      { from: "bot", text: `${saved.botReply} Modul: ${saved.module}.` },
-    ]);
-    setPanelMessage(`Pesan WA masuk ke meja verifikasi sebagai ${saved.intent}.`, "success");
+    const saved = payload.message as { sender: string; botReply: string; module: string; intent: string };
+    await reload();
+    setActiveSender(saved.sender);
+    setPanelMessage(`${saved.intent}: chat masuk dashboard dan diarahkan ke ${saved.module}.`, "success");
     setMessage("");
+    setAttachment(null);
   }
 
   async function sendOutbound() {
@@ -6485,10 +6698,7 @@ function WhatsAppView({
       return;
     }
 
-    setConversation((current) => [
-      ...current,
-      { from: "bot", text: `Pesan outbound terkirim ke ${recipient}: ${trimmed}` },
-    ]);
+    await reload();
     setPanelMessage("Pesan outbound dikirim lewat kanal WhatsApp resmi dan dicatat di meja verifikasi.", "success");
     setMessage("");
   }
@@ -6496,9 +6706,9 @@ function WhatsAppView({
   return (
     <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
-        <h2 className="text-2xl font-black">WA Center</h2>
+        <h2 className="text-2xl font-black">WA Inbox</h2>
         <p className={`mt-2 text-sm font-semibold leading-6 ${mutedClass}`}>
-          Pesan warga, foto, dan PDF masuk ke meja verifikasi. Untuk testing WA biasa, jalankan bridge personal lalu scan QR di panel ini.
+          Daftar percakapan warga dari WhatsApp bot dan input web. Auto-reply berjalan dari bridge WA; operator mengubah status dan menyiapkan follow-up dari panel ini.
         </p>
         <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
           <div className="flex items-start justify-between gap-3">
@@ -6542,46 +6752,106 @@ function WhatsAppView({
             Cek status QR
           </button>
         </div>
-        <div className="mt-5 space-y-2">
-          {waIntents.map((intent) => (
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {(["open", "closed", "archived"] as const).map((item) => (
             <button
-              key={intent.id}
+              key={item}
               type="button"
-              onClick={() => chooseIntent(intent.id)}
-              className={`w-full rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:lb-focus ${
-                selectedIntentId === intent.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+              onClick={() => setFilter(item)}
+              className={`rounded-[10px] border px-3 py-2 text-xs font-black capitalize focus-visible:lb-focus ${
+                filter === item ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
               }`}
             >
-              <p className="text-sm font-black">{intent.label}</p>
-              <p className={`mt-1 text-xs font-bold ${mutedClass}`}>{intent.module}</p>
+              {item}
             </button>
           ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          {filteredConversations.length ? (
+            filteredConversations.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveSender(item.id)}
+                className={`w-full rounded-[12px] border p-3 text-left transition focus-visible:lb-focus ${
+                  activeConversation?.id === item.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black">{item.sender}</p>
+                    <p className={`mt-1 truncate text-xs font-bold ${mutedClass}`}>{item.module}</p>
+                  </div>
+                  <StatusBadge tone={item.bucket === "open" ? "warning" : item.bucket === "closed" ? "success" : "review"}>
+                    {item.bucket}
+                  </StatusBadge>
+                </div>
+                <p className={`mt-2 line-clamp-2 text-xs font-bold leading-5 ${mutedClass}`}>{item.latestText}</p>
+              </button>
+            ))
+          ) : (
+            <div className={`rounded-[12px] border p-4 text-sm font-bold ${innerClass}`}>
+              Belum ada percakapan {filter}.
+            </div>
+          )}
         </div>
       </article>
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-xl font-black">Percakapan warga</h3>
-            <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>Intent aktif: {selectedIntent?.label}</p>
+            <h3 className="text-xl font-black">{activeConversation?.sender ?? "Percakapan baru"}</h3>
+            <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
+              {activeConversation?.queueId ? `Antrean ${activeConversation.queueId}` : "Input web baru"} - {activeConversation?.module ?? selectedIntent?.module}
+            </p>
           </div>
-          <StatusBadge tone="service">WhatsApp Business</StatusBadge>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void updateConversationStatus("Open")} className={`rounded-[10px] border px-3 py-2 text-xs font-black ${innerClass}`}>
+              Open
+            </button>
+            <button type="button" onClick={() => void updateConversationStatus("Closed")} className={`rounded-[10px] border px-3 py-2 text-xs font-black ${innerClass}`}>
+              Closed
+            </button>
+            <button type="button" onClick={() => void updateConversationStatus("Archived")} className={`rounded-[10px] border px-3 py-2 text-xs font-black ${innerClass}`}>
+              Archived
+            </button>
+          </div>
         </div>
         <div className={`mt-5 h-[390px] overflow-y-auto rounded-[16px] border p-4 ${innerClass}`}>
           <div className="space-y-3">
-            {conversation.map((chat, index) => (
-              <div
-                key={`${chat.from}-${index}`}
-                className={`max-w-[82%] rounded-[14px] px-4 py-3 text-sm font-semibold leading-6 ${
-                  chat.from === "warga"
-                    ? "ml-auto bg-[#2F7D32] text-white"
-                    : "bg-[#FFF3D8] text-[#172027]"
-                }`}
-              >
-                {chat.text}
+            {activeConversation?.messages.length ? (
+              activeConversation.messages.map((chat) => (
+                <div
+                  key={chat.id}
+                  className={`max-w-[84%] rounded-[14px] px-4 py-3 text-sm font-semibold leading-6 ${
+                    chat.from === "warga"
+                      ? "mr-auto bg-[#FFF3D8] text-[#172027]"
+                      : "ml-auto bg-[#2F7D32] text-white"
+                  }`}
+                >
+                  {chat.text}
+                </div>
+              ))
+            ) : (
+              <div className={`rounded-[14px] border p-4 text-sm font-bold ${innerClass}`}>
+                Mulai percakapan dari web atau tunggu pesan masuk dari WhatsApp.
               </div>
-            ))}
+            )}
           </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {waIntents.slice(0, 7).map((intent) => (
+            <button
+              key={intent.id}
+              type="button"
+              onClick={() => chooseIntent(intent.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-black focus-visible:lb-focus ${
+                selectedIntentId === intent.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+              }`}
+            >
+              {intent.label}
+            </button>
+          ))}
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
           <label htmlFor="wa-message" className="sr-only">Pesan WhatsApp warga</label>
@@ -6591,7 +6861,7 @@ function WhatsAppView({
             onChange={(event) => setMessage(event.target.value)}
             rows={3}
             className={`min-h-24 rounded-[14px] border px-4 py-3 text-sm font-semibold outline-none focus-visible:lb-focus ${innerClass}`}
-            placeholder="Tulis pesan warga, misalnya: Panen padi minggu depan kira-kira 5 kuintal"
+            placeholder="Tulis chat atau draft operator. Contoh: stok beras habis 20 karung, carikan pembeli kopi 1 ton."
           />
           <div className="grid gap-2">
             <label htmlFor="wa-recipient" className="sr-only">Nomor tujuan WhatsApp</label>
@@ -6602,6 +6872,23 @@ function WhatsAppView({
               className={`rounded-[12px] border px-3 py-2.5 text-sm font-semibold outline-none focus-visible:lb-focus ${innerClass}`}
               placeholder="62812..."
             />
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Gambar", accept: "image/*" },
+                { label: "Voice", accept: "audio/*" },
+                { label: "File", accept: ".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*,audio/*" },
+              ].map((item) => (
+                <label key={item.label} className={`cursor-pointer rounded-[10px] border px-2 py-2 text-center text-[11px] font-black ${innerClass}`}>
+                  {item.label}
+                  <input type="file" accept={item.accept} className="sr-only" onChange={(event) => chooseAttachment(event.target.files?.[0] ?? null)} />
+                </label>
+              ))}
+            </div>
+            {attachment ? (
+              <button type="button" onClick={() => setAttachment(null)} className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${innerClass}`}>
+                Lampiran: {attachment.name} - hapus
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={sendMessage}
@@ -6613,14 +6900,14 @@ function WhatsAppView({
               ) : (
                 <Database size={17} strokeWidth={2.2} aria-hidden="true" />
               )}
-              Catat inbound
+              Simpan chat
             </button>
             <button
               type="button"
               onClick={() =>
                 requestConfirm({
                   title: "Kirim WhatsApp live?",
-                  message: "Pesan akan dikirim ke nomor tujuan melalui kanal WhatsApp resmi bila aktivasi produksi sudah aktif.",
+                  message: "Pesan akan dikirim melalui WhatsApp Cloud API bila kanal resmi sudah aktif. Untuk WA personal testing, auto-reply berjalan dari bridge bot.",
                   confirmLabel: "Kirim resmi",
                   onConfirm: sendOutbound,
                 })
@@ -6637,19 +6924,6 @@ function WhatsAppView({
             </button>
           </div>
         </div>
-        {recentWa.length ? (
-          <div className="mt-5">
-            <p className="text-sm font-black">Riwayat intake terbaru</p>
-            <div className="mt-2 grid gap-2">
-              {recentWa.slice(0, 3).map((item) => (
-                <div key={item.id} className={`rounded-[10px] border px-3 py-2 text-xs font-bold ${innerClass}`}>
-                  <p className="font-black">{item.intent}</p>
-                  <p className={`mt-1 line-clamp-2 ${mutedClass}`}>{item.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </article>
     </section>
   );
@@ -7035,7 +7309,7 @@ function IntegrationView({
         <div className={`mt-5 rounded-[14px] border p-4 text-sm font-semibold leading-6 ${innerClass}`}>
           <p className="font-black">Panduan aktivasi produksi</p>
           <p className={`mt-2 ${mutedClass}`}>
-            Saat digunakan, tampilkan status integrasi di sini. Detail akses dan konfigurasi server dikelola operator teknis di luar UI juri.
+            Saat digunakan, tampilkan status integrasi di sini. Detail akses dan konfigurasi server dikelola operator teknis di luar halaman operasional.
           </p>
         </div>
         {error ? (

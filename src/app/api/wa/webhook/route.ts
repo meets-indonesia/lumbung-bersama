@@ -3,9 +3,9 @@ import {
   describeCommodityProfiles,
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
-import { formatFormalWaReply } from "@/lib/formal-replies";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 import {
+  buildWaOperationalReply,
   buildWaAgentDraft,
   displayTextForPayload,
   ensureOperatorQueueForWaMessage,
@@ -240,17 +240,12 @@ export async function POST(request: Request) {
     });
     const commodityProfiles = await findCommodityProfilesForMessage(text, cooperative.province).catch(() => []);
     const commodityDetails = describeCommodityProfiles(commodityProfiles);
-    const reply = formatFormalWaReply({
-      summary: intent.bot,
-      details: [
-        `Modul tujuan: ${draft.module}.`,
-        `Source: ${draft.source}. Confidence: ${draft.confidence}.`,
-        `Caveat: ${draft.caveat}`,
-        `Status review: ${draft.humanReviewStatus}`,
-        draft.mediaStatus,
-        ...commodityDetails,
-      ],
-      nextSteps: draft.nextSteps,
+    const preliminaryReply = buildWaOperationalReply({
+      intent,
+      draft,
+      message: text,
+      payloadType,
+      commodityDetails,
     });
 
     const inserted = await queryOne<WaMessageRow>(
@@ -273,7 +268,7 @@ export async function POST(request: Request) {
         text,
         intent.label,
         draft.module,
-        reply,
+        preliminaryReply,
         payloadType === "text"
           ? "Masuk webhook; menunggu verifikasi operator"
           : "Masuk webhook; media belum diproses otomatis dan perlu operator",
@@ -292,6 +287,15 @@ export async function POST(request: Request) {
         module: inserted.module,
         status: draft.queueStatus,
       });
+      const reply = buildWaOperationalReply({
+        intent,
+        draft,
+        message: inserted.message,
+        payloadType,
+        queueId: queue?.id ?? inserted.id,
+        commodityDetails,
+      });
+      await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, inserted.id]);
       if (queue) queued += 1;
       if (payloadType !== "text") mediaQueued += 1;
     }

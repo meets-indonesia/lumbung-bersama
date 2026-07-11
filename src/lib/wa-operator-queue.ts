@@ -256,9 +256,9 @@ export const WA_AGENT_INTENTS: WaAgentIntent[] = [
     "price-check",
     "Tanya harga",
     "harga cabai sekarang berapa?",
-    "Cek harga dibuat sebagai draft. Jika sumber harga tidak tersedia, operator wajib memasukkan rujukan harga lokal.",
+    "Jawaban harga dibuat dengan caveat sumber. Jika feed harga belum tersedia, sistem tidak mengarang angka dan meminta rujukan lokal.",
     "Market Price Check & Negotiation Agent",
-    ["harga", "berapa", "price", "cabai", "tawar"],
+    ["harga", "berapa", "price", "cabai", "tawar", "sawit", "tbs", "cpo", "beras", "kopi", "padi", "jagung"],
     ["Cek sumber harga resmi atau terkurasi.", "Jika kosong, minta input operator.", "Cantumkan freshness, confidence, dan caveat."],
   ),
   intent(
@@ -294,7 +294,7 @@ export const WA_AGENT_INTENTS: WaAgentIntent[] = [
     "carikan pembeli kopi grade A",
     "Buyer matching dibuat sebagai archetype atau market proxy. Sistem tidak membuat nama buyer palsu.",
     "Buyer Matching Lite",
-    ["pembeli", "buyer", "offtaker", "carikan", "grade"],
+    ["pembeli", "buyer", "offtaker", "carikan", "grade", "jual", "menjual", "mau jual", "ingin jual"],
     ["Tentukan buyer archetype.", "Cek readiness volume, kualitas, dan packaging.", "Outreach hanya setelah approval operator."],
   ),
   intent(
@@ -321,7 +321,7 @@ export const WA_AGENT_INTENTS: WaAgentIntent[] = [
     "ajukan pinjaman pupuk 1 juta",
     "Draft pengajuan pembiayaan dibuat. AI tidak menyetujui atau menolak pinjaman otomatis.",
     "Simpan Pinjam / Financing Readiness",
-    ["pinjaman", "ajukan", "pupuk", "modal", "pembiayaan"],
+    ["pinjam", "pinjaman", "ajukan", "pupuk", "modal", "pembiayaan"],
     ["Kumpulkan tujuan pinjaman dan nominal.", "Cek dokumen yang kurang.", "Pengurus memberi keputusan setelah review."],
   ),
   intent(
@@ -487,6 +487,103 @@ export function displayTextForPayload(payloadType: WaPayloadType, message: strin
   if (payloadType === "document") return "[dokumen WhatsApp - perlu review operator]";
   if (payloadType === "unknown") return "[payload WhatsApp belum dikenali - perlu review operator]";
   return "";
+}
+
+export function quickWaActionsText() {
+  return [
+    "",
+    "Aksi cepat tersedia di tombol. Jika tombol tidak muncul, balas: menu, puas, atau tidak.",
+  ].join("\n");
+}
+
+function extractCommodityName(message: string) {
+  const normalized = normalizeIntentText(message);
+  const known = ["sawit", "tbs", "cpo", "kopi", "beras", "padi", "cabai", "singkong", "jagung", "rumput laut", "kakao", "lada", "sagu"];
+  return known.find((item) => normalized.includes(item)) ?? "komoditas ini";
+}
+
+function queueLine(queueId?: string | null) {
+  return queueId ? `Nomor antrean: ${queueId}` : "Nomor antrean akan muncul setelah pesan tersimpan di dashboard.";
+}
+
+export function buildWaOperationalReply({
+  intent,
+  draft,
+  message,
+  payloadType = "text",
+  queueId,
+  mediaSummary,
+  commodityDetails = [],
+}: {
+  intent: WaAgentIntent;
+  draft?: WaAgentDraft;
+  message: string;
+  payloadType?: WaPayloadType;
+  queueId?: string | null;
+  mediaSummary?: string | null;
+  commodityDetails?: string[];
+}) {
+  const normalized = normalizeIntentText(message);
+  const commodityName = extractCommodityName(message);
+  const moduleName = draft?.module ?? intent.module;
+  const lines: string[] = [];
+
+  if (normalized === "puas") {
+    return "Terima kasih. Saya catat layanan ini sudah cukup. Ketik MENU jika ingin membuka agent lain.";
+  }
+
+  if (normalized === "tidak" || normalized === "tidak puas") {
+    return [
+      "Baik, saya teruskan sebagai perlu tindak lanjut operator.",
+      queueLine(queueId),
+      "Mohon tulis koreksi atau data tambahan yang perlu dicek.",
+      quickWaActionsText(),
+    ].join("\n");
+  }
+
+  if (payloadType !== "text") {
+    lines.push("File diterima. Saya coba baca sebagai bukti pendukung dan mencatatnya ke dashboard operator.");
+    lines.push(mediaSummary ? `Hasil baca awal: ${mediaSummary}` : draft?.mediaStatus ?? mediaStatusForPayload(payloadType));
+    lines.push("Operator tetap mengecek hasil OCR/PDF sebelum data dikunci.");
+  } else if (intent.module === "Market Price Check & Negotiation Agent") {
+    lines.push("Jawaban harga: feed harga real-time belum tersambung di runtime WA ini, jadi saya tidak akan mengarang angka.");
+    lines.push(`Untuk ${commodityName}, cek harga perlu rujukan lokal/resmi hari ini sebelum dipakai untuk nego.`);
+    lines.push("Kirim kabupaten/lokasi, tanggal harga, kualitas/grade, volume, satuan, dan ongkos angkut agar operator bisa mengisi harga referensi dan batas bawah nego.");
+  } else if (intent.module === "Gerai / Stock Readiness" || intent.module === "Stock Logistics / Pickup") {
+    lines.push("Jawaban stok: laporan stok/panen sudah saya catat sebagai open case.");
+    lines.push("Kirim komoditas, jumlah, satuan, lokasi gudang/pickup, tanggal siap, dan foto bila ada agar status stok bisa dikunci.");
+  } else if (intent.module === "Buyer Matching Lite") {
+    lines.push(`Jawaban buyer: saya bisa bantu siapkan buyer archetype untuk ${commodityName}, tetapi tidak membuat nama buyer palsu.`);
+    lines.push("Kesiapan minimal: volume tersedia, grade/kualitas, kemasan, harga indikatif, lokasi pickup, dan approval pengurus sebelum outreach.");
+  } else if (intent.module === "Simpan Pinjam / Financing Readiness" || intent.module === "Borrower Risk & Fraud Analysis") {
+    lines.push("Jawaban pembiayaan: pengajuan masuk sebagai readiness, bukan persetujuan otomatis.");
+    lines.push("Yang dicek: tujuan pinjaman, nominal, rencana bayar, bukti usaha/panen, dan kelengkapan dokumen sebelum komite mengambil keputusan.");
+  } else if (intent.module === "Peta Unggulan / Komoditas Unggulan" || intent.module === "Opportunity Score" || intent.module === "UMKM/Potensi Lokal intake") {
+    lines.push(`Jawaban potensi: ${commodityName} bisa menjadi peluang awal bila ada bukti pasokan, kapasitas koperasi/gudang, dan kanal serap.`);
+    lines.push("Kirim desa/kecamatan, volume, musim panen, dan bukti pasokan agar analisis wilayah lebih tajam.");
+  } else if (intent.module === "Laporan Aksi") {
+    lines.push("Jawaban laporan: saya catat kebutuhan ini sebagai bahan laporan aksi.");
+    lines.push("Laporan akan memuat ringkasan, evidence/source, gap verifikasi, buyer/stock/readiness, dan keputusan yang masih pending.");
+  } else if (intent.module === "Integrasi / System Health") {
+    lines.push("Jawaban integrasi: status koneksi perlu dicek dari halaman Integrasi atau health check runtime.");
+    lines.push("Saya tidak akan mengklaim kanal siap produksi bila env/token belum lengkap.");
+  } else {
+    lines.push(intent.bot);
+  }
+
+  lines.push(queueLine(queueId));
+  lines.push(`Modul dashboard: ${moduleName}`);
+
+  if (commodityDetails.length) {
+    lines.push("Sinyal komoditas:");
+    lines.push(...commodityDetails.slice(0, 3));
+  }
+
+  lines.push(`Ringkasan masuk: ${message.slice(0, SUMMARY_LIMIT)}`);
+  lines.push("Catatan: pertanyaan informatif dijawab langsung dengan caveat; pembiayaan, negosiasi final, dan perubahan data penting tetap butuh review operator.");
+  lines.push(quickWaActionsText());
+
+  return lines.join("\n");
 }
 
 export function queueStatusForPayload(payloadType: WaPayloadType) {

@@ -1,5 +1,5 @@
 import { requireAuthenticatedRequest, requireRole } from "@/lib/auth";
-import { dbRequiredResponse, isDatabaseConfigured, queryOne } from "@/lib/postgres";
+import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -78,6 +78,23 @@ export async function POST(request: Request, context: RouteContext) {
   if (!stock) {
     return Response.json({ error: "STOCK_NOT_FOUND" }, { status: 404 });
   }
+
+  await queryOne(
+    `INSERT INTO agent_runs (id, cooperative_id, agent_name, record_id, status, output, checks, explanation, next_action)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+     RETURNING id`,
+    [
+      newId("agent"),
+      cooperativeId,
+      "Agen Stok dan Gudang",
+      id,
+      "restock-request-created",
+      `${id}: restock diajukan dan ledger stok diperbarui dari aksi gerai.`,
+      JSON.stringify(["Minimum stok", "Supplier atau gudang asal", "Kuantitas restock", "Jadwal pickup", "Bukti penerimaan"]),
+      "Restock dicatat dari tombol Gerai Pintar dan disimpan sebagai jejak Agent Center.",
+      "Petugas gerai mengisi jumlah restock, supplier/gudang asal, dan jadwal penerimaan sebelum stok dikunci.",
+    ],
+  ).catch(() => null);
 
   return Response.json({ stock });
 }

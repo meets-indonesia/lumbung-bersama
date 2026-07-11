@@ -110,7 +110,7 @@ function configuredLoginAccounts() {
   const adminCooperativeId = process.env.ADMIN_COOPERATIVE_ID?.trim() || "kop-wanasari";
   const juryEmail = process.env.JURY_EMAIL?.trim().toLowerCase();
   const juryPasswordHash = process.env.JURY_PASSWORD_HASH?.trim();
-  const juryName = process.env.JURY_NAME?.trim() || "Juri Penilai";
+  const juryName = process.env.JURY_NAME?.trim() || "Viewer Audit";
   const juryCooperativeId = process.env.JURY_COOPERATIVE_ID?.trim() || adminCooperativeId;
 
   const accounts: ConfiguredLoginAccount[] = [];
@@ -135,7 +135,7 @@ function configuredLoginAccounts() {
       passwordHash: juryPasswordHash,
       fullName: juryName,
       role: "admin",
-      title: "Admin juri",
+      title: "Operator tamu",
     });
   }
 

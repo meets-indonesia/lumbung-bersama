@@ -224,7 +224,7 @@ export default function Home() {
                 Satu alur, bukan kumpulan fitur terpisah.
               </h2>
               <p className="mt-6 max-w-xl text-base font-semibold leading-8 text-[#53606A]">
-                Alur MVP sengaja pendek agar juri melihat masalah, bukti,
+                Alur MVP sengaja pendek agar pengguna melihat masalah, bukti,
                 rekomendasi, kesiapan operasional, dan keputusan pengurus dalam
                 satu narasi.
               </p>

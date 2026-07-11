@@ -1,5 +1,5 @@
 import { requireAuthenticatedRequest, requireRole } from "@/lib/auth";
-import { dbRequiredResponse, isDatabaseConfigured, queryOne } from "@/lib/postgres";
+import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 
 export const runtime = "nodejs";
 
@@ -38,6 +38,23 @@ export async function POST(request: Request, context: RouteContext) {
   if (!financeRequest) {
     return Response.json({ error: "FINANCE_REQUEST_NOT_FOUND" }, { status: 404 });
   }
+
+  await queryOne(
+    `INSERT INTO agent_runs (id, cooperative_id, agent_name, record_id, status, output, checks, explanation, next_action)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+     RETURNING id`,
+    [
+      newId("agent"),
+      cooperativeId,
+      "Agen Pembiayaan Readiness",
+      id,
+      "finance-readiness-reviewed",
+      `${id}: paket komite siap direview. Ini readiness dokumen dan rencana bayar, bukan persetujuan pinjaman otomatis.`,
+      JSON.stringify(["Tujuan pinjaman", "Nominal", "Rencana bayar", "Bukti usaha/panen", "Keputusan komite manual"]),
+      "Review pembiayaan dicatat dari aksi dashboard dan disimpan sebagai jejak Agent Center.",
+      "Komite koperasi mengecek dokumen, cashflow, dan otorisasi sebelum keputusan final.",
+    ],
+  ).catch(() => null);
 
   return Response.json({ request: financeRequest });
 }

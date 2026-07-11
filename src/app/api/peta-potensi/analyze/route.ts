@@ -17,6 +17,62 @@ type AnalyzeRequest = {
 
 const layerIds = new Set<string>(petaLayers.map((layer) => layer.id));
 
+function compactText(value: string | null | undefined, fallback: string) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  return normalized || fallback;
+}
+
+function buildAnalysisCards(input: {
+  areaName: string;
+  commodityName: string;
+  sourceLabel: string;
+  supply: string;
+  demand: string;
+  quantity: string;
+  priceSignal: string;
+  risk: string;
+  score: number;
+  firstActions: string[];
+}) {
+  return [
+    {
+      label: "Peluang inti",
+      value: `${input.commodityName} layak masuk prioritas awal di ${input.areaName}.`,
+      detail: `Skor ${input.score}/100 dibaca dari potensi komoditas, kesiapan sumber, dan sinyal operasional yang tersedia.`,
+    },
+    {
+      label: "Bukti sumber",
+      value: input.sourceLabel,
+      detail: `${compactText(input.supply, "Pasokan belum lengkap")} | ${compactText(input.demand, "Demand belum lengkap")} | ${compactText(input.quantity, "Volume perlu validasi")}.`,
+    },
+    {
+      label: "Harga dan nego",
+      value: compactText(input.priceSignal, "Harga perlu rujukan lokal hari ini"),
+      detail: "Jangan pakai angka nego sebelum ada lokasi, grade, satuan, volume, dan ongkos angkut.",
+    },
+    {
+      label: "Risiko lapangan",
+      value: compactText(input.risk, "Risiko belum cukup data"),
+      detail: "Risiko diperlakukan sebagai caveat verifikasi, bukan label gagal.",
+    },
+    {
+      label: "Langkah terdekat",
+      value: input.firstActions[0] ?? "Minta data bukti dari warga/operator.",
+      detail: input.firstActions.slice(1, 4).join(" "),
+    },
+  ];
+}
+
+function buildValidationQuestions(commodityName: string, areaName: string) {
+  return [
+    `Di desa/kecamatan mana stok ${commodityName.toLowerCase()} siap dikumpulkan?`,
+    "Berapa volume, satuan lokal, grade/kualitas, dan tanggal siap pickup?",
+    "Ada foto barang, bukti timbang, nota, atau kontak petugas lapangan?",
+    `Apakah ${areaName} punya gudang, titik kumpul, atau rute pickup yang sudah disetujui?`,
+    "Harga rujukan hari ini berasal dari sumber mana dan berlaku untuk grade apa?",
+  ];
+}
+
 async function getSharedEvidenceContext() {
   const sharedEvidence = await getHackathonDashboardEvidence(true).catch(() => null);
   const sharedProductRows = sharedEvidence?.tables.productRows ?? [];
@@ -194,6 +250,19 @@ export async function POST(request: Request) {
             .filter(Boolean)
             .slice(0, 4)
         : firstActions;
+      const analysisCards = buildAnalysisCards({
+        areaName: area.name,
+        commodityName: areaProfile.commodity,
+        sourceLabel: areaProfile.sourceName || areaProfile.sourceId,
+        supply: areaProfile.basis,
+        demand: `Rank #${areaProfile.rank} sektor ${areaProfile.sector}`,
+        quantity: "Volume belum terkunci; butuh stok WA/operator.",
+        priceSignal: areaProfile.confidence,
+        risk: commodity.risk,
+        score,
+        firstActions: providerActions,
+      });
+      const validationQuestions = buildValidationQuestions(areaProfile.commodity, area.name);
 
       return NextResponse.json({
         mode: provider.used ? provider.mode : `${provider.mode}-peta-area-profile`,
@@ -224,6 +293,8 @@ export async function POST(request: Request) {
           risk: commodity.risk,
           waScript,
           evidenceNotes,
+          analysisCards,
+          validationQuestions,
         },
         sharedEvidence: sharedEvidenceContext.responsePayload,
       });
@@ -338,6 +409,20 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .slice(0, 4)
     : firstActions;
+  const finalScore = Math.min(score, 95);
+  const analysisCards = buildAnalysisCards({
+    areaName: village.name,
+    commodityName: commodity.name,
+    sourceLabel: "Peta Unggulan operational map data",
+    supply: commodity.supply,
+    demand: commodity.demand,
+    quantity: commodity.quantity,
+    priceSignal: commodity.priceSignal,
+    risk: commodity.risk,
+    score: finalScore,
+    firstActions: providerActions,
+  });
+  const validationQuestions = buildValidationQuestions(commodity.name, village.name);
 
   return NextResponse.json({
     mode: provider.used ? provider.mode : `${provider.mode}-peta-rules`,
@@ -358,7 +443,7 @@ export async function POST(request: Request) {
     commodity,
     selectedLayers,
     visibleAssets: visibleAssets.length,
-    score: Math.min(score, 95),
+    score: finalScore,
     confidence: provider.used ? `AI provider ${provider.providerLabel} + data peta` : "source-labeled operational data",
     opportunity: {
       title: commodity.opportunity,
@@ -367,6 +452,8 @@ export async function POST(request: Request) {
       risk: commodity.risk,
       waScript,
       evidenceNotes,
+      analysisCards,
+      validationQuestions,
     },
     sharedEvidence: sharedEvidenceContext.responsePayload,
   });

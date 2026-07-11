@@ -73,6 +73,8 @@ type OpportunityAnalysis = {
     risk: string;
     waScript: string;
     evidenceNotes?: string[];
+    analysisCards?: Array<{ label: string; value: string; detail: string }>;
+    validationQuestions?: string[];
   };
   provider?: {
     configured: boolean;
@@ -1266,18 +1268,58 @@ export function PetaUnggulanClient() {
                     <p className="mt-2 text-[#858B8D]">{providerModeLabel}</p>
                   ) : null}
                   {analysisResult?.opportunity ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="font-medium text-[#F4D7A2]">{analysisResult.opportunity.title}</p>
-                      <p>{analysisResult.opportunity.whyNow}</p>
-                      <ul className="list-disc space-y-1 pl-4">
-                        {analysisResult.opportunity.firstActions.slice(0, 3).map((action) => (
-                          <li key={action}>{action}</li>
+                    <div className="mt-3 space-y-3">
+                      <div className="rounded-[12px] border border-[#D79A2B]/30 bg-[#D79A2B]/10 p-3">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#F4D7A2]">Rekomendasi</p>
+                        <p className="mt-1 text-sm font-semibold text-[#F4F0E8]">{analysisResult.opportunity.title}</p>
+                      </div>
+                      {analysisResult.opportunity.analysisCards?.length ? (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {analysisResult.opportunity.analysisCards.slice(0, 6).map((card) => (
+                            <div key={card.label} className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
+                              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#F4D7A2]">{card.label}</p>
+                              <p className="mt-2 text-sm font-semibold leading-5 text-[#F4F0E8]">{card.value}</p>
+                              <p className="mt-2 text-xs leading-5 text-[#AEB4B5]">{card.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          ["Alasan", analysisResult.opportunity.whyNow],
+                          ["Risiko", analysisResult.opportunity.risk || analysisResult.commodity?.risk || "Risiko belum cukup data; butuh verifikasi operator."],
+                          ["Script WA", analysisResult.opportunity.waScript],
+                        ].map(([label, value]) => (
+                          <div key={label} className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#858B8D]">{label}</p>
+                            <p className="mt-2 text-xs leading-5 text-[#D2D6D6]">{value}</p>
+                          </div>
                         ))}
-                      </ul>
+                        <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#858B8D]">Aksi pertama</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-[#D2D6D6]">
+                            {analysisResult.opportunity.firstActions.slice(0, 4).map((action) => (
+                              <li key={action}>{action}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      {analysisResult.opportunity.validationQuestions?.length ? (
+                        <div className="rounded-[12px] border border-[#D79A2B]/25 bg-[#D79A2B]/10 p-3">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#F4D7A2]">Pertanyaan lanjutan untuk WA/operator</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-[#D2D6D6]">
+                            {analysisResult.opportunity.validationQuestions.slice(0, 5).map((question) => (
+                              <li key={question}>{question}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       {analysisResult.opportunity.evidenceNotes?.length ? (
-                        <div className="rounded-[10px] border border-white/10 bg-white/[0.045] p-2 text-[#858B8D]">
-                          {analysisResult.opportunity.evidenceNotes.slice(0, 2).map((note) => (
-                            <p key={note}>{note}</p>
+                        <div className="grid gap-2">
+                          {analysisResult.opportunity.evidenceNotes.slice(0, 4).map((note) => (
+                            <div key={note} className="rounded-[10px] border border-white/10 bg-black/20 p-2 text-[#858B8D]">
+                              {note}
+                            </div>
                           ))}
                         </div>
                       ) : null}

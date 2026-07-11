@@ -43,7 +43,7 @@ const agentRouter = [
     module: "Peta Unggulan / Komoditas Unggulan",
     keywords: ["peta", "potensi", "desa", "wilayah", "komoditas unggulan", "unggulan desa", "umkm"],
     prompt: "Tanyakan potensi wilayah, komoditas unggulan, atau UMKM lokal.",
-    bot: "Saya arahkan ke Agen Peta Potensi Desa. Saya akan bantu susun ringkasan potensi, komoditas, sumber, dan data yang perlu diverifikasi.",
+    bot: "Agen Peta Potensi Desa siap menyusun ringkasan potensi, komoditas, sumber, dan data yang perlu diverifikasi.",
   },
   {
     id: "2",
@@ -51,15 +51,15 @@ const agentRouter = [
     module: "Gerai / Stock Readiness",
     keywords: ["stok", "gerai", "gudang", "habis", "restock", "barang masuk", "barang keluar", "panen", "kg", "kilo", "ton", "karung"],
     prompt: "Tanyakan stok, panen, barang masuk, barang keluar, restock, atau kapasitas gudang.",
-    bot: "Saya arahkan ke Agen Stok dan Gudang. Data akan masuk antrean operator untuk cek volume, satuan, bukti, dan kesiapan stok.",
+    bot: "Agen Stok dan Gudang siap mencatat volume, satuan, bukti, dan kesiapan stok.",
   },
   {
     id: "3",
     name: "Agen Buyer Matching",
     module: "Buyer Matching Lite",
-    keywords: ["buyer", "pembeli", "mitra", "offtaker", "order", "pesanan", "carikan", "kontak", "outreach", "negosiasi"],
+    keywords: ["buyer", "pembeli", "mitra", "offtaker", "order", "pesanan", "carikan", "kontak", "outreach", "negosiasi", "jual", "menjual", "mau jual", "ingin jual"],
     prompt: "Tanyakan calon pembeli, script outreach, atau kesiapan produk untuk buyer.",
-    bot: "Saya arahkan ke Agen Buyer Matching. Saya bantu buat draft kebutuhan buyer dan next action; kontak buyer tetap harus disetujui operator.",
+    bot: "Agen Buyer Matching siap membuat buyer archetype, draft kebutuhan, dan next action tanpa membuat nama buyer palsu.",
   },
   {
     id: "4",
@@ -67,7 +67,7 @@ const agentRouter = [
     module: "Market Price Check & Negotiation Agent",
     keywords: ["harga", "berapa", "price", "nego", "tawar", "margin", "floor price", "cabai", "beras", "kopi", "sawit", "tbs", "cpo"],
     prompt: "Tanyakan harga, risiko harga, atau bahan negosiasi.",
-    bot: "Saya arahkan ke Agen Harga dan Negosiasi. Jawaban akan memakai sinyal yang tersedia dan menandai caveat bila sumber harga belum lengkap.",
+    bot: "Agen Harga dan Negosiasi siap memberi jawaban dengan caveat sumber dan tidak mengarang angka bila feed harga belum lengkap.",
   },
   {
     id: "5",
@@ -75,7 +75,7 @@ const agentRouter = [
     module: "Simpan Pinjam / Financing Readiness",
     keywords: ["pinjam", "pinjaman", "pembiayaan", "modal", "angsuran", "kredit", "komite", "bayar", "cicil", "pupuk", "benih"],
     prompt: "Tanyakan draft pinjaman, tujuan pembiayaan, dokumen, atau kesiapan review komite.",
-    bot: "Saya arahkan ke Agen Pembiayaan Readiness. Ini hanya readiness dan checklist, bukan persetujuan otomatis.",
+    bot: "Agen Pembiayaan Readiness siap membuat checklist kesiapan; ini bukan persetujuan otomatis.",
   },
   {
     id: "6",
@@ -102,7 +102,7 @@ const agentRouter = [
       "revisi",
     ],
     prompt: "Kirim foto, PDF, nota, bukti timbang, atau koreksi data untuk diverifikasi.",
-    bot: "Saya arahkan ke Agen Bukti dan Dokumen. File akan dibaca otomatis jika memungkinkan dan tetap masuk review operator.",
+    bot: "Agen Bukti dan Dokumen siap membaca file bila memungkinkan dan mencatat hasil awal untuk review operator.",
   },
   {
     id: "7",
@@ -110,7 +110,7 @@ const agentRouter = [
     module: "Laporan Aksi",
     keywords: ["laporan", "ringkasan", "rapat", "export", "csv", "aksi", "keputusan", "rekomendasi"],
     prompt: "Tanyakan ringkasan laporan, data kurang, atau keputusan aksi koperasi.",
-    bot: "Saya arahkan ke Agen Laporan Aksi. Saya bantu susun executive summary, bukti, gap, dan keputusan yang masih pending.",
+    bot: "Agen Laporan Aksi siap menyusun executive summary, bukti, gap, dan keputusan yang masih pending.",
   },
 ];
 
@@ -179,10 +179,7 @@ function buildUnknownReply() {
 function quickActions() {
   return [
     "",
-    "Tombol cepat:",
-    "[MENU] kembali ke daftar agent",
-    "[PUAS] jawaban cukup",
-    "[TIDAK] minta operator cek manual",
+    "Aksi cepat tersedia di tombol. Jika tombol tidak muncul, balas: menu, puas, atau tidak.",
   ].join("\n");
 }
 
@@ -206,7 +203,7 @@ function extractCommodityName(text) {
   return known.find((item) => normalized.includes(item)) ?? "komoditas ini";
 }
 
-function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }) {
+function buildOperationalAnswer({ agent, queueId, mediaNote, messageText }) {
   const normalized = normalizeRouterText(messageText);
   const commodityName = extractCommodityName(messageText);
 
@@ -488,7 +485,16 @@ async function extractImageOcr(buffer) {
 }
 
 async function extractMessage(message, downloadContentFromMessage, providerMessageId) {
+  const buttonText =
+    message.buttonsResponseMessage?.selectedButtonId ||
+    message.buttonsResponseMessage?.selectedDisplayText ||
+    message.templateButtonReplyMessage?.selectedId ||
+    message.templateButtonReplyMessage?.selectedDisplayText ||
+    message.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    message.listResponseMessage?.title ||
+    "";
   const text =
+    buttonText ||
     message.conversation ||
     message.extendedTextMessage?.text ||
     message.imageMessage?.caption ||
@@ -659,6 +665,32 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
   return { waMessageId: row.id, queueId, module: row.module, reply };
 }
 
+function quickReplyButtons() {
+  return [
+    { buttonId: "menu", buttonText: { displayText: "Menu agent" }, type: 1 },
+    { buttonId: "puas", buttonText: { displayText: "Jawaban cukup" }, type: 1 },
+    { buttonId: "tidak", buttonText: { displayText: "Perlu operator" }, type: 1 },
+  ];
+}
+
+async function sendReply(sock, remoteJid, reply, quoted) {
+  try {
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text: reply,
+        footer: "Kopdes Lumbung Bersama",
+        buttons: quickReplyButtons(),
+        headerType: 1,
+      },
+      { quoted },
+    );
+  } catch (error) {
+    console.warn(`Tombol WA tidak tersedia, fallback teks: ${error instanceof Error ? error.message : "unknown error"}`);
+    await sock.sendMessage(remoteJid, { text: reply }, { quoted });
+  }
+}
+
 async function main() {
   const baileys = await import("@whiskeysockets/baileys");
   const makeWASocket = baileys.default;
@@ -720,7 +752,7 @@ async function main() {
           mediaSize: extracted.mediaSize,
         });
         if (remoteJid && result.reply) {
-          await sock.sendMessage(remoteJid, { text: result.reply }, { quoted: item });
+          await sendReply(sock, remoteJid, result.reply, item);
         }
         console.log(`Pesan masuk dicatat: ${result.queueId} -> ${result.module}`);
       } catch (error) {

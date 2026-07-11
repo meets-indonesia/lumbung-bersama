@@ -98,6 +98,48 @@ function buildCaseDataBasis(caseContext: AgentCaseContext | null, coverageBasis:
   ].join("; ");
 }
 
+function buildFollowUpQuestions(agentName: string, summary: string) {
+  const normalized = summary.toLowerCase();
+  const hasQuantity = /\d|kg|kilo|ton|karung|kuintal|liter|ikat|bak/i.test(normalized);
+  const hasLocation = /desa|dusun|kecamatan|kabupaten|lokasi|di\s+[a-z]+/i.test(normalized);
+  const hasCommodity = /(sawit|tbs|cpo|kopi|beras|padi|cabai|singkong|jagung|kakao|lada|sagu|pisang|rumput laut)/i.test(normalized);
+  const hasAmount = /rp|rupiah|juta|ribu|\d/i.test(normalized);
+  const hasPurpose = /(pupuk|benih|modal|alat|panen|usaha|bibit|stok|produksi)/i.test(normalized);
+
+  if (agentName === "Agen Pasar dan Mitra") {
+    return [
+      hasCommodity ? "" : "Komoditas/produk apa yang ingin dijual?",
+      hasLocation ? "" : "Lokasi desa/kecamatan dan titik pickup di mana?",
+      hasQuantity ? "" : "Berapa volume, satuan lokal, grade/kualitas, dan tanggal siap?",
+      "Apakah ada foto barang, bukti timbang, dan harga indikatif?",
+    ].filter(Boolean);
+  }
+
+  if (agentName === "Agen Pembiayaan Readiness") {
+    return [
+      hasAmount ? "" : "Berapa nominal pembiayaan yang diminta?",
+      hasPurpose ? "" : "Tujuan pembiayaan untuk apa dan terkait usaha/komoditas apa?",
+      "Kapan rencana bayar, sumber pembayaran, dan bukti usaha/panen yang tersedia?",
+      "Apakah pengajuan ini dari anggota yang sudah terverifikasi pengurus?",
+    ].filter(Boolean);
+  }
+
+  if (agentName === "Agen Stok dan Gudang") {
+    return [
+      hasCommodity ? "" : "Barang/komoditas apa yang stoknya dilaporkan?",
+      hasQuantity ? "" : "Jumlah dan satuan stok berapa?",
+      hasLocation ? "" : "Lokasi gerai/gudang/pickup di mana?",
+      "Kapan stok siap dicek dan apakah ada foto/bukti timbang?",
+    ].filter(Boolean);
+  }
+
+  return [
+    hasLocation ? "" : "Wilayah/desa mana yang perlu dianalisis?",
+    hasCommodity ? "" : "Komoditas/produk apa yang menjadi fokus?",
+    hasQuantity ? "" : "Apakah ada volume, bukti pasokan, atau tanggal siap?",
+  ].filter(Boolean);
+}
+
 function buildCaseBackedOutput({
   agentName,
   defaultOutput,
@@ -119,16 +161,18 @@ function buildCaseBackedOutput({
   const commodityLead = commodityDetails.length
     ? ` Sinyal komoditas: ${commodityDetails.slice(0, 3).join("; ")}.`
     : "";
+  const followUps = buildFollowUpQuestions(agentName, caseContext.summary);
+  const followUpLine = followUps.length ? ` Pertanyaan lanjutan: ${followUps.join(" ")}` : "";
 
   if (agentName === "Agen Pasar dan Mitra") {
-    return `${caseLead}. Buyer matching lite perlu memakai modul ${caseContext.module}, status ${caseContext.status}, dan approval pengurus.${commodityLead}`;
+    return `${caseLead}. Buyer matching lite perlu memakai modul ${caseContext.module}, status ${caseContext.status}, dan approval pengurus.${commodityLead}${followUpLine}`;
   }
 
   if (agentName === "Agen Laporan") {
-    return `${caseLead}. Masukkan ke laporan aksi sebagai item ${caseContext.status} dengan sumber ${caseContext.source}.${commodityLead}`;
+    return `${caseLead}. Masukkan ke laporan aksi sebagai item ${caseContext.status} dengan sumber ${caseContext.source}.${commodityLead}${followUpLine}`;
   }
 
-  return `${caseLead}. Rekomendasi awal harus menjelaskan prioritas komoditas, readiness koperasi, dan bukti operator.${commodityLead}`;
+  return `${caseLead}. Rekomendasi awal harus menjelaskan prioritas komoditas, readiness koperasi, dan bukti operator.${commodityLead}${followUpLine}`;
 }
 
 function buildNextAction(agentName: string, caseContext: AgentCaseContext | null) {

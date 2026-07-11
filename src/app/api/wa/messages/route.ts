@@ -4,8 +4,8 @@ import {
   describeCommodityProfiles,
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
-import { formatFormalWaReply } from "@/lib/formal-replies";
 import {
+  buildWaOperationalReply,
   buildWaAgentDraft,
   displayTextForPayload,
   ensureOperatorQueueForWaMessage,
@@ -109,17 +109,12 @@ export async function POST(request: Request) {
     : "Draft tersimpan; pengiriman live menunggu env WhatsApp";
   const commodityProfiles = await findCommodityProfilesForMessage(message, cooperative.province).catch(() => []);
   const commodityDetails = describeCommodityProfiles(commodityProfiles);
-  const botReply = formatFormalWaReply({
-    summary: selected.bot,
-    details: [
-      `Modul tujuan: ${draft.module}.`,
-      `Source: ${draft.source}. Confidence: ${draft.confidence}.`,
-      `Caveat: ${draft.caveat}`,
-      `Status review: ${draft.humanReviewStatus}`,
-      draft.mediaStatus,
-      ...commodityDetails,
-    ],
-    nextSteps: draft.nextSteps,
+  const preliminaryBotReply = buildWaOperationalReply({
+    intent: selected,
+    draft,
+    message,
+    payloadType,
+    commodityDetails,
   });
 
   const sender = normalizeWaDisplayName(body.sender) ?? "Warga";
@@ -142,15 +137,15 @@ export async function POST(request: Request) {
     [
       newId("wa"),
       cooperative.id,
-      providerMessageId,
-      sender,
-      message,
-      selected.label,
-      draft.module,
-      botReply,
-      status,
-    ],
-  );
+       providerMessageId,
+       sender,
+       message,
+       selected.label,
+       draft.module,
+      preliminaryBotReply,
+       status,
+     ],
+   );
 
   if (!row) {
     return Response.json({ error: "WA_MESSAGE_NOT_SAVED" }, { status: 500 });
@@ -168,8 +163,33 @@ export async function POST(request: Request) {
     status: draft.queueStatus,
   });
 
+  const botReply = buildWaOperationalReply({
+    intent: selected,
+    draft,
+    message,
+    payloadType,
+    queueId: queue?.id ?? row.id,
+    commodityDetails,
+  });
+  const finalRow = await queryOne<WaMessageRow>(
+    `UPDATE wa_messages
+     SET bot_reply = $1
+     WHERE id = $2
+     RETURNING id,
+       cooperative_id AS "cooperativeId",
+       provider_message_id AS "providerMessageId",
+       sender,
+       message,
+       intent,
+       module,
+       bot_reply AS "botReply",
+       status,
+       created_at AS "createdAt"`,
+    [botReply, row.id],
+  );
+
   return Response.json({
-    message: row,
+    message: finalRow ?? { ...row, botReply },
     queue,
     setup,
     agent: {

@@ -21,7 +21,7 @@ export type RoleOwner =
   | "kasir"
   | "kurir"
   | "operator_wa"
-  | "juri_viewer";
+  | "audit_viewer";
 
 export type Provenance = {
   sourceFamily:
@@ -218,7 +218,7 @@ const signalFamilies: SignalFamily[] = [
     status: "future_connector",
     sourceLabel: "cross-role public-sector signal map",
     caveat: "This can only become a facilitator/dinas report view after official access rules are clear.",
-    ownerRole: "juri_viewer",
+    ownerRole: "audit_viewer",
     usedFor: ["facilitator-report-mode", "connector-scorecard", "roadmap"],
     provenance: provenance("static_route_audit", "pendamping,dinas,kementerian,survey", "manager", "low"),
   },
@@ -367,7 +367,7 @@ const rolePermissionMatrix = [
   { role: "Kasir", ownerRole: "kasir", canView: true, canCorrect: true, canApprove: false, canExecute: true, boundary: "Supplies aggregate POS demand signal without customer detail." },
   { role: "Kurir", ownerRole: "kurir", canView: true, canCorrect: false, canApprove: false, canExecute: true, boundary: "Updates fulfillment stage without exposing recipient detail publicly." },
   { role: "Operator WA", ownerRole: "operator_wa", canView: true, canCorrect: true, canApprove: false, canExecute: true, boundary: "Receives evidence and creates drafts; no automatic external action." },
-  { role: "Juri/Viewer demo", ownerRole: "juri_viewer", canView: true, canCorrect: false, canApprove: false, canExecute: false, boundary: "Read-only aggregate demo view." },
+  { role: "Viewer audit", ownerRole: "audit_viewer", canView: true, canCorrect: false, canApprove: false, canExecute: false, boundary: "Read-only aggregate view." },
 ] as const;
 
 const remediationPlanner: RemediationTask[] = [
