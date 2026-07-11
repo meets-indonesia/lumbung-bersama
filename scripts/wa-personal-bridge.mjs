@@ -138,7 +138,8 @@ function menuText() {
     "Selamat datang di Kopdes Lumbung Bersama.",
     "Saya bisa bantu cek potensi desa, stok, harga, buyer, pembiayaan, dokumen, dan laporan aksi koperasi.",
     "",
-    "Ketik langsung kebutuhan Anda, atau pilih angka:",
+    "Pilih agent dari tombol/list di bawah, atau langsung tulis kebutuhan Anda.",
+    "Jika tombol belum muncul di WhatsApp Anda, balas angka 1-7:",
     "1. Peta potensi desa",
     "2. Stok dan gudang",
     "3. Buyer matching",
@@ -195,6 +196,57 @@ function shouldShowMenu(text, payloadType) {
   if (payloadType !== "text") return false;
   const normalized = normalizeRouterText(text);
   return !normalized || welcomeTriggers.has(normalized);
+}
+
+function unwrapMessageContent(message) {
+  let current = message;
+  for (let index = 0; index < 5; index += 1) {
+    const next =
+      current?.ephemeralMessage?.message ||
+      current?.viewOnceMessage?.message ||
+      current?.viewOnceMessageV2?.message ||
+      current?.viewOnceMessageV2Extension?.message ||
+      current?.documentWithCaptionMessage?.message;
+    if (!next) break;
+    current = next;
+  }
+  return current || message;
+}
+
+function parseJsonObject(value) {
+  if (!value || typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function nativeFlowResponseText(message) {
+  const response = message.interactiveResponseMessage;
+  const parsed = parseJsonObject(response?.nativeFlowResponseMessage?.paramsJson);
+  const nested =
+    parseJsonObject(parsed?.response_json) ||
+    parseJsonObject(parsed?.responseJson) ||
+    parseJsonObject(parsed?.paramsJson) ||
+    parsed;
+  const candidates = [
+    nested?.id,
+    nested?.button_id,
+    nested?.buttonId,
+    nested?.selected_id,
+    nested?.selectedId,
+    nested?.selected_row_id,
+    nested?.selectedRowId,
+    nested?.row_id,
+    nested?.rowId,
+    nested?.title,
+    nested?.display_text,
+    nested?.displayText,
+    response?.body?.text,
+  ];
+  return candidates.find((candidate) => typeof candidate === "string" && candidate.trim())?.trim() || "";
 }
 
 function aiConfig() {
@@ -925,22 +977,24 @@ async function extractImageOcr(buffer) {
 }
 
 async function extractMessage(message, downloadContentFromMessage, providerMessageId) {
+  const content = unwrapMessageContent(message);
   const buttonText =
-    message.buttonsResponseMessage?.selectedButtonId ||
-    message.buttonsResponseMessage?.selectedDisplayText ||
-    message.templateButtonReplyMessage?.selectedId ||
-    message.templateButtonReplyMessage?.selectedDisplayText ||
-    message.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    message.listResponseMessage?.title ||
+    content.buttonsResponseMessage?.selectedButtonId ||
+    content.buttonsResponseMessage?.selectedDisplayText ||
+    content.templateButtonReplyMessage?.selectedId ||
+    content.templateButtonReplyMessage?.selectedDisplayText ||
+    content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    content.listResponseMessage?.title ||
+    nativeFlowResponseText(content) ||
     "";
   const text =
     buttonText ||
-    message.conversation ||
-    message.extendedTextMessage?.text ||
-    message.imageMessage?.caption ||
-    message.documentMessage?.caption ||
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.documentMessage?.caption ||
     "";
-  const media = mediaKind(message);
+  const media = mediaKind(content);
   if (!media) {
     return {
       payloadType: "text",
@@ -1546,7 +1600,71 @@ function quickReplyButtons() {
   ];
 }
 
-async function sendReply(sock, remoteJid, reply, quoted) {
+function nativeFlowButton(name, params) {
+  return {
+    name,
+    buttonParamsJson: JSON.stringify(params),
+  };
+}
+
+function quickActionButtons() {
+  return [
+    nativeFlowButton("single_select", {
+      title: "Pilih agent",
+      sections: [
+        {
+          title: "Agent Kopdes",
+          rows: agentRouter.map((agent) => ({
+            id: agent.id,
+            title: agent.name.replace(/^Agen\s+/i, "").slice(0, 24),
+            description: agent.prompt.slice(0, 72),
+          })),
+        },
+      ],
+    }),
+    nativeFlowButton("quick_reply", { display_text: "Selesai", id: "puas" }),
+    nativeFlowButton("quick_reply", { display_text: "Operator", id: "operator" }),
+  ];
+}
+
+async function sendNativeReply(sock, remoteJid, reply, quoted, helpers) {
+  const userJid = helpers.userJid();
+  if (!userJid) throw new Error("WA user id belum siap");
+  const interactiveMessage = helpers.proto.Message.InteractiveMessage.create({
+    body: helpers.proto.Message.InteractiveMessage.Body.create({ text: reply }),
+    footer: helpers.proto.Message.InteractiveMessage.Footer.create({ text: "Kopdes Lumbung Bersama" }),
+    header: helpers.proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
+    nativeFlowMessage: helpers.proto.Message.InteractiveMessage.NativeFlowMessage.create({
+      buttons: quickActionButtons(),
+      messageVersion: 1,
+      messageParamsJson: JSON.stringify({ source: "lumbung-bersama-wa-personal" }),
+    }),
+  });
+  const message = helpers.generateWAMessageFromContent(
+    remoteJid,
+    {
+      viewOnceMessage: {
+        message: {
+          messageContextInfo: {
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2,
+          },
+          interactiveMessage,
+        },
+      },
+    },
+    { userJid, quoted },
+  );
+  await sock.relayMessage(remoteJid, message.message, { messageId: message.key.id });
+}
+
+async function sendReply(sock, remoteJid, reply, quoted, helpers) {
+  try {
+    await sendNativeReply(sock, remoteJid, reply, quoted, helpers);
+    return;
+  } catch (error) {
+    console.warn(`Native WA buttons tidak tersedia, coba button klasik: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
   try {
     await sock.sendMessage(
       remoteJid,
@@ -1567,7 +1685,13 @@ async function sendReply(sock, remoteJid, reply, quoted) {
 async function main() {
   const baileys = await import("@whiskeysockets/baileys");
   const makeWASocket = baileys.default;
-  const { DisconnectReason, downloadContentFromMessage, useMultiFileAuthState: getMultiFileAuthState } = baileys;
+  const {
+    DisconnectReason,
+    downloadContentFromMessage,
+    generateWAMessageFromContent,
+    proto,
+    useMultiFileAuthState: getMultiFileAuthState,
+  } = baileys;
   const { state, saveCreds } = await getMultiFileAuthState(authDir);
 
   const sock = makeWASocket({
@@ -1625,7 +1749,11 @@ async function main() {
           mediaSize: extracted.mediaSize,
         });
         if (remoteJid && result.reply) {
-          await sendReply(sock, remoteJid, result.reply, item);
+          await sendReply(sock, remoteJid, result.reply, item, {
+            generateWAMessageFromContent,
+            proto,
+            userJid: () => sock.user?.id || state.creds.me?.id || "",
+          });
         }
         console.log(`Pesan masuk dicatat: ${result.queueId} -> ${result.module}`);
       } catch (error) {
