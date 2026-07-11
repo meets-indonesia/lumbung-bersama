@@ -43,6 +43,13 @@ export type WaAgentDraft = {
   nextSteps: string[];
 };
 
+export type WaReviewPolicy = {
+  shouldQueue: boolean;
+  queueStatus: string;
+  mode: "auto-answer" | "manual-review";
+  slaText?: string;
+};
+
 type OperatorQueueRow = QueryResultRow & {
   id: string;
   cooperativeId: string;
@@ -492,18 +499,146 @@ export function displayTextForPayload(payloadType: WaPayloadType, message: strin
 export function quickWaActionsText() {
   return [
     "",
-    "Aksi cepat tersedia di tombol. Jika tombol tidak muncul, balas: menu, puas, atau tidak.",
+    "Gunakan tombol cepat bila muncul. Jika tidak muncul, balas: menu, operator, puas, atau tidak.",
   ].join("\n");
 }
 
 function extractCommodityName(message: string) {
   const normalized = normalizeIntentText(message);
   const known = ["sawit", "tbs", "cpo", "kopi", "beras", "padi", "cabai", "singkong", "jagung", "rumput laut", "kakao", "lada", "sagu"];
-  return known.find((item) => normalized.includes(item)) ?? "komoditas ini";
+  const found = known.find((item) => normalized.includes(item));
+  if (found === "tbs" || found === "cpo") return "sawit/TBS";
+  return found ?? "komoditas ini";
+}
+
+function extractAreaHint(message: string) {
+  const normalized = message.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/\b(?:di|daerah|kabupaten|kecamatan|desa)\s+([A-Za-zÀ-ÖØ-öø-ÿ\s.-]{3,40})/i);
+  return match?.[1]?.trim().replace(/[?.!,;:].*$/, "") || "";
 }
 
 function queueLine(queueId?: string | null) {
-  return queueId ? `Nomor antrean: ${queueId}` : "Nomor antrean akan muncul setelah pesan tersimpan di dashboard.";
+  return queueId ? `Nomor antrean: ${queueId}` : "Riwayat chat tersimpan di WA Inbox. Tidak dibuat antrean operator karena skenario ini dijawab otomatis.";
+}
+
+function formatReplySections(sections: Array<{ title?: string; lines: Array<string | null | undefined> }>) {
+  return sections
+    .map((section) => {
+      const lines = section.lines.map((line) => String(line ?? "").trim()).filter(Boolean);
+      if (!lines.length) return "";
+      return [section.title, ...lines].filter(Boolean).join("\n");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function closingLine(closed = false) {
+  return closed
+    ? "Terima kasih. Percakapan saya tutup sebagai selesai. Ketik menu bila nanti membutuhkan bantuan lagi."
+    : "Ada lagi yang bisa saya bantu?";
+}
+
+function hasManualKeyword(message: string) {
+  const normalized = normalizeIntentText(message);
+  return /\b(pinjam|pinjaman|pembiayaan|modal|komite|jual|menjual|mau jual|buyer|pembeli|offtaker|outreach|nego|negosiasi|tawar|deal|approval|setuju|koreksi|ubah|revisi|salah|hapus|restock|habis|kosong|pickup|jemput|jadwal|barang masuk|barang keluar|export|csv|operator)\b/i.test(normalized);
+}
+
+export function getWaReviewPolicy(intent: WaAgentIntent, payloadType: WaPayloadType, message: string): WaReviewPolicy {
+  const normalized = normalizeIntentText(message);
+
+  if (normalized === "puas" || normalized === "tidak" || normalized === "tidak puas" || normalized === "menu") {
+    return {
+      shouldQueue: false,
+      queueStatus: "Dijawab otomatis",
+      mode: "auto-answer",
+    };
+  }
+
+  if (normalized === "operator" || normalized === "panggil operator") {
+    return {
+      shouldQueue: true,
+      queueStatus: "Menunggu operator 24 jam",
+      mode: "manual-review",
+      slaText: "Operator akan menindaklanjuti maksimal 24 jam kerja.",
+    };
+  }
+
+  if (payloadType !== "text") {
+    return {
+      shouldQueue: true,
+      queueStatus: "Perlu review dokumen/media 24 jam",
+      mode: "manual-review",
+      slaText: "Operator akan mengecek bukti dan menindaklanjuti maksimal 24 jam kerja.",
+    };
+  }
+
+  const manualIntentIds = new Set([
+    "citizen-report",
+    "note-status",
+    "data-correction",
+    "media-evidence",
+    "stock-out-alert",
+    "pickup-schedule",
+    "warehouse-capacity",
+    "stock-movement",
+    "buyer-search",
+    "buyer-script",
+    "deal-update",
+    "loan-request",
+    "loan-status",
+    "loan-purpose",
+    "repayment-plan",
+    "weekly-report",
+    "missing-data",
+    "export-request",
+    "wa-test-send",
+  ]);
+
+  if (manualIntentIds.has(intent.id) || hasManualKeyword(message)) {
+    const queueStatus =
+      intent.module === "Simpan Pinjam / Financing Readiness" || intent.module === "Borrower Risk & Fraud Analysis"
+        ? "Menunggu review pembiayaan 24 jam"
+        : intent.module === "Buyer Matching Lite" || intent.module === "Market Price Check & Negotiation Agent"
+          ? "Menunggu approval komersial 24 jam"
+          : "Menunggu tindak lanjut operator 24 jam";
+    return {
+      shouldQueue: true,
+      queueStatus,
+      mode: "manual-review",
+      slaText: "Operator akan menindaklanjuti maksimal 24 jam kerja.",
+    };
+  }
+
+  return {
+    shouldQueue: false,
+    queueStatus: "Dijawab otomatis",
+    mode: "auto-answer",
+  };
+}
+
+function priceGuidanceForCommodity(commodityName: string, areaHint: string, commodityDetails: string[]) {
+  const normalized = normalizeIntentText(commodityName);
+  const unit =
+    normalized.includes("sawit") || normalized.includes("tbs")
+      ? "Rp/kg TBS"
+      : normalized.includes("beras") || normalized.includes("padi")
+        ? "Rp/kg atau Rp/karung sesuai jenis beras/gabah"
+        : normalized.includes("cabai")
+          ? "Rp/kg sesuai varietas dan pasar"
+          : normalized.includes("kopi")
+            ? "Rp/kg sesuai green bean/cherry/grade"
+            : "satuan lokal sesuai komoditas";
+  const areaText = areaHint ? `untuk area ${areaHint}` : "karena area belum disebut";
+  const context = commodityDetails.length
+    ? `Sinyal wilayah yang tersedia: ${commodityDetails.slice(0, 2).join("; ")}.`
+    : "Sinyal komoditas dari database aplikasi belum menemukan area spesifik untuk pesan ini.";
+
+  return [
+    `Harga ${commodityName} tidak punya satu angka nasional; ${areaText}, harga harus dibaca per wilayah, grade, volume, dan ongkos angkut.`,
+    `Format cek yang dipakai koperasi: ${unit}; sumber rujukan perlu berasal dari harga resmi/kurasi lokal hari ini atau input operator lapangan.`,
+    context,
+    "Untuk negosiasi awal, jangan kunci harga sebelum ada: kabupaten/kecamatan, grade/kualitas, volume, satuan, lokasi pickup, dan biaya angkut.",
+  ];
 }
 
 export function buildWaOperationalReply({
@@ -525,69 +660,82 @@ export function buildWaOperationalReply({
 }) {
   const normalized = normalizeIntentText(message);
   const commodityName = extractCommodityName(message);
+  const areaHint = extractAreaHint(message);
   const moduleName = draft?.module ?? intent.module;
-  const lines: string[] = [];
+  const reviewPolicy = getWaReviewPolicy(intent, payloadType, message);
 
   if (normalized === "puas") {
-    return "Terima kasih. Saya catat layanan ini sudah cukup. Ketik MENU jika ingin membuka agent lain.";
+    return closingLine(true);
   }
 
   if (normalized === "tidak" || normalized === "tidak puas") {
-    return [
-      "Baik, saya teruskan sebagai perlu tindak lanjut operator.",
-      queueLine(queueId),
-      "Mohon tulis koreksi atau data tambahan yang perlu dicek.",
-      quickWaActionsText(),
-    ].join("\n");
+    return closingLine(true);
   }
 
+  const answerLines: string[] = [];
   if (payloadType !== "text") {
-    lines.push("File diterima. Saya coba baca sebagai bukti pendukung dan mencatatnya ke dashboard operator.");
-    lines.push(mediaSummary ? `Hasil baca awal: ${mediaSummary}` : draft?.mediaStatus ?? mediaStatusForPayload(payloadType));
-    lines.push("Operator tetap mengecek hasil OCR/PDF sebelum data dikunci.");
+    answerLines.push("File diterima dan saya simpan sebagai bukti pendukung.");
+    answerLines.push(mediaSummary ? `Hasil baca awal: ${mediaSummary}` : draft?.mediaStatus ?? mediaStatusForPayload(payloadType));
+    answerLines.push("Hasil baca otomatis dipisahkan dari keputusan operasional agar tidak tercampur dengan rekomendasi agent.");
   } else if (intent.module === "Market Price Check & Negotiation Agent") {
-    lines.push("Jawaban harga: feed harga real-time belum tersambung di runtime WA ini, jadi saya tidak akan mengarang angka.");
-    lines.push(`Untuk ${commodityName}, cek harga perlu rujukan lokal/resmi hari ini sebelum dipakai untuk nego.`);
-    lines.push("Kirim kabupaten/lokasi, tanggal harga, kualitas/grade, volume, satuan, dan ongkos angkut agar operator bisa mengisi harga referensi dan batas bawah nego.");
+    answerLines.push(...priceGuidanceForCommodity(commodityName, areaHint, commodityDetails));
+    if (reviewPolicy.shouldQueue) {
+      answerLines.push("Karena pesan ini mengarah ke negosiasi/jual-beli, saya buat antrean approval komersial.");
+    }
   } else if (intent.module === "Gerai / Stock Readiness" || intent.module === "Stock Logistics / Pickup") {
-    lines.push("Jawaban stok: laporan stok/panen sudah saya catat sebagai open case.");
-    lines.push("Kirim komoditas, jumlah, satuan, lokasi gudang/pickup, tanggal siap, dan foto bila ada agar status stok bisa dikunci.");
+    answerLines.push("Saya cek konteks stok dari pesan ini.");
+    answerLines.push("Jika ini hanya pertanyaan stok, riwayatnya disimpan. Jika ada stok habis, restock, barang masuk/keluar, atau pickup, kasus masuk tindak lanjut operator.");
+    answerLines.push("Data minimal: komoditas, jumlah, satuan, lokasi gerai/gudang, tanggal siap, dan bukti bila ada.");
   } else if (intent.module === "Buyer Matching Lite") {
-    lines.push(`Jawaban buyer: saya bisa bantu siapkan buyer archetype untuk ${commodityName}, tetapi tidak membuat nama buyer palsu.`);
-    lines.push("Kesiapan minimal: volume tersedia, grade/kualitas, kemasan, harga indikatif, lokasi pickup, dan approval pengurus sebelum outreach.");
+    answerLines.push(`Untuk menjual ${commodityName}, alur yang aman adalah cek harga dulu, lalu buyer matching setelah volume dan kualitas jelas.`);
+    answerLines.push("Saya tidak membuat nama buyer palsu. Buyer hanya berupa tipe kebutuhan/archetype sampai pengurus menyetujui outreach.");
+    answerLines.push("Kirim volume, grade, lokasi pickup, foto barang, dan harga indikatif agar case bisa dinilai.");
   } else if (intent.module === "Simpan Pinjam / Financing Readiness" || intent.module === "Borrower Risk & Fraud Analysis") {
-    lines.push("Jawaban pembiayaan: pengajuan masuk sebagai readiness, bukan persetujuan otomatis.");
-    lines.push("Yang dicek: tujuan pinjaman, nominal, rencana bayar, bukti usaha/panen, dan kelengkapan dokumen sebelum komite mengambil keputusan.");
+    answerLines.push("Pembiayaan masuk sebagai readiness, bukan persetujuan otomatis.");
+    answerLines.push("Yang harus dilengkapi: nominal, tujuan, rencana bayar, sumber pembayaran, bukti usaha/panen, dan status anggota terverifikasi.");
+    answerLines.push("Jika nominal/tujuan/rencana bayar tidak masuk akal atau data sangat kurang, sistem menandai belum layak masuk review komite sampai data diperbaiki.");
   } else if (intent.module === "Peta Unggulan / Komoditas Unggulan" || intent.module === "Opportunity Score" || intent.module === "UMKM/Potensi Lokal intake") {
-    lines.push(`Jawaban potensi: ${commodityName} bisa menjadi peluang awal bila ada bukti pasokan, kapasitas koperasi/gudang, dan kanal serap.`);
-    lines.push("Kirim desa/kecamatan, volume, musim panen, dan bukti pasokan agar analisis wilayah lebih tajam.");
+    answerLines.push(`Potensi ${commodityName} dinilai dari pasokan, aset koperasi/gudang, sinyal buyer, dan risiko harga.`);
+    if (commodityDetails.length) answerLines.push(`Sinyal database: ${commodityDetails.slice(0, 3).join("; ")}.`);
+    answerLines.push("Agar analisis wilayah tajam, kirim desa/kecamatan, volume, musim panen, grade/kualitas, dan bukti pasokan.");
   } else if (intent.module === "Laporan Aksi") {
-    lines.push("Jawaban laporan: saya catat kebutuhan ini sebagai bahan laporan aksi.");
-    lines.push("Laporan akan memuat ringkasan, evidence/source, gap verifikasi, buyer/stock/readiness, dan keputusan yang masih pending.");
+    answerLines.push("Saya siapkan kebutuhan ini sebagai bahan laporan aksi.");
+    answerLines.push("Isi laporan: ringkasan, evidence/source, gap verifikasi, buyer action, stock/readiness gap, dan status keputusan.");
   } else if (intent.module === "Integrasi / System Health") {
-    lines.push("Jawaban integrasi: status koneksi perlu dicek dari halaman Integrasi atau health check runtime.");
-    lines.push("Saya tidak akan mengklaim kanal siap produksi bila env/token belum lengkap.");
+    answerLines.push("Status koneksi dicek dari halaman Integrasi dan health runtime.");
+    answerLines.push("Jika kanal belum aktif, sistem menampilkan status apa adanya dan tidak mengklaim koneksi live.");
   } else {
-    lines.push(intent.bot);
+    answerLines.push(intent.bot);
   }
 
-  lines.push(queueLine(queueId));
-  lines.push(`Modul dashboard: ${moduleName}`);
-
-  if (commodityDetails.length) {
-    lines.push("Sinyal komoditas:");
-    lines.push(...commodityDetails.slice(0, 3));
-  }
-
-  lines.push(`Ringkasan masuk: ${message.slice(0, SUMMARY_LIMIT)}`);
-  lines.push("Catatan: pertanyaan informatif dijawab langsung dengan caveat; pembiayaan, negosiasi final, dan perubahan data penting tetap butuh review operator.");
-  lines.push(quickWaActionsText());
-
-  return lines.join("\n");
+  return formatReplySections([
+    { title: intent.label, lines: answerLines },
+    {
+      title: "Status",
+      lines: [
+        queueLine(reviewPolicy.shouldQueue ? queueId : null),
+        `Modul dashboard: ${moduleName}`,
+        reviewPolicy.slaText,
+      ],
+    },
+    {
+      title: "Ringkasan masuk",
+      lines: [message.slice(0, SUMMARY_LIMIT)],
+    },
+    {
+      title: "Catatan",
+      lines: [
+        "Pertanyaan informatif dijawab otomatis dengan caveat. Pembiayaan, negosiasi final, outreach buyer, koreksi data, dan bukti media tetap butuh review operator.",
+        closingLine(false),
+        quickWaActionsText(),
+      ],
+    },
+  ]);
 }
 
-export function queueStatusForPayload(payloadType: WaPayloadType) {
-  return payloadType === "text" ? DEFAULT_QUEUE_STATUS : "Perlu Operator: Media Belum Diproses";
+export function queueStatusForPayload(payloadType: WaPayloadType, intent?: WaAgentIntent, message = "") {
+  if (intent) return getWaReviewPolicy(intent, payloadType, message).queueStatus;
+  return payloadType === "text" ? DEFAULT_QUEUE_STATUS : "Perlu review dokumen/media 24 jam";
 }
 
 export function queueSourceForPayload(payloadType: WaPayloadType, sourcePrefix = "Local WA") {
@@ -602,9 +750,11 @@ export function buildWaAgentDraft(input: {
   intent: WaAgentIntent;
   payloadType?: WaPayloadType;
   source?: string;
+  message?: string;
 }): WaAgentDraft {
   const payloadType = input.payloadType ?? "text";
   const hasMedia = payloadType !== "text";
+  const reviewPolicy = getWaReviewPolicy(input.intent, payloadType, input.message ?? "");
 
   return {
     intentId: input.intent.id,
@@ -618,7 +768,7 @@ export function buildWaAgentDraft(input: {
     humanReviewStatus:
       "Human review required: AI hanya membuat draft, queue, script, summary, checklist, dan next action.",
     mediaStatus: mediaStatusForPayload(payloadType),
-    queueStatus: queueStatusForPayload(payloadType),
+    queueStatus: reviewPolicy.queueStatus,
     nextSteps: input.intent.nextSteps,
   };
 }

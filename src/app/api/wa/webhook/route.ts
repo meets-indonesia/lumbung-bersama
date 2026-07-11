@@ -10,6 +10,7 @@ import {
   displayTextForPayload,
   ensureOperatorQueueForWaMessage,
   fallbackIntentForPayload,
+  getWaReviewPolicy,
   normalizeWaPayloadType,
   queueSourceForPayload,
   selectWaAgentIntent,
@@ -237,7 +238,9 @@ export async function POST(request: Request) {
       intent,
       payloadType,
       source: queueSourceForPayload(payloadType, "WhatsApp webhook"),
+      message: text,
     });
+    const reviewPolicy = getWaReviewPolicy(intent, payloadType, text);
     const commodityProfiles = await findCommodityProfilesForMessage(text, cooperative.province).catch(() => []);
     const commodityDetails = describeCommodityProfiles(commodityProfiles);
     const preliminaryReply = buildWaOperationalReply({
@@ -269,30 +272,32 @@ export async function POST(request: Request) {
         intent.label,
         draft.module,
         preliminaryReply,
-        payloadType === "text"
-          ? "Masuk webhook; menunggu verifikasi operator"
-          : "Masuk webhook; media belum diproses otomatis dan perlu operator",
+        reviewPolicy.shouldQueue
+          ? "Masuk webhook; menunggu tindak lanjut operator"
+          : "Dijawab otomatis; riwayat tersimpan di WA Inbox",
       ],
     );
     if (inserted) {
       stored += 1;
-      const queue = await ensureOperatorQueueForWaMessage({
-        queryOne,
-        waMessageId: inserted.id,
-        providerMessageId: inserted.providerMessageId,
-        cooperativeId: inserted.cooperativeId,
-        sender: inserted.sender,
-        source: draft.source,
-        message: inserted.message,
-        module: inserted.module,
-        status: draft.queueStatus,
-      });
+      const queue = reviewPolicy.shouldQueue
+        ? await ensureOperatorQueueForWaMessage({
+            queryOne,
+            waMessageId: inserted.id,
+            providerMessageId: inserted.providerMessageId,
+            cooperativeId: inserted.cooperativeId,
+            sender: inserted.sender,
+            source: draft.source,
+            message: inserted.message,
+            module: inserted.module,
+            status: draft.queueStatus,
+          })
+        : null;
       const reply = buildWaOperationalReply({
         intent,
         draft,
         message: inserted.message,
         payloadType,
-        queueId: queue?.id ?? inserted.id,
+        queueId: queue?.id ?? null,
         commodityDetails,
       });
       await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, inserted.id]);

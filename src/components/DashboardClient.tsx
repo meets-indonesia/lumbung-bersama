@@ -49,7 +49,7 @@ import { StatusBadge } from "./StatusBadge";
 
 const navGroups = [
   {
-    label: "Alur MVP",
+    label: "Alur Kerja",
     items: [
       { label: "Ringkasan", view: "overview", icon: LayoutDashboard },
       { label: "Peta Potensi", view: "peta-unggulan", icon: MapPinned },
@@ -62,7 +62,7 @@ const navGroups = [
   {
     label: "Intake & kesiapan",
     items: [
-      { label: "WA Agent", view: "wa", icon: MessageCircle },
+      { label: "WA Inbox", view: "wa", icon: MessageCircle },
       { label: "AI Agent", view: "agents", icon: Bot },
       { label: "Gerai Pintar", view: "gerai-pintar", icon: Store },
       { label: "Simpan Pinjam", view: "simpan-pinjam", icon: CircleDollarSign },
@@ -123,7 +123,7 @@ const dashboardTourSteps: TourStep[] = [
   },
 ];
 
-const demoFlowSteps = [
+const operatorFlowSteps = [
   {
     id: "peta",
     label: "Peta",
@@ -3005,7 +3005,7 @@ function DashboardWelcomePanel({
   onOpenView: (view: string) => void;
 }) {
   const highlights = [
-    ["Alur MVP", "Peta Potensi -> Rekomendasi Produk -> Buyer Awal -> Stok/Kesiapan -> Laporan Aksi."],
+    ["Alur Kerja", "Peta Potensi -> Rekomendasi Produk -> Buyer Awal -> Stok/Kesiapan -> Laporan Aksi."],
     ["Data aman", "Hanya sampel dan agregat; tidak menampilkan data pribadi atau buyer bernama sebagai fakta."],
     ["Review manusia", "AI membantu rekomendasi, operator dan pengurus mengunci keputusan."],
     ["Tabel kerja", "Antrean, stok, buyer, pembiayaan, ledger, dan bukti media bisa dicari, difilter, dan dipaginasi."],
@@ -3474,7 +3474,7 @@ function OverviewView({
                 approved ? "border border-[#88D982]/30 text-[#88D982]" : "bg-[#C92A2A] text-[#FFE5E2]"
               }`}
             >
-              {approved ? "Details" : "Review"}
+              {approved ? "Tanya warga" : "Review"}
             </button>
           </div>
         );
@@ -3549,7 +3549,7 @@ function OverviewView({
       <section className={`mt-5 rounded-[16px] border p-5 ${panelClass}`}>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Alur MVP terpandu</p>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#D79A2B]">Alur kerja terpandu</p>
               <h2 className="mt-2 text-xl font-black">Ikuti urutan dari peta sampai laporan aksi.</h2>
               <p className={`mt-2 max-w-4xl text-sm font-semibold leading-6 ${mutedClass}`}>
               Banner ini menjaga alur kerja tetap mengikuti MVP: sampel/agregat tanpa PII, tipe buyer, dan persetujuan manusia sebelum aksi bisnis.
@@ -3558,7 +3558,7 @@ function OverviewView({
           <StatusBadge tone="service">Urutan alur siap</StatusBadge>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-5">
-          {demoFlowSteps.map((step, index) => (
+          {operatorFlowSteps.map((step, index) => (
             <button
               key={step.id}
               type="button"
@@ -6517,6 +6517,7 @@ function WhatsAppView({
   const [recipient, setRecipient] = useState("");
   const [activeSender, setActiveSender] = useState("");
   const [filter, setFilter] = useState<"open" | "closed" | "archived">("open");
+  const [waSideTab, setWaSideTab] = useState<"conversations" | "rules">("conversations");
   const [attachment, setAttachment] = useState<{ name: string; type: string; payloadType: "image" | "audio" | "document" } | null>(null);
   const [waLoading, setWaLoading] = useState<"inbound" | "outbound" | "">("");
   const [personalStatus, setPersonalStatus] = useState<WaPersonalStatus | null>(null);
@@ -6581,6 +6582,24 @@ function WhatsAppView({
     filteredConversations.find((item) => item.id === activeSender) ??
     filteredConversations[0] ??
     null;
+  const agentRules = [
+    {
+      title: "Jawab otomatis",
+      body: "Harga, potensi wilayah, status integrasi, dan pertanyaan informatif dijawab langsung dengan caveat sumber.",
+    },
+    {
+      title: "Masuk antrean 24 jam",
+      body: "Pembiayaan, negosiasi final, buyer outreach, koreksi data, pickup/restock, dan bukti media menunggu operator.",
+    },
+    {
+      title: "Tolak sebelum review",
+      body: "Pengajuan tanpa nominal, tujuan, rencana bayar, volume, grade, atau lokasi ditandai belum layak diproses.",
+    },
+    {
+      title: "Handoff agent",
+      body: "Mau jual diarahkan ke cek harga dulu; jika layak baru buyer matching, stok, dan laporan aksi.",
+    },
+  ];
 
   async function loadPersonalStatus() {
     try {
@@ -6713,7 +6732,7 @@ function WhatsAppView({
         <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Pairing WA testing</p>
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#D79A2B]">Kanal WA</p>
               <p className="mt-2 text-lg font-black">
                 {personalLoading
                   ? "Mengecek bridge"
@@ -6736,7 +6755,7 @@ function WhatsAppView({
             </div>
           ) : null}
           <p className={`mt-3 text-xs font-bold leading-5 ${mutedClass}`}>
-            {personalStatus?.message ?? "Jalankan `npm run wa:personal` di server/terminal untuk membuat QR testing."}
+            {personalStatus?.message ?? "Kanal WA personal membaca QR dari runtime bridge bila belum tersambung."}
           </p>
           {personalStatus?.status === "connected" ? (
             <p className="mt-2 text-xs font-black text-[#2F7D32]">
@@ -6752,8 +6771,27 @@ function WhatsAppView({
             Cek status QR
           </button>
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          {(["open", "closed", "archived"] as const).map((item) => (
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          {[
+            { id: "conversations", label: "Percakapan" },
+            { id: "rules", label: "Aturan agent" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setWaSideTab(item.id as "conversations" | "rules")}
+              className={`rounded-[10px] border px-3 py-2 text-xs font-black focus-visible:lb-focus ${
+                waSideTab === item.id ? "border-[#D79A2B] bg-[#D79A2B]/10" : innerClass
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {waSideTab === "conversations" ? (
+          <>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(["open", "closed", "archived"] as const).map((item) => (
             <button
               key={item}
               type="button"
@@ -6764,11 +6802,11 @@ function WhatsAppView({
             >
               {item}
             </button>
-          ))}
-        </div>
-        <div className="mt-4 space-y-2">
-          {filteredConversations.length ? (
-            filteredConversations.map((item) => (
+              ))}
+            </div>
+            <div className="mt-4 space-y-2">
+              {filteredConversations.length ? (
+                filteredConversations.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -6788,13 +6826,24 @@ function WhatsAppView({
                 </div>
                 <p className={`mt-2 line-clamp-2 text-xs font-bold leading-5 ${mutedClass}`}>{item.latestText}</p>
               </button>
-            ))
-          ) : (
-            <div className={`rounded-[12px] border p-4 text-sm font-bold ${innerClass}`}>
-              Belum ada percakapan {filter}.
+                ))
+              ) : (
+                <div className={`rounded-[12px] border p-4 text-sm font-bold ${innerClass}`}>
+                  Belum ada percakapan {filter}.
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="mt-4 grid gap-2">
+            {agentRules.map((rule) => (
+              <div key={rule.title} className={`rounded-[12px] border p-3 ${innerClass}`}>
+                <p className="text-sm font-black">{rule.title}</p>
+                <p className={`mt-1 text-xs font-bold leading-5 ${mutedClass}`}>{rule.body}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </article>
 
       <article className={`rounded-[16px] border p-5 ${panelClass}`}>
@@ -6906,8 +6955,8 @@ function WhatsAppView({
               type="button"
               onClick={() =>
                 requestConfirm({
-                  title: "Kirim WhatsApp live?",
-                  message: "Pesan akan dikirim melalui WhatsApp Cloud API bila kanal resmi sudah aktif. Untuk WA personal testing, auto-reply berjalan dari bridge bot.",
+                  title: "Kirim pesan WhatsApp?",
+                  message: "Pesan akan dikirim melalui kanal WhatsApp resmi bila konfigurasi sudah aktif. Auto-reply WA personal tetap berjalan dari bridge bot.",
                   confirmLabel: "Kirim resmi",
                   onConfirm: sendOutbound,
                 })
@@ -7491,7 +7540,7 @@ function ModuleView({
         <div className={`mt-5 rounded-[14px] border p-4 ${innerClass}`}>
           <div className="flex items-center gap-2">
             <MessageCircle size={18} strokeWidth={2.2} className="text-[#D79A2B]" aria-hidden="true" />
-            <p className="font-black">Shortcut WA</p>
+            <p className="font-black">Input operasional</p>
           </div>
           <p className="mt-3 text-xl font-black">{activeFeatureModule.waCommand}</p>
         </div>

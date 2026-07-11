@@ -51,9 +51,34 @@ function buildAnalysisCards(input: {
       detail: "Jangan pakai angka nego sebelum ada lokasi, grade, satuan, volume, dan ongkos angkut.",
     },
     {
+      label: "Readiness stok",
+      value: compactText(input.quantity, "Volume belum terkunci"),
+      detail: "Kunci stok hanya bila ada bukti timbang/foto, tanggal siap, lokasi pickup, dan penanggung jawab operator.",
+    },
+    {
+      label: "Buyer readiness",
+      value: "Cek buyer setelah stok dan grade jelas",
+      detail: "Buyer matching memakai tipe kebutuhan/archetype. Nama pihak, kontak, dan outreach tetap menunggu approval pengurus.",
+    },
+    {
+      label: "Skor breakdown",
+      value: `Sumber + ranking + confidence = ${input.score}/100`,
+      detail: "Skor naik bila profil area spesifik, confidence baik, evidence eksplorasi terbaca, dan ada sinyal logistik/koperasi.",
+    },
+    {
       label: "Risiko lapangan",
       value: compactText(input.risk, "Risiko belum cukup data"),
       detail: "Risiko diperlakukan sebagai caveat verifikasi, bukan label gagal.",
+    },
+    {
+      label: "Gap verifikasi",
+      value: "Wilayah, grade, volume, harga, dan bukti lapangan",
+      detail: "Tanpa lima data ini, hasil tetap rekomendasi awal dan belum boleh menjadi janji buyer, stok final, atau keputusan pembiayaan.",
+    },
+    {
+      label: "Handoff agent",
+      value: "Peta -> Harga -> Buyer/Stok -> Laporan",
+      detail: "Jika warga mau jual, cek harga dan kualitas lebih dulu; jika layak, lanjut buyer matching atau kesiapan stok.",
     },
     {
       label: "Langkah terdekat",
@@ -70,6 +95,8 @@ function buildValidationQuestions(commodityName: string, areaName: string) {
     "Ada foto barang, bukti timbang, nota, atau kontak petugas lapangan?",
     `Apakah ${areaName} punya gudang, titik kumpul, atau rute pickup yang sudah disetujui?`,
     "Harga rujukan hari ini berasal dari sumber mana dan berlaku untuk grade apa?",
+    "Jika mau dijual, berapa batas harga bawah setelah ongkos angkut, sortasi, dan kemasan?",
+    "Jika butuh pembiayaan, nominal, tujuan, dan rencana bayar sudah masuk akal terhadap volume panen?",
   ];
 }
 

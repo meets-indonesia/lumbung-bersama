@@ -140,6 +140,19 @@ function buildFollowUpQuestions(agentName: string, summary: string) {
   ].filter(Boolean);
 }
 
+function preferredAgentForCase(caseContext: AgentCaseContext) {
+  const combined = `${caseContext.module} ${caseContext.summary}`.toLowerCase();
+  if (/(harga|nego|negosiasi|tawar|floor price|margin)/i.test(combined)) return "Agen Harga dan Negosiasi";
+  if (/(buyer|pembeli|offtaker|outreach|jual|menjual|mau jual)/i.test(combined)) return "Agen Pasar dan Mitra";
+  if (/(pinjam|pinjaman|pembiayaan|modal|komite|cicil|rencana bayar)/i.test(combined)) return "Agen Pembiayaan Readiness";
+  if (/(risiko|fraud|anomali|tidak konsisten)/i.test(combined)) return "Agen Risiko dan Fraud";
+  if (/(stok|gudang|restock|habis|pickup|barang masuk|barang keluar|panen)/i.test(combined)) return "Agen Stok dan Gudang";
+  if (/(foto|gambar|dokumen|pdf|nota|bukti|ocr|koreksi|revisi)/i.test(combined)) return "Agen Bukti dan Dokumen";
+  if (/(laporan|ringkasan|export|csv|aksi)/i.test(combined)) return "Agen Laporan";
+  if (/(integrasi|health|sistem|wa|bridge)/i.test(combined)) return "Agen Integrasi dan Sistem";
+  return "Agen Unggulan Desa";
+}
+
 function buildCaseBackedOutput({
   agentName,
   defaultOutput,
@@ -165,7 +178,19 @@ function buildCaseBackedOutput({
   const followUpLine = followUps.length ? ` Pertanyaan lanjutan: ${followUps.join(" ")}` : "";
 
   if (agentName === "Agen Pasar dan Mitra") {
-    return `${caseLead}. Buyer matching lite perlu memakai modul ${caseContext.module}, status ${caseContext.status}, dan approval pengurus.${commodityLead}${followUpLine}`;
+    return `${caseLead}. Alur internal: cek harga dan readiness stok dulu, lalu buyer matching lite memakai modul ${caseContext.module}, status ${caseContext.status}, dan approval pengurus.${commodityLead}${followUpLine} SLA manual maksimal 24 jam kerja bila perlu outreach buyer.`;
+  }
+
+  if (agentName === "Agen Harga dan Negosiasi") {
+    return `${caseLead}. Jawaban harga boleh memberi kerangka cek harga dan opportunity context, tetapi negosiasi final/floor price menunggu sumber harga resmi atau input operator, biaya angkut, grade, volume, dan approval pengurus.${commodityLead}${followUpLine}`;
+  }
+
+  if (agentName === "Agen Pembiayaan Readiness") {
+    return `${caseLead}. Pengajuan pembiayaan diperlakukan sebagai readiness. Bila nominal, tujuan, rencana bayar, atau bukti usaha tidak lengkap/tidak masuk akal, case belum layak masuk review komite sampai data diperbaiki.${followUpLine} SLA tindak lanjut maksimal 24 jam kerja.`;
+  }
+
+  if (agentName === "Agen Stok dan Gudang") {
+    return `${caseLead}. Cek stok harus meminta komoditas, jumlah, satuan, lokasi gudang/pickup, tanggal siap, dan bukti. Restock/pickup masuk tindak lanjut operator, pertanyaan informatif dijawab otomatis.${commodityLead}${followUpLine}`;
   }
 
   if (agentName === "Agen Laporan") {
@@ -240,7 +265,7 @@ export async function POST(request: Request) {
     recordId?: string;
   };
 
-  const agent = aiAgents.find((item) => item.name === body.agentName) ?? aiAgents[0];
+  const requestedAgent = aiAgents.find((item) => item.name === body.agentName) ?? aiAgents[0];
   const recordId = body.recordId?.trim();
   if (!recordId) {
     return Response.json(
@@ -270,6 +295,9 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
+  const preferredAgentName = preferredAgentForCase(caseContext);
+  const agent = aiAgents.find((item) => item.name === preferredAgentName) ?? requestedAgent;
+  const handoffFrom = requestedAgent.name !== agent.name ? requestedAgent.name : null;
   const commodityProfiles = await findCommodityProfilesForMessage(
     `${agent.name} ${recordId} ${caseContext?.summary ?? ""}`,
     cooperative.province,
@@ -318,7 +346,10 @@ export async function POST(request: Request) {
     mode: provider.used ? provider.mode : `${provider.mode}-rules-operational-data`,
     dataBasis,
   })} ${providerNote}`;
-  const output = provider.suggestion?.output ?? fallbackOutput;
+  const outputPrefix = handoffFrom
+    ? `Handoff internal: ${handoffFrom} mengalihkan case ke ${agent.name} karena konteks modul/ringkasan lebih cocok. `
+    : "";
+  const output = `${outputPrefix}${provider.suggestion?.output ?? fallbackOutput}`;
   const nextAction = provider.suggestion?.nextAction ?? fallbackNextAction;
   const checks = mergeChecks(fallbackChecks, provider.suggestion?.checks);
 
@@ -349,5 +380,12 @@ export async function POST(request: Request) {
       model: provider.model,
       errorCode: provider.errorCode,
     },
+    handoff: handoffFrom
+      ? {
+          from: handoffFrom,
+          to: agent.name,
+          reason: "Agent dipilih otomatis berdasarkan modul dan isi case.",
+        }
+      : null,
   });
 }

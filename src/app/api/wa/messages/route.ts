@@ -10,6 +10,7 @@ import {
   displayTextForPayload,
   ensureOperatorQueueForWaMessage,
   fallbackIntentForPayload,
+  getWaReviewPolicy,
   normalizeWaPayloadType,
   queueSourceForPayload,
   selectWaAgentIntent,
@@ -103,10 +104,14 @@ export async function POST(request: Request) {
     intent: selected,
     payloadType,
     source: "WA local draft",
+    message,
   });
-  const status = setup.send.status === "ready"
-    ? "Draft tersimpan; pengiriman live belum dilakukan dan wajib approval operator"
-    : "Draft tersimpan; pengiriman live menunggu env WhatsApp";
+  const reviewPolicy = getWaReviewPolicy(selected, payloadType, message);
+  const status = reviewPolicy.shouldQueue
+    ? setup.send.status === "ready"
+      ? "Butuh tindak lanjut operator; pengiriman live belum dilakukan"
+      : "Butuh tindak lanjut operator; pengiriman live menunggu kanal resmi"
+    : "Dijawab otomatis; riwayat tersimpan di WA Inbox";
   const commodityProfiles = await findCommodityProfilesForMessage(message, cooperative.province).catch(() => []);
   const commodityDetails = describeCommodityProfiles(commodityProfiles);
   const preliminaryBotReply = buildWaOperationalReply({
@@ -151,24 +156,26 @@ export async function POST(request: Request) {
     return Response.json({ error: "WA_MESSAGE_NOT_SAVED" }, { status: 500 });
   }
 
-  const queue = await ensureOperatorQueueForWaMessage({
-    queryOne,
-    waMessageId: row.id,
-    providerMessageId: row.providerMessageId,
-    cooperativeId: row.cooperativeId,
-    sender: row.sender,
-    source: queueSourceForPayload(payloadType),
-    message: row.message,
-    module: row.module,
-    status: draft.queueStatus,
-  });
+  const queue = reviewPolicy.shouldQueue
+    ? await ensureOperatorQueueForWaMessage({
+        queryOne,
+        waMessageId: row.id,
+        providerMessageId: row.providerMessageId,
+        cooperativeId: row.cooperativeId,
+        sender: row.sender,
+        source: queueSourceForPayload(payloadType),
+        message: row.message,
+        module: row.module,
+        status: draft.queueStatus,
+      })
+    : null;
 
   const botReply = buildWaOperationalReply({
     intent: selected,
     draft,
     message,
     payloadType,
-    queueId: queue?.id ?? row.id,
+    queueId: queue?.id ?? null,
     commodityDetails,
   });
   const finalRow = await queryOne<WaMessageRow>(
@@ -196,6 +203,7 @@ export async function POST(request: Request) {
       ...draft,
       lbQueueId: queue?.id ?? null,
       deliveryStatus: status,
+      reviewMode: reviewPolicy.mode,
     },
   });
 }

@@ -127,8 +127,8 @@ function toBuyerReadinessEvidence(row: BuyerRow, index: number) {
     ...row,
     buyer: buyerArchetypeLabel(row, index),
     status: buyerReadinessStatus(row.status),
-    reason: `${row.reason} Catatan: baris ini dipakai sebagai archetype demo/baseline, bukan komitmen buyer bernama.`,
-    buyerSource: "demo-baseline-archetype",
+    reason: `${row.reason} Catatan: baris ini dipakai sebagai archetype baseline operasional, bukan komitmen buyer bernama.`,
+    buyerSource: "operational-baseline-archetype",
     sourceLabel: "Buyer archetype; not a named buyer, live demand record, atau komitmen offtaker.",
     verifiedBuyer: false,
   };
@@ -393,7 +393,7 @@ export async function GET(request: Request) {
       status: prefixedDbReady ? "ready" : "setup-required",
       message: prefixedDbReady
         ? "Tabel app-owned prefixed siap dipakai untuk requirement, stock ledger, dan media evidence."
-        : "Sebagian tabel app-owned prefixed belum siap. Jalankan migrasi aplikasi sebelum demo DB-backed.",
+        : "Sebagian tabel app-owned prefixed belum siap. Jalankan migrasi aplikasi sebelum mode data operasional penuh.",
       tables: prefixedTables,
     },
     hackathonSharedDb: hackathonDashboardEvidence,

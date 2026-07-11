@@ -1275,7 +1275,7 @@ export function PetaUnggulanClient() {
                       </div>
                       {analysisResult.opportunity.analysisCards?.length ? (
                         <div className="grid gap-2 sm:grid-cols-2">
-                          {analysisResult.opportunity.analysisCards.slice(0, 6).map((card) => (
+                          {analysisResult.opportunity.analysisCards.slice(0, 9).map((card) => (
                             <div key={card.label} className="rounded-[12px] border border-white/10 bg-white/[0.045] p-3">
                               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#F4D7A2]">{card.label}</p>
                               <p className="mt-2 text-sm font-semibold leading-5 text-[#F4F0E8]">{card.value}</p>
@@ -1308,7 +1308,7 @@ export function PetaUnggulanClient() {
                         <div className="rounded-[12px] border border-[#D79A2B]/25 bg-[#D79A2B]/10 p-3">
                           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#F4D7A2]">Pertanyaan lanjutan untuk WA/operator</p>
                           <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-[#D2D6D6]">
-                            {analysisResult.opportunity.validationQuestions.slice(0, 5).map((question) => (
+                            {analysisResult.opportunity.validationQuestions.slice(0, 7).map((question) => (
                               <li key={question}>{question}</li>
                             ))}
                           </ul>

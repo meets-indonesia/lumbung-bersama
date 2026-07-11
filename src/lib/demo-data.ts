@@ -9,7 +9,7 @@ export const pilotCooperative = {
   name: "Koperasi Desa Maju Bersama",
   village: "Desa Wanasari",
   district: "Kecamatan Sukamaju",
-  label: "Data Awal",
+  label: "Data operasional awal",
 };
 
 export const pilotVoiceNote =
@@ -27,10 +27,10 @@ export const extractedSubmission = {
 };
 
 export const pilotMetrics = [
-  { label: "Laporan warga hari ini", value: "18", note: "Data Awal" },
-  { label: "Draft perlu dicek", value: "7", note: "Data Awal" },
-  { label: "Stok gerai kritis", value: "3", note: "Data Awal" },
-  { label: "Siap laporan", value: "5", note: "Data Awal" },
+  { label: "Laporan warga hari ini", value: "18", note: "Operasional awal" },
+  { label: "Draft perlu dicek", value: "7", note: "Operasional awal" },
+  { label: "Stok gerai kritis", value: "3", note: "Operasional awal" },
+  { label: "Siap laporan", value: "5", note: "Operasional awal" },
 ];
 
 export const demoCooperative = pilotCooperative;
@@ -279,7 +279,7 @@ export const operatorQueue = [
   },
   {
     id: "LB-1026",
-    sender: "Kelompok tani demo",
+    sender: "Kelompok tani binaan",
     source: "Assisted by operator",
     summary: "Singkong satu bak pickup, perlu jadwal ambil.",
     status: "Menunggu Dicek",
