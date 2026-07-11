@@ -35,6 +35,14 @@ const cooperativeId =
 const ocrEnabled = process.env.WA_PERSONAL_OCR_ENABLED === "1";
 const ocrLang = process.env.WA_PERSONAL_OCR_LANG || "ind+eng";
 const welcomeTriggers = new Set(["halo", "hai", "hi", "hello", "menu", "bantuan", "help", "start", "mulai", "kembali", "back"]);
+const closeTriggers = new Set(["puas", "tidak", "tidak puas", "terima kasih", "terimakasih", "makasih", "thanks", "thank you"]);
+
+function getSharedDatabaseUrl() {
+  if (process.env.HACKATHON_SHARED_DATABASE_URL) return process.env.HACKATHON_SHARED_DATABASE_URL;
+  if (!process.env.DB_HOST || !process.env.DB_DATABASE || !process.env.DB_USERNAME || !process.env.DB_PASSWORD) return "";
+  const port = process.env.DB_PORT || "5432";
+  return `postgresql://${encodeURIComponent(process.env.DB_USERNAME)}:${encodeURIComponent(process.env.DB_PASSWORD)}@${process.env.DB_HOST}:${port}/${encodeURIComponent(process.env.DB_DATABASE)}`;
+}
 
 const agentRouter = [
   {
@@ -161,6 +169,17 @@ function routeAgent(text, payloadType) {
   return best?.score ? best.agent : null;
 }
 
+function isOutOfScopeMessage(text, payloadType) {
+  if (payloadType !== "text") return false;
+  const normalized = normalizeRouterText(text);
+  if (!normalized || welcomeTriggers.has(normalized) || closeTriggers.has(normalized) || normalized === "operator" || normalized === "panggil operator") {
+    return false;
+  }
+  return !/\b(koperasi|kopdes|lumbung|desa|warga|komoditas|produk|panen|beras|padi|gabah|sawit|tbs|cpo|kopi|cabai|singkong|jagung|kakao|lada|sagu|rumput laut|harga|jual|buyer|pembeli|offtaker|stok|stock|gerai|gudang|restock|pickup|barang|pinjam|pinjaman|pembiayaan|modal|simpan|keuangan|angsuran|pupuk|benih|nota|bukti|dokumen|pdf|foto|gambar|ocr|laporan|aksi|integrasi|wa|catatan|status|kemitraan|transaksi|umkm)\b/i.test(
+    normalized,
+  );
+}
+
 function shouldShowMenu(text, payloadType) {
   if (payloadType !== "text") return false;
   const normalized = normalizeRouterText(text);
@@ -172,6 +191,132 @@ function quickActions() {
     "",
     "Gunakan tombol cepat bila muncul. Jika tidak muncul, balas: menu, operator, puas, atau tidak.",
   ].join("\n");
+}
+
+function aiConfig() {
+  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
+  if (!apiKey) return null;
+  return {
+    apiKey,
+    baseUrl: (process.env.OPENAI_BASE_URL || process.env.AI_BASE_URL || "https://xai.hashmicro.co/v1").replace(/\/+$/, ""),
+    model: process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5.2",
+    wireApi: process.env.OPENAI_WIRE_API || process.env.AI_WIRE_API || "responses",
+    timeoutMs: Number(process.env.AI_PROVIDER_TIMEOUT_MS ?? 12000),
+  };
+}
+
+function extractJsonObject(raw) {
+  const trimmed = String(raw ?? "").trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  const candidate = fenced || trimmed.match(/\{[\s\S]*\}/)?.[0] || trimmed;
+  return JSON.parse(candidate);
+}
+
+function responseOutputText(payload) {
+  if (typeof payload?.output_text === "string") return payload.output_text;
+  const output = Array.isArray(payload?.output) ? payload.output : [];
+  const parts = [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const contentItem of content) {
+      if (typeof contentItem?.text === "string") parts.push(contentItem.text);
+    }
+  }
+  return parts.join("\n");
+}
+
+function chatOutputText(payload) {
+  return typeof payload?.choices?.[0]?.message?.content === "string" ? payload.choices[0].message.content : "";
+}
+
+function sanitizeAiReply(reply) {
+  return String(reply ?? "")
+    .replace(/\r/g, "")
+    .replace(/\b(?:DATABASE_URL|DB_PASSWORD|OPENAI_API_KEY|AI_API_KEY|WHATSAPP_[A-Z0-9_]+|WA_PERSONAL_[A-Z0-9_]+)\b/gi, "[secret-redacted]")
+    .replace(/\b\d{10,16}@s\.whatsapp\.net\b/gi, "[wa-redacted]")
+    .replace(/\b(?:\+?62|0)\d{8,13}\b/g, "[nomor-redacted]")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 1700);
+}
+
+async function finalizeReplyWithAi({ agent, messageText, payloadType, reviewMode, queueId, fallbackReply }) {
+  const config = aiConfig();
+  if (!config) return fallbackReply;
+
+  const prompt = [
+    "Anda adalah WA agent Lumbung Bersama untuk koperasi desa.",
+    "Tulis ulang jawaban agar natural dan adaptif, tetapi hanya memakai fakta dari fallback.",
+    "Scope hanya potensi desa/komoditas, harga/negosiasi koperasi, stok/gudang, buyer readiness, pembiayaan readiness, dokumen/OCR, laporan aksi, dan integrasi WA/dashboard.",
+    "Jika fallback menyebut data tidak tersedia, jangan mengarang angka.",
+    "Jangan tampilkan nomor WA, credential, raw media path, buyer bernama tidak terverifikasi, atau data pribadi.",
+    "Jangan menyetujui pinjaman, deal final, floor price final, atau buyer outreach otomatis.",
+    "Format WA rapi dengan spasi antar bagian. Maksimal 1700 karakter.",
+    "",
+    `Agent: ${agent?.name ?? "WA Intake"}`,
+    `Modul: ${agent?.module ?? "WA Intake / Suara Warga"}`,
+    `Payload: ${payloadType}`,
+    `Review mode: ${reviewMode}`,
+    `Queue ID: ${queueId ?? "tidak ada"}`,
+    `Pesan user: ${messageText}`,
+    "",
+    "Fallback/data evidence:",
+    fallbackReply,
+    "",
+    'Kembalikan JSON saja: {"reply":"..."}',
+  ].join("\n");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.timeoutMs) ? config.timeoutMs : 12000);
+  try {
+    const response = await fetch(
+      config.wireApi === "chat-completions" ? `${config.baseUrl}/chat/completions` : `${config.baseUrl}/responses`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          config.wireApi === "chat-completions"
+            ? {
+                model: config.model,
+                messages: [
+                  { role: "system", content: "Return valid JSON only. Keep answer evidence-backed and scope-limited." },
+                  { role: "user", content: prompt },
+                ],
+                temperature: 0.2,
+                max_tokens: 700,
+              }
+            : {
+                model: config.model,
+                input: [
+                  {
+                    role: "system",
+                    content: [{ type: "input_text", text: "Return valid JSON only. Keep answer evidence-backed and scope-limited." }],
+                  },
+                  { role: "user", content: [{ type: "input_text", text: prompt }] },
+                ],
+                max_output_tokens: 700,
+              },
+        ),
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) return fallbackReply;
+    const payload = await response.json().catch(() => null);
+    const raw = config.wireApi === "chat-completions" ? chatOutputText(payload) : responseOutputText(payload);
+    const parsed = extractJsonObject(raw);
+    const reply = sanitizeAiReply(parsed.reply);
+    return reply || fallbackReply;
+  } catch {
+    return fallbackReply;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function extractCommodityName(text) {
@@ -211,7 +356,7 @@ function hasManualKeyword(text) {
 
 function reviewPolicy(agent, payloadType, messageText) {
   const normalized = normalizeRouterText(messageText);
-  if (normalized === "puas" || normalized === "tidak" || normalized === "tidak puas" || welcomeTriggers.has(normalized)) {
+  if (closeTriggers.has(normalized) || welcomeTriggers.has(normalized)) {
     return { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" };
   }
   if (normalized === "operator" || normalized === "panggil operator") {
@@ -269,36 +414,48 @@ function closingLine(closed = false) {
     : "Ada lagi yang bisa saya bantu?";
 }
 
-function priceGuidance(commodityName, areaHint) {
-  const normalized = normalizeRouterText(commodityName);
-  const unit =
-    normalized.includes("sawit") || normalized.includes("tbs")
-      ? "Rp/kg TBS"
-      : normalized.includes("beras") || normalized.includes("padi")
-        ? "Rp/kg atau Rp/karung sesuai jenis beras/gabah"
-        : normalized.includes("cabai")
-          ? "Rp/kg sesuai varietas dan pasar"
-          : normalized.includes("kopi")
-            ? "Rp/kg sesuai green bean/cherry/grade"
-            : "satuan lokal sesuai komoditas";
+function financeReadinessLines(messageText) {
+  const normalized = normalizeRouterText(messageText);
+  const hasAmount = /\b(?:rp|rupiah)\s*\d|(?:\d+(?:[.,]\d+)?)\s*(?:juta|ribu|jt)\b/i.test(messageText);
+  const productivePurpose = /\b(pupuk|benih|bibit|panen|musim tanam|modal usaha|usaha|produksi|stok|alat tani|komoditas|kopi|padi|beras|sawit|cabai|jagung)\b/i.test(
+    normalized,
+  );
+  const repayment = /\b(bayar|cicil|angsuran|setelah panen|panen|mingguan|bulanan|tenor|rencana bayar)\b/i.test(normalized);
+  const riskyPurpose = /\b(konsumtif|pribadi|gadget|hp|liburan|judi|tidak tahu|belum tahu|tanpa usaha|tidak ada usaha)\b/i.test(normalized);
+
+  if (riskyPurpose || (!productivePurpose && hasAmount)) {
+    return [
+      "Status awal: Perlu revisi sebelum review komite.",
+      "Alasan: tujuan pembiayaan belum terkait usaha/komoditas produktif atau rencana bayar belum jelas.",
+      "Lengkapi tujuan produktif, nominal wajar, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
+    ];
+  }
+
+  if (hasAmount && productivePurpose && repayment) {
+    return [
+      "Status awal: Siap masuk review komite.",
+      "Alasan: nominal, tujuan produktif, dan rencana bayar sudah terbaca dari pesan.",
+      "Data yang tetap diminta: bukti usaha/panen, status anggota terverifikasi, dan catatan pengurus.",
+    ];
+  }
+
   return [
-    `Harga ${commodityName} tidak punya satu angka nasional; ${areaHint ? `untuk area ${areaHint}` : "area belum disebut"}, harga dibaca per wilayah, grade, volume, dan ongkos angkut.`,
-    `Format cek koperasi: ${unit}; rujukan harus berasal dari harga resmi/kurasi lokal hari ini atau input operator lapangan.`,
-    "Untuk negosiasi awal, jangan kunci harga sebelum ada kabupaten/kecamatan, grade/kualitas, volume, satuan, lokasi pickup, dan biaya angkut.",
+    "Status awal: Data belum lengkap.",
+    "Kirim nominal, tujuan penggunaan, rencana bayar, sumber pembayaran, dan bukti usaha/panen.",
   ];
 }
 
-function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text", messageText }) {
+function priceGuidance(commodityName, areaHint) {
+  return dataBackedPriceGuidance(commodityName, areaHint);
+}
+
+async function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text", messageText }) {
   const normalized = normalizeRouterText(messageText);
   const commodityName = extractCommodityName(messageText);
   const areaHint = extractAreaHint(messageText);
   const policy = reviewPolicy(agent, payloadType, messageText);
 
-  if (normalized === "puas") {
-    return closingLine(true);
-  }
-
-  if (normalized === "tidak" || normalized === "tidak puas") {
+  if (closeTriggers.has(normalized)) {
     return closingLine(true);
   }
 
@@ -312,7 +469,7 @@ function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text
 
   const answerLines = [];
   if (agent.id === "4") {
-    answerLines.push(...priceGuidance(commodityName, areaHint));
+    answerLines.push(...(await priceGuidance(commodityName, areaHint)));
     if (policy.shouldQueue) answerLines.push("Karena pesan ini mengarah ke negosiasi/jual-beli, saya buat antrean approval komersial.");
     return formatSections([
       { title: "Cek harga", lines: answerLines },
@@ -341,8 +498,8 @@ function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text
 
   if (agent.id === "5") {
     answerLines.push("Pembiayaan masuk sebagai readiness, bukan persetujuan otomatis.");
-    answerLines.push("Yang harus dilengkapi: nominal, tujuan, rencana bayar, sumber pembayaran, bukti usaha/panen, dan status anggota terverifikasi.");
-    answerLines.push("Jika data tidak lengkap atau tidak masuk akal, sistem menandai belum layak masuk review komite sampai data diperbaiki.");
+    answerLines.push(...financeReadinessLines(messageText));
+    answerLines.push("Keputusan tetap menunggu review pengurus/komite.");
   }
 
   if (agent.id === "6") {
@@ -366,9 +523,9 @@ function buildOperationalAnswer({ agent, queueId, mediaNote, payloadType = "text
   ]);
 }
 
-function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }) {
+async function buildAgentReply({ agent, queueId, mediaNote, payloadType, messageText }) {
   const lines = [
-    buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }),
+    await buildOperationalAnswer({ agent, queueId, mediaNote, payloadType, messageText }),
   ];
 
   return lines.join("\n");
@@ -382,6 +539,16 @@ const pool = new Pool({
   ssl: process.env.PGSSLMODE === "require" ? { rejectUnauthorized: false } : undefined,
   max: Number(process.env.WA_PERSONAL_POOL_MAX ?? 2),
 });
+
+const sharedDatabaseUrl = getSharedDatabaseUrl();
+const sharedPool = sharedDatabaseUrl
+  ? new Pool({
+      connectionString: sharedDatabaseUrl,
+      ssl: (process.env.HACKATHON_SHARED_DB_SSL ?? process.env.PGSSLMODE) === "require" ? { rejectUnauthorized: false } : undefined,
+      max: Number(process.env.HACKATHON_SHARED_DB_POOL_MAX ?? 1),
+      connectionTimeoutMillis: Number(process.env.HACKATHON_SHARED_DB_CONNECT_TIMEOUT_MS ?? 5000),
+    })
+  : null;
 
 function digest(value) {
   return createHash("sha256").update(value).digest("hex").slice(0, 16).toUpperCase();
@@ -429,7 +596,7 @@ function summarize(text) {
 
 function classifyIntent(text, payloadType) {
   const normalized = normalizeRouterText(text);
-  if (normalized === "puas" || normalized === "tidak" || normalized === "tidak puas") {
+  if (closeTriggers.has(normalized)) {
     return {
       intent: "Feedback layanan",
       module: "WA Intake / Suara Warga",
@@ -446,6 +613,16 @@ function classifyIntent(text, payloadType) {
       bot: "Percakapan diteruskan ke operator.",
       agent: agentRouter[0],
       responseType: "agent",
+    };
+  }
+
+  if (isOutOfScopeMessage(text, payloadType)) {
+    return {
+      intent: "Di luar scope koperasi",
+      module: "WA Intake / Suara Warga",
+      bot: "Pertanyaan di luar scope Lumbung Bersama ditolak otomatis.",
+      agent: null,
+      responseType: "out-of-scope",
     };
   }
 
@@ -617,6 +794,257 @@ async function queryOne(sql, params = []) {
   return result.rows[0] ?? null;
 }
 
+async function queryRows(sql, params = []) {
+  const result = await pool.query(sql, params);
+  return result.rows;
+}
+
+function safeAmount(value) {
+  const numeric = Number(String(value ?? "0").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatRupiah(value) {
+  return `Rp${Math.round(Number(value) || 0).toLocaleString("id-ID")}`;
+}
+
+function quoteIdentifier(identifier) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error("INVALID_COLUMN_IDENTIFIER");
+  }
+  return `"${identifier}"`;
+}
+
+function sqlTextLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'::text`;
+}
+
+function pickColumn(columns, candidates) {
+  return candidates.find((candidate) => columns.has(candidate)) ?? null;
+}
+
+function textExpression(column, fallback) {
+  return column ? `${quoteIdentifier(column)}::text` : sqlTextLiteral(fallback);
+}
+
+function numericExpression(column) {
+  if (!column) return "0::numeric";
+  const expression = quoteIdentifier(column);
+  return `COALESCE(NULLIF(REGEXP_REPLACE(${expression}::text, '[^0-9.-]', '', 'g'), '')::numeric, 0)`;
+}
+
+function commodityPattern(commodityName) {
+  const normalized = normalizeRouterText(commodityName);
+  if (/(beras|padi|gabah)/i.test(normalized)) return "(beras|padi|gabah|rice)";
+  if (/(sawit|tbs|cpo)/i.test(normalized)) return "(sawit|tbs|cpo|kelapa sawit)";
+  if (/kopi/i.test(normalized)) return "(kopi|robusta|arabika)";
+  if (/cabai/i.test(normalized)) return "(cabai|cabe|chili)";
+  if (/jagung/i.test(normalized)) return "(jagung)";
+  if (/singkong/i.test(normalized)) return "(singkong|ubi kayu)";
+  if (/kakao/i.test(normalized)) return "(kakao|cokelat)";
+  if (/lada/i.test(normalized)) return "(lada|merica)";
+  if (/sagu/i.test(normalized)) return "(sagu)";
+  if (/rumput laut/i.test(normalized)) return "(rumput laut)";
+  return normalized.replace(/[^\p{Letter}\p{Number}\s]/gu, " ").trim().replace(/\s+/g, "|") || ".+";
+}
+
+async function sharedQueryRows(sql, params = []) {
+  if (!sharedPool) return [];
+  const client = await sharedPool.connect();
+  try {
+    await client.query("BEGIN READ ONLY");
+    await client.query(`SET LOCAL statement_timeout = ${Number(process.env.HACKATHON_SHARED_DB_STATEMENT_TIMEOUT_MS ?? 8000)}`);
+    const result = await client.query(sql, params);
+    await client.query("COMMIT");
+    return result.rows;
+  } catch {
+    await client.query("ROLLBACK").catch(() => undefined);
+    return [];
+  } finally {
+    client.release();
+  }
+}
+
+async function sharedColumns(tableName) {
+  const rows = await sharedQueryRows(
+    `SELECT column_name AS "columnName"
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = $1`,
+    [tableName],
+  );
+  return new Set(rows.map((row) => row.columnName));
+}
+
+async function localPriceEvidence(commodityName, areaHint) {
+  const rows = await queryRows(
+    `SELECT villages.name AS "villageName",
+            villages.regency,
+            villages.province,
+            village_commodities.name AS commodity,
+            village_commodities.quantity,
+            village_commodities.price_signal AS "priceSignal",
+            village_commodities.supply,
+            village_commodities.demand,
+            village_commodities.risk
+     FROM village_commodities
+     JOIN villages ON villages.code = village_commodities.village_code
+     WHERE ($1::text = '' OR LOWER(village_commodities.name) ~* $2)
+       AND (
+         $3::text = ''
+         OR villages.name ILIKE $4
+         OR villages.district ILIKE $4
+         OR villages.regency ILIKE $4
+         OR villages.province ILIKE $4
+       )
+     ORDER BY villages.updated_at DESC
+     LIMIT 5`,
+    [commodityName === "komoditas ini" ? "" : commodityName, commodityPattern(commodityName), areaHint, `%${areaHint}%`],
+  ).catch(() => []);
+
+  return rows.map(
+    (row) =>
+      `Peta/local: ${row.commodity} di ${row.villageName}, ${row.regency}, ${row.province}; volume ${row.quantity}; sinyal harga "${row.priceSignal}"; supply ${row.supply}; demand ${row.demand}; risiko ${row.risk}`,
+  );
+}
+
+async function sharedInventoryPriceEvidence(commodityName, areaHint) {
+  const columns = await sharedColumns("inventaris_produk");
+  const productColumn = pickColumn(columns, ["nama_produk", "produk", "nama_barang", "nama_item", "komoditas", "nama_komoditas"]);
+  const priceColumn = pickColumn(columns, ["harga", "harga_jual", "harga_beli", "harga_satuan", "harga_produk", "price", "unit_price", "nilai_produk"]);
+  const stockColumn = pickColumn(columns, ["stok", "stock", "jumlah_stok", "quantity", "qty", "jumlah"]);
+  const unitColumn = pickColumn(columns, ["satuan", "unit", "unit_label", "uom"]);
+  const cooperativeColumn = columns.has("koperasi_ref") ? "koperasi_ref" : null;
+  if (!productColumn || !priceColumn) return [];
+
+  const productExpr = textExpression(productColumn, "Produk tanpa nama");
+  const priceExpr = numericExpression(priceColumn);
+  const stockExpr = numericExpression(stockColumn);
+  const unitExpr = textExpression(unitColumn, "unit");
+  const areaFilter = cooperativeColumn
+    ? `AND (
+         $2::text = ''
+         OR EXISTS (
+           SELECT 1
+           FROM referensi_koperasi_wilayah rkw
+           JOIN referensi_wilayah rw ON rw.kode_wilayah = rkw.kode_wilayah
+           WHERE rkw.koperasi_ref = inventaris_produk.${quoteIdentifier(cooperativeColumn)}
+             AND (rw.provinsi ILIKE $3 OR rw.kab_kota ILIKE $3 OR rw.kecamatan ILIKE $3)
+         )
+       )`
+    : "";
+
+  const rows = await sharedQueryRows(
+    `SELECT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama') AS "productName",
+            COALESCE(NULLIF(BTRIM(${unitExpr}), ''), 'unit') AS "unitLabel",
+            COUNT(*)::int AS rows,
+            AVG(NULLIF(${priceExpr}, 0))::text AS "avgPrice",
+            MIN(NULLIF(${priceExpr}, 0))::text AS "minPrice",
+            MAX(NULLIF(${priceExpr}, 0))::text AS "maxPrice",
+            COALESCE(SUM(${stockExpr}), 0)::text AS "stockTotal"
+     FROM inventaris_produk
+     WHERE LOWER(${productExpr}) ~* $1
+       AND ${priceExpr} > 0
+       ${areaFilter}
+     GROUP BY 1, 2
+     ORDER BY COUNT(*) DESC, AVG(NULLIF(${priceExpr}, 0)) DESC
+     LIMIT 4`,
+    [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
+  );
+
+  return rows.map((row) => {
+    const avg = safeAmount(row.avgPrice);
+    const min = safeAmount(row.minPrice);
+    const max = safeAmount(row.maxPrice);
+    const range = min && max && min !== max ? `${formatRupiah(min)}-${formatRupiah(max)}` : formatRupiah(avg || min || max);
+    return `Shared DB inventaris: ${row.productName}; harga data ${range}/${row.unitLabel}; rata-rata ${formatRupiah(avg)}; stok agregat ${safeAmount(row.stockTotal).toLocaleString("id-ID")} ${row.unitLabel}; ${row.rows} baris.`;
+  });
+}
+
+async function sharedTransactionPriceEvidence(commodityName, areaHint) {
+  const columns = await sharedColumns("transaksi_penjualan");
+  const productColumn = pickColumn(columns, ["nama_produk", "produk", "nama_barang", "nama_item", "komoditas", "nama_komoditas"]);
+  const amountColumn = pickColumn(columns, ["total_pembayaran", "total_payment", "total_penjualan", "nilai_transaksi", "jumlah_pembayaran", "nominal", "amount", "total"]);
+  const quantityColumn = pickColumn(columns, ["jumlah_produk", "jumlah_barang", "kuantitas", "quantity", "qty", "volume", "jumlah"]);
+  const unitColumn = pickColumn(columns, ["satuan", "unit", "unit_label", "uom"]);
+  const cooperativeColumn = columns.has("koperasi_ref") ? "koperasi_ref" : null;
+  if (!productColumn || !amountColumn) return [];
+
+  const productExpr = textExpression(productColumn, "Produk tanpa nama");
+  const amountExpr = numericExpression(amountColumn);
+  const quantityExpr = numericExpression(quantityColumn);
+  const unitExpr = textExpression(unitColumn, "unit");
+  const unitPriceExpr = quantityColumn ? `SUM(${amountExpr}) / NULLIF(SUM(${quantityExpr}), 0)` : "NULL::numeric";
+  const areaFilter = cooperativeColumn
+    ? `AND (
+         $2::text = ''
+         OR EXISTS (
+           SELECT 1
+           FROM referensi_koperasi_wilayah rkw
+           JOIN referensi_wilayah rw ON rw.kode_wilayah = rkw.kode_wilayah
+           WHERE rkw.koperasi_ref = transaksi_penjualan.${quoteIdentifier(cooperativeColumn)}
+             AND (rw.provinsi ILIKE $3 OR rw.kab_kota ILIKE $3 OR rw.kecamatan ILIKE $3)
+         )
+       )`
+    : "";
+
+  const rows = await sharedQueryRows(
+    `SELECT COALESCE(NULLIF(BTRIM(${productExpr}), ''), 'Produk tanpa nama') AS "productName",
+            COALESCE(NULLIF(BTRIM(${unitExpr}), ''), 'unit') AS "unitLabel",
+            COUNT(*)::int AS transactions,
+            COALESCE(SUM(${amountExpr}), 0)::text AS "amountTotal",
+            COALESCE(SUM(${quantityExpr}), 0)::text AS "quantityTotal",
+            (${unitPriceExpr})::text AS "unitPrice",
+            AVG(NULLIF(${amountExpr}, 0))::text AS "averageTransactionValue"
+     FROM transaksi_penjualan
+     WHERE LOWER(${productExpr}) ~* $1
+       AND ${amountExpr} > 0
+       ${areaFilter}
+     GROUP BY 1, 2
+     ORDER BY COUNT(*) DESC, COALESCE(SUM(${amountExpr}), 0) DESC
+     LIMIT 4`,
+    [commodityPattern(commodityName), areaHint, `%${areaHint}%`],
+  );
+
+  return rows.map((row) => {
+    const unitPrice = safeAmount(row.unitPrice);
+    const averageTransactionValue = safeAmount(row.averageTransactionValue);
+    const amountTotal = safeAmount(row.amountTotal);
+    const quantityTotal = safeAmount(row.quantityTotal);
+    const pricePart =
+      unitPrice > 0
+        ? `harga satuan terhitung ${formatRupiah(unitPrice)}/${row.unitLabel} dari total nilai/kuantitas`
+        : `rata-rata nilai transaksi ${formatRupiah(averageTransactionValue)}; kuantitas tidak cukup untuk harga per unit`;
+    return `Shared DB transaksi: ${row.productName}; ${pricePart}; total nilai ${formatRupiah(amountTotal)}; total kuantitas ${quantityTotal.toLocaleString("id-ID")} ${row.unitLabel}; ${row.transactions} transaksi.`;
+  });
+}
+
+async function dataBackedPriceGuidance(commodityName, areaHint) {
+  const [localEvidence, inventoryEvidence, transactionEvidence] = await Promise.all([
+    localPriceEvidence(commodityName, areaHint),
+    sharedInventoryPriceEvidence(commodityName, areaHint).catch(() => []),
+    sharedTransactionPriceEvidence(commodityName, areaHint).catch(() => []),
+  ]);
+  const evidence = [...transactionEvidence, ...inventoryEvidence, ...localEvidence].slice(0, 6);
+
+  if (!evidence.length) {
+    return [
+      "Saya belum menemukan angka harga yang cocok di data untuk komoditas/wilayah ini.",
+      "Kirim wilayah lebih spesifik, grade/kualitas, volume, satuan, dan lokasi pickup agar saya cek ulang dari data koperasi.",
+      "Saya tidak akan mengarang harga jika data harga tidak tersedia.",
+    ];
+  }
+
+  const hasNumericPrice = evidence.some((line) => /Rp\d/i.test(line));
+  return [
+    "Saya cek dari data transaksi, inventaris, atau sinyal harga yang tersedia.",
+    ...evidence,
+    hasNumericPrice
+      ? "Angka di atas berasal dari field harga/nilai/kuantitas yang tersedia di data. Harga final tetap perlu grade, volume, lokasi pickup, ongkos angkut, dan sumber hari ini."
+      : "Data yang tersedia baru berupa sinyal harga, belum angka harga satuan eksplisit. Saya perlu wilayah, grade, volume, dan sumber hari ini untuk angka final.",
+  ];
+}
+
 async function ensureCooperative() {
   const cooperative = await queryOne("SELECT id FROM cooperatives WHERE id = $1 LIMIT 1", [cooperativeId]);
   if (!cooperative) {
@@ -636,6 +1064,8 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
           mode: "manual-review",
           slaText: "Operator akan menindaklanjuti maksimal 24 jam kerja.",
         }
+      : classified.responseType === "out-of-scope"
+        ? { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" }
       : classified.agent
         ? reviewPolicy(classified.agent, payloadType, messageText)
         : { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" };
@@ -729,22 +1159,43 @@ async function insertInbound({ providerMessageId, sender, messageText, payloadTy
     );
   }
 
-  const reply =
+  const fallbackReply =
     classified.responseType === "menu"
       ? menuText()
+      : classified.responseType === "out-of-scope"
+        ? formatSections([
+            {
+              title: "Di Luar Scope",
+              lines: [
+                "Mohon maaf, saya hanya bisa membantu topik Lumbung Bersama/koperasi desa: potensi komoditas, harga koperasi, stok, buyer readiness, pembiayaan readiness, dokumen, laporan, dan integrasi.",
+                "Balas menu untuk memilih agent koperasi.",
+              ],
+            },
+          ])
       : classified.responseType === "unknown"
         ? formatSections([
             { title: "Klasifikasi", lines: ["Mohon maaf, saya belum yakin kebutuhan ini masuk ke agent mana.", "Saya buat antrean operator agar pesan ini tidak hilang.", queueLine(queueId, policy), policy.slaText] },
             { title: "Arahkan ulang", lines: ["Anda juga bisa balas menu lalu pilih agent, atau tulis kebutuhan dengan komoditas, wilayah, volume, dan tujuan."] },
             { title: "Catatan", lines: [closingLine(false), quickActions()] },
           ])
-        : buildAgentReply({
+        : await buildAgentReply({
             agent: classified.agent ?? agentRouter[0],
             queueId,
             mediaNote,
             payloadType,
             messageText: row.message,
           });
+  const reply =
+    classified.responseType === "agent"
+      ? await finalizeReplyWithAi({
+          agent: classified.agent ?? agentRouter[0],
+          messageText: row.message,
+          payloadType,
+          reviewMode: policy.mode,
+          queueId,
+          fallbackReply,
+        })
+      : fallbackReply;
 
   await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, row.id]);
 
@@ -851,11 +1302,13 @@ async function main() {
 process.on("SIGINT", async () => {
   console.log("Menutup WA personal bridge.");
   await pool.end().catch(() => undefined);
+  await sharedPool?.end().catch(() => undefined);
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   await pool.end().catch(() => undefined);
+  await sharedPool?.end().catch(() => undefined);
   process.exit(0);
 });
 

@@ -3,6 +3,7 @@ import {
   describeCommodityProfiles,
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
+import { buildOrchestratedWaReply, isWaMessageOutOfScope } from "@/lib/wa-agent-orchestrator";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 import {
   buildWaOperationalReply,
@@ -207,8 +208,8 @@ export async function POST(request: Request) {
     process.env.WEBHOOK_COOPERATIVE_ID?.trim() ||
     process.env.DEFAULT_COOPERATIVE_ID?.trim() ||
     "kop-wanasari";
-  const cooperative = await queryOne<{ id: string; province: string }>(
-    "SELECT id, province FROM cooperatives WHERE id = $1 LIMIT 1",
+  const cooperative = await queryOne<{ id: string; province: string; regency: string }>(
+    "SELECT id, province, regency FROM cooperatives WHERE id = $1 LIMIT 1",
     [cooperativeId],
   );
 
@@ -240,7 +241,10 @@ export async function POST(request: Request) {
       source: queueSourceForPayload(payloadType, "WhatsApp webhook"),
       message: text,
     });
-    const reviewPolicy = getWaReviewPolicy(intent, payloadType, text);
+    const outOfScope = isWaMessageOutOfScope(text, payloadType);
+    const reviewPolicy = outOfScope
+      ? { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" as const }
+      : getWaReviewPolicy(intent, payloadType, text);
     const commodityProfiles = await findCommodityProfilesForMessage(text, cooperative.province).catch(() => []);
     const commodityDetails = describeCommodityProfiles(commodityProfiles);
     const preliminaryReply = buildWaOperationalReply({
@@ -292,14 +296,27 @@ export async function POST(request: Request) {
             status: draft.queueStatus,
           })
         : null;
-      const reply = buildWaOperationalReply({
+      const orchestrated = await buildOrchestratedWaReply({
+        cooperativeId: cooperative.id,
+        cooperativeProvince: cooperative.province,
+        cooperativeRegency: cooperative.regency,
         intent,
         draft,
         message: inserted.message,
         payloadType,
         queueId: queue?.id ?? null,
         commodityDetails,
-      });
+      }).catch(() => null);
+      const reply =
+        orchestrated?.reply ??
+        buildWaOperationalReply({
+          intent,
+          draft,
+          message: inserted.message,
+          payloadType,
+          queueId: queue?.id ?? null,
+          commodityDetails,
+        });
       await queryOne("UPDATE wa_messages SET bot_reply = $1 WHERE id = $2 RETURNING id", [reply, inserted.id]);
       if (queue) queued += 1;
       if (payloadType !== "text") mediaQueued += 1;

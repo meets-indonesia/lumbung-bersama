@@ -4,6 +4,7 @@ import {
   describeCommodityProfiles,
   findCommodityProfilesForMessage,
 } from "@/lib/commodity-intelligence";
+import { buildOrchestratedWaReply, isWaMessageOutOfScope } from "@/lib/wa-agent-orchestrator";
 import {
   buildWaOperationalReply,
   buildWaAgentDraft,
@@ -83,8 +84,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "MESSAGE_REQUIRED" }, { status: 400 });
   }
 
-  const cooperative = await queryOne<{ id: string; province: string }>(
-    "SELECT id, province FROM cooperatives WHERE id = $1 LIMIT 1",
+  const cooperative = await queryOne<{ id: string; province: string; regency: string }>(
+    "SELECT id, province, regency FROM cooperatives WHERE id = $1 LIMIT 1",
     [cooperativeId],
   );
 
@@ -106,7 +107,10 @@ export async function POST(request: Request) {
     source: "WA local draft",
     message,
   });
-  const reviewPolicy = getWaReviewPolicy(selected, payloadType, message);
+  const outOfScope = isWaMessageOutOfScope(message, payloadType);
+  const reviewPolicy = outOfScope
+    ? { shouldQueue: false, queueStatus: "Dijawab otomatis", mode: "auto-answer" as const }
+    : getWaReviewPolicy(selected, payloadType, message);
   const status = reviewPolicy.shouldQueue
     ? setup.send.status === "ready"
       ? "Butuh tindak lanjut operator; pengiriman live belum dilakukan"
@@ -170,14 +174,27 @@ export async function POST(request: Request) {
       })
     : null;
 
-  const botReply = buildWaOperationalReply({
+  const orchestrated = await buildOrchestratedWaReply({
+    cooperativeId: cooperative.id,
+    cooperativeProvince: cooperative.province,
+    cooperativeRegency: cooperative.regency,
     intent: selected,
     draft,
     message,
     payloadType,
     queueId: queue?.id ?? null,
     commodityDetails,
-  });
+  }).catch(() => null);
+  const botReply =
+    orchestrated?.reply ??
+    buildWaOperationalReply({
+      intent: selected,
+      draft,
+      message,
+      payloadType,
+      queueId: queue?.id ?? null,
+      commodityDetails,
+    });
   const finalRow = await queryOne<WaMessageRow>(
     `UPDATE wa_messages
      SET bot_reply = $1
@@ -204,6 +221,8 @@ export async function POST(request: Request) {
       lbQueueId: queue?.id ?? null,
       deliveryStatus: status,
       reviewMode: reviewPolicy.mode,
+      toolScope: orchestrated?.toolSummary.scope ?? null,
+      aiReplyMode: orchestrated?.provider.mode ?? "fallback",
     },
   });
 }

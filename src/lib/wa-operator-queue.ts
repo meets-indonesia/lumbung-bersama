@@ -538,6 +538,10 @@ function closingLine(closed = false) {
     : "Ada lagi yang bisa saya bantu?";
 }
 
+function isConversationCloseTrigger(normalized: string) {
+  return ["puas", "tidak", "tidak puas", "terima kasih", "terimakasih", "makasih", "thanks", "thank you"].includes(normalized);
+}
+
 function hasManualKeyword(message: string) {
   const normalized = normalizeIntentText(message);
   return /\b(pinjam|pinjaman|pembiayaan|modal|komite|jual|menjual|mau jual|buyer|pembeli|offtaker|outreach|nego|negosiasi|tawar|deal|approval|setuju|koreksi|ubah|revisi|salah|hapus|restock|habis|kosong|pickup|jemput|jadwal|barang masuk|barang keluar|export|csv|operator)\b/i.test(normalized);
@@ -546,7 +550,7 @@ function hasManualKeyword(message: string) {
 export function getWaReviewPolicy(intent: WaAgentIntent, payloadType: WaPayloadType, message: string): WaReviewPolicy {
   const normalized = normalizeIntentText(message);
 
-  if (normalized === "puas" || normalized === "tidak" || normalized === "tidak puas" || normalized === "menu") {
+  if (isConversationCloseTrigger(normalized) || normalized === "menu") {
     return {
       shouldQueue: false,
       queueStatus: "Dijawab otomatis",
@@ -664,11 +668,7 @@ export function buildWaOperationalReply({
   const moduleName = draft?.module ?? intent.module;
   const reviewPolicy = getWaReviewPolicy(intent, payloadType, message);
 
-  if (normalized === "puas") {
-    return closingLine(true);
-  }
-
-  if (normalized === "tidak" || normalized === "tidak puas") {
+  if (isConversationCloseTrigger(normalized)) {
     return closingLine(true);
   }
 

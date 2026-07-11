@@ -1,3 +1,5 @@
+import type { AgentToolRunSummary } from "@/lib/agent-tool-registry";
+
 type WireApi = "responses" | "chat-completions";
 
 export type AgentProviderSuggestion = {
@@ -18,6 +20,16 @@ export type AgentProviderResult = {
   suggestion?: AgentProviderSuggestion;
 };
 
+export type WaReplyProviderResult = {
+  configured: boolean;
+  used: boolean;
+  mode: string;
+  providerLabel: string;
+  model: string | null;
+  errorCode?: string;
+  reply?: string;
+};
+
 type AgentProviderInput = {
   agentName: string;
   agentJob: string;
@@ -28,6 +40,18 @@ type AgentProviderInput = {
   caseModule: string | null;
   commodityDetails: string[];
   coverageBasis: string;
+};
+
+type WaReplyProviderInput = {
+  agentName: string;
+  agentJob: string;
+  module: string;
+  message: string;
+  payloadType: string;
+  reviewMode: string;
+  queueId?: string | null;
+  fallbackReply: string;
+  toolSummary: AgentToolRunSummary;
 };
 
 type ProviderConfig = {
@@ -99,6 +123,18 @@ function cleanText(value: unknown, maxLength: number) {
   return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+function cleanMultilineText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, maxLength);
+}
+
 function cleanChecks(value: unknown) {
   if (!Array.isArray(value)) return [];
 
@@ -136,6 +172,15 @@ function normalizeSuggestion(raw: string): AgentProviderSuggestion | null {
   }
 }
 
+function normalizeWaReply(raw: string) {
+  try {
+    const parsed = parseJsonObject(raw);
+    return cleanMultilineText(parsed.reply, 1700) || null;
+  } catch {
+    return null;
+  }
+}
+
 function buildPrompt(input: AgentProviderInput) {
   const caseBlock = input.caseSummary
     ? [
@@ -166,6 +211,51 @@ function buildPrompt(input: AgentProviderInput) {
     commodityBlock,
     "",
     'Kembalikan JSON saja dengan field: {"output":"...","nextAction":"...","checks":["..."],"confidence":"rendah|sedang|tinggi","evidenceNotes":["..."]}.',
+  ].join("\n");
+}
+
+function buildWaReplyPrompt(input: WaReplyProviderInput) {
+  const evidence = input.toolSummary.evidenceLines.length
+    ? input.toolSummary.evidenceLines.map((item, index) => `${index + 1}. ${item}`).join("\n")
+    : "Tidak ada evidence tool yang siap. Gunakan fallback dan minta data minimum.";
+  const restrictions = input.toolSummary.restrictions.length
+    ? input.toolSummary.restrictions.map((item, index) => `${index + 1}. ${item}`).join("\n")
+    : "Scope hanya Lumbung Bersama/koperasi desa. Jangan bocorkan PII, credential, raw media URI, atau buyer bernama tidak terverifikasi.";
+  const handoff = input.toolSummary.handoffHints.length
+    ? input.toolSummary.handoffHints.map((item, index) => `${index + 1}. ${item}`).join("\n")
+    : "Tidak ada handoff tambahan.";
+
+  return [
+    "Anda adalah WA agent Lumbung Bersama untuk koperasi desa.",
+    "Jawab adaptif dan natural, tetapi hanya memakai fakta dari tool evidence dan fallback aman.",
+    "Scope yang boleh: potensi desa/komoditas, harga/negosiasi koperasi, stok/gudang, buyer matching readiness, pembiayaan readiness, bukti dokumen/OCR, laporan aksi, integrasi WA/dashboard.",
+    "Jika pertanyaan keluar dari scope koperasi desa Lumbung Bersama, tolak singkat dan arahkan ke menu agent.",
+    "Jangan mengarang angka. Angka hanya boleh diulang bila ada di tool evidence/fallback. Jangan klaim harga real-time bila evidence tidak menyebut feed live.",
+    "Jangan tampilkan nomor WA, raw sender, credential, raw media path, storage URI, atau data pribadi.",
+    "Jangan menyetujui pinjaman, floor price final, deal, atau outreach buyer otomatis.",
+    "Format WA rapi: judul pendek, baris ringkas, spasi antar bagian, tanpa markdown tabel.",
+    "",
+    `Agent: ${input.agentName}`,
+    `Tugas agent: ${input.agentJob}`,
+    `Modul: ${input.module}`,
+    `Payload: ${input.payloadType}`,
+    `Review mode: ${input.reviewMode}`,
+    `Queue ID: ${input.queueId ?? "tidak ada"}`,
+    `Pesan user: ${input.message}`,
+    "",
+    "Tool evidence:",
+    evidence,
+    "",
+    "Restrictions:",
+    restrictions,
+    "",
+    "Handoff hints:",
+    handoff,
+    "",
+    "Fallback aman:",
+    input.fallbackReply,
+    "",
+    'Kembalikan JSON saja dengan field {"reply":"..."} berisi jawaban WA final. Maksimal 1700 karakter.',
   ].join("\n");
 }
 
@@ -323,5 +413,58 @@ export async function runAgentProvider(input: AgentProviderInput): Promise<Agent
     providerLabel: config.providerLabel,
     model: config.model,
     suggestion,
+  };
+}
+
+export async function runWaReplyProvider(input: WaReplyProviderInput): Promise<WaReplyProviderResult> {
+  const config = getProviderConfig();
+
+  if (!config) {
+    return {
+      configured: false,
+      used: false,
+      mode: "rules-operational-data",
+      providerLabel: "not-configured",
+      model: null,
+    };
+  }
+
+  const prompt = buildWaReplyPrompt(input);
+  const response =
+    config.wireApi === "chat-completions"
+      ? await callChatCompletionsApi(config, prompt)
+      : await callResponsesApi(config, prompt);
+
+  if (!response.ok) {
+    return {
+      configured: true,
+      used: false,
+      mode: `provider-fallback-${response.errorCode}`,
+      providerLabel: config.providerLabel,
+      model: config.model,
+      errorCode: response.errorCode,
+    };
+  }
+
+  const reply = normalizeWaReply(response.text);
+
+  if (!reply) {
+    return {
+      configured: true,
+      used: false,
+      mode: "provider-fallback-unparseable-output",
+      providerLabel: config.providerLabel,
+      model: config.model,
+      errorCode: "unparseable-output",
+    };
+  }
+
+  return {
+    configured: true,
+    used: true,
+    mode: `provider-${config.wireApi}`,
+    providerLabel: config.providerLabel,
+    model: config.model,
+    reply,
   };
 }

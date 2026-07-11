@@ -6,6 +6,7 @@ import {
   getCommodityCoverageSummary,
 } from "@/lib/commodity-intelligence";
 import { runAgentProvider } from "@/lib/ai-provider";
+import { runScopedAgentTools } from "@/lib/agent-tool-registry";
 import { formatAgentExplanation } from "@/lib/formal-replies";
 import { dbRequiredResponse, isDatabaseConfigured, newId, queryOne } from "@/lib/postgres";
 
@@ -308,11 +309,28 @@ export async function POST(request: Request) {
     ? `${commodityCoverage.totalProfiles.toLocaleString("id-ID")} profil komoditas untuk ${commodityCoverage.totalAreas.toLocaleString("id-ID")} area; ${commodityCoverage.totalVillages.toLocaleString("id-ID")} desa/kelurahan memiliki baseline.`
     : "profil komoditas belum dihitung.";
   const dataBasis = buildCaseDataBasis(caseContext, coverageBasis);
+  const toolSummary = await runScopedAgentTools({
+    cooperativeId: cooperative.id,
+    cooperativeProvince: cooperative.province,
+    agentName: agent.name,
+    module: caseContext.module,
+    message: caseContext.summary,
+  }).catch(() => null);
+  const toolEvidence = toolSummary?.evidenceLines.slice(0, 4) ?? [];
+  const toolChecks = toolSummary
+    ? [
+        `Tool scope: ${toolSummary.scope}`,
+        ...toolSummary.tools
+          .filter((tool) => tool.status === "ready" || tool.status === "restricted")
+          .map((tool) => `Tool ${tool.tool}: ${tool.status}`),
+      ]
+    : [];
   const fallbackNextAction = buildNextAction(agent.name, caseContext);
   const fallbackChecks = [
     ...agent.checks,
     ...(caseContext ? ["Case source", "Record status", "Human approval"] : ["Record lookup fallback"]),
     ...(commodityDetails.length ? ["Komoditas baseline", "Source level"] : []),
+    ...toolChecks,
   ];
   const fallbackOutput = buildCaseBackedOutput({
     agentName: agent.name,
@@ -344,12 +362,13 @@ export async function POST(request: Request) {
   const explanation = `${formatAgentExplanation({
     agentName: agent.name,
     mode: provider.used ? provider.mode : `${provider.mode}-rules-operational-data`,
-    dataBasis,
+    dataBasis: toolEvidence.length ? `${dataBasis}; tool evidence ${toolEvidence.join("; ")}` : dataBasis,
   })} ${providerNote}`;
   const outputPrefix = handoffFrom
     ? `Handoff internal: ${handoffFrom} mengalihkan case ke ${agent.name} karena konteks modul/ringkasan lebih cocok. `
     : "";
-  const output = `${outputPrefix}${provider.suggestion?.output ?? fallbackOutput}`;
+  const toolEvidenceSuffix = toolEvidence.length ? ` Basis tool: ${toolEvidence.join("; ")}` : "";
+  const output = `${outputPrefix}${provider.suggestion?.output ?? fallbackOutput}${toolEvidenceSuffix}`;
   const nextAction = provider.suggestion?.nextAction ?? fallbackNextAction;
   const checks = mergeChecks(fallbackChecks, provider.suggestion?.checks);
 
@@ -385,6 +404,14 @@ export async function POST(request: Request) {
           from: handoffFrom,
           to: agent.name,
           reason: "Agent dipilih otomatis berdasarkan modul dan isi case.",
+        }
+      : null,
+    tools: toolSummary
+      ? {
+          scope: toolSummary.scope,
+          evidence: toolSummary.evidenceLines,
+          restrictions: toolSummary.restrictions,
+          handoffHints: toolSummary.handoffHints,
         }
       : null,
   });

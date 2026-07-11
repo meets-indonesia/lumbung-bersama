@@ -281,6 +281,33 @@ async function smokeLocalIntake(cookie) {
   pass("local WA intake is idempotent by clientMessageId");
 }
 
+async function smokeDirectPriceQuestion(cookie) {
+  const clientMessageId = `wa-price-${Date.now()}`;
+  const response = await authedRequest(cookie, "/api/wa/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sender: "QA Smoke",
+      message: "Harga beras per kilo di Lampung berapa?",
+      clientMessageId,
+    }),
+  });
+  expectStatus(response, 200, "direct WA price question");
+
+  const payload = await json(response);
+  if (payload.queue) {
+    fail("direct price question created an operator queue");
+  }
+  const reply = String(payload.message?.botReply ?? "");
+  if (!/data|harga|sinyal/i.test(reply)) {
+    fail("direct price reply did not mention data-backed price context");
+  }
+  if (/Rujukan awal/i.test(reply)) {
+    fail("direct price reply appears to use the removed hardcoded benchmark band");
+  }
+  pass("direct price question is answered automatically without static benchmark band");
+}
+
 async function smokePersonalStatus(cookie) {
   const response = await authedRequest(cookie, "/api/wa/personal/status");
   expectStatus(response, 200, "personal WA status");
@@ -400,6 +427,7 @@ async function run() {
   if (cookie) {
     await smokePersonalStatus(cookie);
     await smokeLocalIntake(cookie);
+    await smokeDirectPriceQuestion(cookie);
     await smokeSendSetup(cookie);
   }
 

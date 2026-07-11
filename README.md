@@ -12,6 +12,8 @@ Demo-critical signal spine:
 
 `Peta -> Rekomendasi Produk -> Buyer Awal -> Kesiapan Stok -> Laporan Aksi`
 
+WA/video demo script: see [`docs/38-wa-agent-demo-scenarios.md`](docs/38-wa-agent-demo-scenarios.md).
+
 Important boundaries:
 
 1. This is not a full marketplace checkout.
